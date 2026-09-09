@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1a0f2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>问道之旅 · 四十五日 · 于不浪</title>
+<style>
+:root{
+  --bg:#1a0f2e; --bg2:#241845; --bg3:#2d1f5c;
+  --fg:#e8f7d8; --fg2:#c8d8b8; --dim:#9a8abe;
+  --neon:#ff5fa8; --cyber:#3df0ff; --gold:#ffd23f; --ok:#7fff7f; --danger:#ff5252;
+  --border:#4a2d7a; --border-lit:#7a3dbf;
+  --pixel:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue","PingFang SC","Hiragino Sans GB",system-ui,sans-serif;
+  --shadow:2px 2px 0 #000;
+  --ink2:var(--dim); --serif:var(--pixel); --accent:var(--cyber); --hair:var(--border);
+}
+/* @font-face 已废弃：改用 iOS 系统字体族，保证清晰易读与跨设备一致性 */
+*{box-sizing:border-box;touch-action:manipulation}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:clamp(14px,4.4vw,20px);line-height:1.65;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+#game{max-width:860px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom)}
+.hidden{display:none!important}
+.serif{font-family:var(--pixel)}
+.intlink{color:var(--cyber);text-decoration:underline dotted;text-underline-offset:3px}
+.intlink:hover{color:var(--neon)}
+
+/* header */
+.hd{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--border-lit);padding-bottom:8px;text-shadow:1px 1px 0 #000}
+.hd .t{font-weight:600;font-size:clamp(16px,4.8vw,22px);letter-spacing:.14em;color:var(--cyber)}
+.hd .t small{font-size:11px;color:var(--dim);letter-spacing:.18em;margin-left:8px}
+.hd .stats{font-size:12.5px;color:var(--fg2);display:flex;gap:14px;font-variant-numeric:tabular-nums}
+.hd .stats b{color:var(--gold)}
+.hd .stats button{background:none;border:none;font:inherit;color:var(--fg2);cursor:pointer;text-decoration:underline;padding:0}
+.hd .stats button:hover{color:var(--neon)}
+.navline{display:flex;gap:2px;margin:8px 0 0;overflow-x:auto}
+.navline button{background:none;border:none;font:inherit;font-size:13px;color:var(--fg2);padding:5px 12px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.navline button.on{color:var(--cyber);border-bottom-color:var(--neon);font-weight:600}
+.navline button .dot{display:inline-block;width:6px;height:6px;background:var(--neon);border-radius:50%;margin-left:4px;vertical-align:2px}
+
+/* chat stream */
+.stream{flex:1;overflow-y:auto;padding:14px 4px 8px;scroll-behavior:smooth}
+.sys{font-size:12px;color:var(--dim);text-align:center;margin:12px 0;letter-spacing:.08em}
+.sys.daysep{border-bottom:1px dashed var(--border);padding-bottom:8px;margin-top:22px;letter-spacing:.15em}
+.msg{display:flex;gap:10px;margin:10px 0;align-items:flex-start}
+.msg .avatar{flex:none;width:38px;height:38px;border:2px solid var(--border-lit);background:var(--bg2);
+  display:flex;align-items:center;justify-content:center;font-size:17px;color:var(--cyber);box-shadow:2px 2px 0 #000}
+.msg .body{max-width:78%}
+.msg .name{font-size:12px;color:var(--dim);margin-bottom:2px}
+.msg .name b{color:var(--cyber);font-weight:600}
+.bubble{background:var(--bg2);border:2px solid var(--border);padding:9px 13px;font-size:14.5px;box-shadow:2px 2px 0 #000}
+.bubble.narration{background:none;border:none;color:var(--dim);font-size:13.5px;padding:2px 0;font-style:italic}
+.msg.me{flex-direction:row-reverse}
+.msg.me .body{text-align:right}
+.msg.me .bubble{background:var(--neon);border-color:var(--neon);color:#1a0f2e;text-align:left}
+.msg.sysline{justify-content:center}
+.msg.sysline .bubble{background:var(--bg2);border:none;font-size:12px;color:var(--dim);padding:4px 10px}
+
+/* quest card in stream */
+.qcard{border:2px solid var(--border-lit);background:var(--bg);margin-top:8px;padding:10px 12px;max-width:100%;box-shadow:3px 3px 0 #000;position:relative}
+.qcard::before{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent 0,transparent 2px,rgba(0,0,0,.1) 2px,rgba(0,0,0,.1) 3px);z-index:0}
+.qcard>*{position:relative;z-index:1}
+.qcard.locked{border-color:var(--border);opacity:.6}
+.qcard .qn{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:8px;color:var(--fg)}
+.qcard .qn .rk{font-size:11px;color:var(--neon)}
+.qcard .qg{font-size:12.5px;color:var(--fg2);margin:4px 0 8px}
+.qcard .qr{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--gold)}
+.qcard .qr .dur{color:var(--dim)}
+.qcard.done{opacity:.65;border-color:var(--border)}
+.qcard.done .qn::after{content:" ✓";color:var(--ok)}
+.btn{display:inline-block;border:2px solid var(--border-lit);background:linear-gradient(180deg,var(--bg3) 0%,var(--bg2) 100%);color:var(--fg);font:inherit;font-size:13.5px;
+  padding:6px 16px;cursor:pointer;letter-spacing:.06em;transition:none;
+  box-shadow:inset 2px 2px 0 var(--border-lit),inset -2px -2px 0 #000,3px 3px 0 #000}
+.btn:hover{filter:brightness(1.3)}
+.btn:active{transform:translate(2px,2px);box-shadow:inset 2px 2px 0 #000,inset -2px -2px 0 var(--border-lit)}
+.btn.primary{background:linear-gradient(180deg,var(--neon),#c91e6b);border-color:var(--neon);color:#fff}
+.btn.primary:hover{filter:brightness(1.2)}
+.btn.primary:active{box-shadow:inset 2px 2px 0 #000,inset -2px -2px 0 var(--neon)}
+.btn.gold{background:linear-gradient(180deg,var(--gold),#b8902a);border-color:var(--gold);color:#1a0f2e}
+.btn.ghost{border-color:var(--dim);color:var(--dim)}
+.btn.ghost:hover{border-color:var(--fg2);color:var(--fg2);filter:none}
+.btn.sm{padding:4px 12px;font-size:12.5px}
+.btn:disabled{opacity:.35;cursor:not-allowed;filter:none}
+.btn:disabled:hover{filter:none}
+.btn:disabled:active{transform:none;box-shadow:inset 2px 2px 0 var(--border-lit),inset -2px -2px 0 #000,3px 3px 0 #000}
+
+/* input bar */
+.inputbar{display:flex;gap:8px;padding:10px 0;border-top:1px solid var(--border);margin-top:8px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+.inputbar input{flex:1;border:2px solid var(--border);background:var(--bg);color:var(--fg);font:inherit;font-size:14px;padding:9px 12px}
+.inputbar input:focus{outline:none;border-color:var(--neon)}
+.inputbar .hint{font-size:11.5px;color:var(--dim);padding-top:12px;white-space:nowrap}
+
+/* overlays */
+.ov{position:fixed;inset:0;background:rgba(10,5,20,.8);display:flex;align-items:center;justify-content:center;z-index:60;padding:14px}
+.dlg{background:var(--bg2);border:2px solid var(--border-lit);width:100%;max-width:680px;max-height:88vh;overflow:auto;padding:20px 22px 20px 22px;box-shadow:4px 4px 0 #000;position:relative}
+.dlg::before{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent 0,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 3px);z-index:0}
+.dlg>*{position:relative;z-index:1}
+.dlg h2{font-size:clamp(18px,5.5vw,24px);margin:0 0 2px;padding-right:48px;font-weight:600;color:var(--cyber);text-shadow:2px 2px 0 #000}
+.dlg .mt{font-size:12px;color:var(--dim);letter-spacing:.12em;margin-bottom:10px;padding-right:48px}
+.dlg .close{position:sticky;top:0;float:right;margin:-20px -22px 0 0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--bg3);border:2px solid var(--border-lit);font-size:22px;line-height:1;cursor:pointer;color:var(--fg2);z-index:10;box-shadow:2px 2px 0 #000;-webkit-tap-highlight-color:transparent;border-radius:0}
+.dlg .close:hover{color:var(--neon);border-color:var(--neon)}
+.dlg .close:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #000}
+
+/* scroll book pages */
+.book{background:var(--bg3);border:2px solid var(--border);padding:14px 16px;margin:10px 0;box-shadow:inset 1px 1px 0 var(--border-lit)}
+.book .bp{font-weight:600;font-size:14px;letter-spacing:.1em;color:var(--neon);margin-bottom:8px;text-shadow:1px 1px 0 #000;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.book .bp .pid{font-weight:600}
+.book .bp em{font-style:normal;color:var(--gold);font-weight:600}
+.book .pt{border-bottom:1px dashed var(--border);padding:7px 0;font-size:14px;line-height:1.6}
+.book .pt .pid{font-weight:600;margin-right:8px}
+.book .pt .pid .s3{color:var(--neon)}
+.book .pt em{font-style:normal;color:var(--gold);font-weight:600}
+.book .npcnote{font-size:12.5px;color:var(--dim);border-top:1px dashed var(--border);margin-top:8px;padding-top:6px;font-style:italic}
+.book .anchor{background:var(--bg2);border:1px solid var(--border-lit);padding:8px 10px;margin-top:8px;font-size:13px}
+.book .anchor b{color:var(--neon)}
+.book .oralrow{padding:8px 0;border-bottom:1px dashed var(--border);font-size:13.5px}
+.book .oralrow .en{display:block;color:var(--fg);font-size:14px;line-height:1.6}
+.book .oralrow .zh{display:block;color:var(--dim);font-size:12.5px;margin-top:4px}
+
+/* 朗读/复述工作台 */
+.oralkit{border:2px solid var(--border);background:var(--bg);padding:12px;margin-top:10px}
+.oraltxt{position:relative;border:1px dashed var(--border-lit);padding:10px 12px;margin-bottom:8px;line-height:1.7;transition:filter .2s}
+.oraltxt.masked .en{filter:blur(7px);user-select:none;pointer-events:none}
+.oraltxt.masked .zh{opacity:.35}
+.oraltxt .maskhint{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--neon);font-size:14px;letter-spacing:.1em;pointer-events:none;text-shadow:1px 1px 0 #000}
+.oraltxt.masked .maskhint{display:flex}
+.kitbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+.kitbar .btn{padding:5px 10px;font-size:12.5px}
+.rectimer{font-size:13px;color:var(--gold);font-variant-numeric:tabular-nums;min-width:52px}
+.wave{width:100%;height:48px;background:var(--bg2);border:1px solid var(--border);display:block;margin:6px 0}
+.kwgrid{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.kwchip{border:1px solid var(--border-lit);background:var(--bg2);color:var(--fg2);padding:4px 10px;font-size:12.5px;cursor:pointer;user-select:none}
+.kwchip.hit{background:var(--ok);color:#1a0f2e;border-color:var(--ok);text-decoration:line-through}
+.kwchip.miss{opacity:.45}
+.recscore{font-size:14px;margin-top:6px;padding:8px 10px;border-left:3px solid var(--gold);background:var(--bg3)}
+.recscore.good{border-left-color:var(--ok)}
+.recscore.bad{border-left-color:var(--danger)}
+.speedbtns button.cur{background:var(--neon);color:#fff;border-color:var(--neon)}
+.pager{display:flex;gap:8px;align-items:center;justify-content:center;margin:10px 0}
+.pager button{min-width:34px}
+.pager .pg{font-size:12.5px;color:var(--dim)}
+
+/* quiz inside modal */
+.quiz{border-top:1px solid var(--border);margin-top:12px;padding-top:10px}
+.quiz .qz{font-size:14px;margin:8px 0}
+.quiz .qz .kk{font-size:11px;color:var(--dim);letter-spacing:.1em;display:block;margin-bottom:3px}
+.quiz input{width:100%;border:2px solid var(--border);background:var(--bg);color:var(--fg);font:inherit;font-size:14px;padding:7px 10px;margin-top:4px}
+.quiz input:focus{outline:none;border-color:var(--neon)}
+.quiz .fb{font-size:13px;margin-top:6px;display:block;line-height:1.7}
+.quiz .fb.ok{color:var(--ok)} .quiz .fb.no{color:var(--danger)}
+.quiz .fb .btn{margin-top:6px}
+.jbtns{display:flex;gap:10px;margin-top:6px}
+
+/* timer */
+.timer{font-size:clamp(28px,8vw,40px);text-align:center;font-variant-numeric:tabular-nums;padding:4px 0;color:var(--cyber);text-shadow:2px 2px 0 #000}
+.tstate{text-align:center;font-size:12px;color:var(--dim)}
+
+/* lists */
+.li{border-bottom:1px solid var(--border);padding:7px 2px;font-size:13.5px}
+.li b{color:var(--neon);margin-right:8px}
+.ach{display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--border);padding:8px 2px}
+.ach .ic{width:28px;height:28px;flex:none;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--dim)}
+.ach.got .ic{background:var(--neon);color:#1a0f2e;border-color:var(--neon)}
+.ach.got b{color:var(--gold)}
+.ach .ts{margin-left:auto;font-size:11px;color:var(--dim)}
+.heart{border-bottom:1px solid var(--border);padding:9px 2px}
+.heart .hn{font-weight:600;color:var(--cyber)}
+.heart .ht{font-size:11.5px;color:var(--dim)}
+.heart .hl{font-size:14px;margin-top:3px;font-style:italic}
+.heart.locked .hl{color:var(--border);font-style:normal}
+.shoprow{display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--border);padding:7px 2px}
+.shoprow input{flex:1;border:none;background:none;font:inherit;border-bottom:1px dashed var(--border);font-size:14px;color:var(--fg)}
+.shoprow .cost{width:64px;text-align:right;font-variant-numeric:tabular-nums;color:var(--gold)}
+.flashcard{border:2px solid var(--border-lit);padding:22px 18px;text-align:center;margin:12px 0;min-height:150px;background:var(--bg3);box-shadow:3px 3px 0 #000}
+.flashcard .fc-id{font-size:12px;color:var(--dim);letter-spacing:.1em}
+.flashcard .fc-main{font-size:16px;margin-top:10px;color:var(--fg)}
+.flashcard .fc-rev{margin-top:12px;font-size:13px;color:var(--cyber);border-top:1px dashed var(--border);padding-top:10px}
+.wrongrow{border-bottom:1px solid var(--border);padding:7px 2px;font-size:13.5px;display:flex;gap:10px;align-items:center}
+.wrongrow .retry{margin-left:auto}
+.savegrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:10px}
+.note{font-size:12px;color:var(--dim);background:var(--bg3);padding:6px 10px;margin:10px 0;border-left:3px solid var(--neon)}
+.toasts{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom));right:16px;display:flex;flex-direction:column;gap:8px;z-index:99}
+.toast{background:var(--bg3);color:var(--fg);padding:10px 15px;font-size:13.5px;max-width:300px;animation:tin .25s;border:2px solid var(--border-lit);box-shadow:3px 3px 0 #000}
+.toast.gold{background:var(--gold);color:#1a0f2e;border-color:var(--gold)}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
+footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2em;padding:8px 0;padding-bottom:calc(8px + env(safe-area-inset-bottom))}
+.recctl{display:flex;gap:8px;align-items:center;margin-top:8px}
+@media(max-width:560px){.dlg{padding:14px}.msg .body{max-width:88%}.timer{font-size:28px}}
+
+.journey{display:flex;flex-direction:column;gap:14px;margin:12px 0}
+.jrow{display:flex;align-items:center;gap:10px}
+.jact{width:46px;flex:none;text-align:center}
+.jact svg{display:block;margin:0 auto;stroke:var(--cyber)!important}
+.jact .an{font-size:11px;color:var(--dim)}
+.jnodes{display:flex;flex-wrap:wrap;gap:5px;flex:1}
+.jnode{width:34px;height:34px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;background:var(--bg);font-variant-numeric:tabular-nums;box-shadow:2px 2px 0 #000;transition:none}
+.jnode:hover{background:var(--bg3)}
+.jnode.cur{border-color:var(--neon);color:var(--neon);font-weight:600;box-shadow:0 0 8px var(--neon),2px 2px 0 #000}
+.jnode.done{background:var(--ok);color:#1a0f2e;border-color:var(--ok)}
+.jnode.part{background:var(--bg3);border-color:var(--neon)}
+.jnode.future{opacity:.4}
+.jnode.boss{border-width:2px;border-color:var(--gold)}
+.badgewall{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.badge{border:2px solid var(--border);padding:14px 10px;text-align:center;background:var(--bg2)}
+.badge .bic{width:52px;height:52px;margin:0 auto 8px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--border)}
+.badge.got{border-color:var(--neon)}
+.badge.got .bic{border-color:var(--neon);color:var(--neon);background:var(--bg3)}
+.badge.got b{color:var(--fg)}
+.badge b{font-weight:600;font-size:14px;display:block;color:var(--fg)}
+.badge .bd{font-size:12px;color:var(--dim)}
+.descbox{background:var(--bg3);border:1px solid var(--border);padding:10px 12px;margin:10px 0;font-size:13.5px}
+.descbox .dbg{font-style:italic;color:var(--dim);margin-bottom:6px}
+.descbox .dgl{margin:4px 0}
+.descbox .dgl b,.descbox .dst b{color:var(--neon);margin-right:6px}
+.descbox .dac{border-top:1px dashed var(--border);margin-top:8px;padding-top:6px;color:var(--ok)}
+
+.wow{font-size:14.5px}
+.wow .wbg{background:var(--bg3);border-left:3px solid var(--neon);padding:8px 12px;margin:8px 0;font-style:italic;color:var(--cyber)}
+.wow .wsec{margin:10px 0}
+.wow .wl{font-weight:600;color:var(--neon);letter-spacing:.08em;margin-right:8px}
+.wow .witem{color:var(--gold);font-weight:600}
+.wow ul{margin:4px 0 4px 18px;padding:0}
+.wow li{margin:3px 0}
+.wow a{color:var(--cyber);text-decoration:underline}
+.gl{border-bottom:1px dashed var(--neon);cursor:help;color:var(--neon)}
+.gcard{position:fixed;z-index:80;background:var(--bg3);color:var(--fg);padding:12px 14px;max-width:320px;font-size:13px;border:2px solid var(--gold);box-shadow:4px 4px 0 #000}
+.gcard .gw{font-weight:600;color:var(--gold);margin-bottom:6px}
+.gcard .gs{margin:4px 0}
+.gcard .gs b{color:var(--gold);margin-right:6px}
+
+/* 藏经阁增强 */
+.libtabs{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0}
+.progbar{height:10px;background:var(--bg3);border:1px solid var(--border);margin:6px 0}
+.progfill{height:100%;background:linear-gradient(90deg,var(--neon),var(--cyber));transition:width .3s}
+.libanchor{display:block;color:var(--cyber);font-size:12.5px;margin-top:4px;line-height:1.5}
+.libanchor.auto{color:var(--dim);font-style:italic}
+.libanchor.auto::before{content:"〔自动〕"}
+.libwarn{color:var(--gold);font-size:11px;margin-left:4px}
+.dayinfo{text-align:center;color:var(--dim);font-size:13px;margin-bottom:8px}
+.missing{text-align:center;padding:30px;color:var(--dim)}
+.statbar{display:flex;gap:14px;margin:8px 0;font-size:13px}
+.statbar b{color:var(--gold)}
+.ad{font-size:12px;color:var(--dim)}
+
+/* 任务面板（行者手札·任务卷） */
+.loadmeter{margin:8px 0}
+.loadmeter .lmrow{display:flex;justify-content:space-between;font-size:12.5px;color:var(--fg2);margin-bottom:3px}
+.loadmeter .lmtrack{height:12px;background:var(--bg3);border:1px solid var(--border);position:relative}
+.loadmeter .lmfill{height:100%;background:linear-gradient(90deg,var(--ok),var(--gold));transition:width .3s}
+.loadmeter.heavy .lmfill{background:linear-gradient(90deg,var(--gold),var(--danger))}
+.boardgroup{margin:14px 0}
+.boardgroup>h3{font-size:14px;color:var(--cyber);margin:0 0 6px;letter-spacing:.1em;text-shadow:1px 1px 0 #000;border-left:3px solid var(--neon);padding-left:8px}
+.qrow{display:flex;align-items:center;gap:10px;border:1px solid var(--border);background:var(--bg);padding:8px 10px;margin:6px 0;flex-wrap:wrap}
+.qrow.done{opacity:.6;border-color:var(--border)}
+.qrow.active{border-color:var(--neon);box-shadow:2px 2px 0 #000}
+.qrow.locked{opacity:.5}
+.qrow .qstage{font-size:11px;padding:2px 8px;border:1px solid var(--border-lit);white-space:nowrap}
+.qrow.done .qstage{color:var(--ok);border-color:var(--ok)}
+.qrow.active .qstage{color:var(--neon);border-color:var(--neon)}
+.qrow.locked .qstage{color:var(--dim)}
+.qrow .qinfo{flex:1;min-width:160px}
+.qrow .qinfo .qn{font-size:13.5px;font-weight:600}
+.qrow .qinfo .qmeta{font-size:11.5px;color:var(--dim);margin-top:2px}
+.qrow .qrew{font-size:11.5px;color:var(--gold);white-space:nowrap}
+.entrygrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:8px 0}
+.entrybtn{border:2px solid var(--border-lit);background:var(--bg3);color:var(--fg);font:inherit;font-size:12.5px;padding:10px 8px;cursor:pointer;text-align:center;line-height:1.4}
+.entrybtn:active{transform:translate(1px,1px)}
+.entrybtn .ei{font-size:18px;display:block;margin-bottom:3px}
+
+/* 打字复述区 */
+.typezone{margin-top:8px;border-top:1px dashed var(--border);padding-top:8px}
+.typezone textarea{width:100%;min-height:64px;border:2px solid var(--border);background:var(--bg);color:var(--fg);font:inherit;font-size:13.5px;padding:8px 10px;resize:vertical}
+.typezone textarea:focus{outline:none;border-color:var(--neon)}
+.typecmp{font-size:13px;margin-top:6px;line-height:1.8}
+.typecmp .hit{color:var(--ok);font-weight:600}
+.typecmp .miss{color:var(--danger)}
+.recbig{width:100%;margin-top:8px;padding:12px;font-size:15px;letter-spacing:.1em}
+
+/* ===== 可折叠任务树 ===== */
+.treetools{display:flex;gap:8px;justify-content:flex-end;margin:6px 0}
+.tree{border:1px solid var(--border);background:var(--bg);max-height:320px;overflow-y:auto;padding:4px}
+.tnode{user-select:none}
+.trow{display:flex;align-items:center;gap:6px;padding:6px 6px;cursor:pointer;border-bottom:1px dashed var(--border);transition:background .15s}
+.trow:hover{background:var(--bg2)}
+.ttog{width:20px;height:20px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--cyber);font-size:12px;border:1px solid var(--border);background:var(--bg3);transition:transform .2s}
+.tnode[data-expanded="false"]>.trow .ttog{transform:rotate(0deg)}
+.tnode[data-expanded="true"]>.trow .ttog .tcar{display:inline-block;transform:rotate(90deg)}
+.tnode:not([data-has-children="true"]) .ttog{visibility:hidden}
+.tchildren{margin-left:18px;border-left:2px dotted var(--border-lit);padding-left:6px}
+.tnode[data-expanded="false"]>.tchildren{display:none}
+.tnode[data-level="0"]>.trow{font-weight:600;color:var(--cyber);font-size:13.5px}
+.tnode[data-level="1"]>.trow{color:var(--fg2);font-size:13px}
+.tnode[data-level="2"]>.trow{color:var(--fg);font-size:12.5px}
+.tdot{width:9px;height:9px;flex:none;border:2px solid var(--border)}
+.trow.done .tdot{background:var(--ok);border-color:var(--ok)}
+.trow.cur .tdot{background:var(--neon);border-color:var(--neon);box-shadow:0 0 5px var(--neon)}
+.trow.locked .tdot{background:transparent}
+.tlabel{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow.locked .tlabel{color:var(--dim)}
+.tmeta{font-size:10.5px;color:var(--dim);flex:none}
+.trow.leaf{cursor:pointer}
+
+/* ===== 藏经阁卡片堆 ===== */
+.carddeck{display:flex;flex-direction:column;align-items:center;margin:12px 0}
+.cardstack{position:relative;width:100%;max-width:520px;height:320px;margin-bottom:10px}
+.qcard3d{position:absolute;inset:0;background:var(--bg2);border:2px solid var(--border-lit);padding:16px 18px;overflow-y:auto;box-shadow:4px 4px 0 #000;transition:transform .25s ease,opacity .25s}
+.qcard3d.c0{z-index:3;transform:translateY(0)}
+.qcard3d.c1{z-index:2;transform:translate(6px,6px);opacity:.6;border-color:var(--border)}
+.qcard3d.c2{z-index:1;transform:translate(12px,12px);opacity:.35;border-color:var(--border)}
+.qcard3d .ccat{font-size:11px;color:var(--neon);letter-spacing:.12em;margin-bottom:6px}
+.qcard3d .cid{font-weight:600;color:var(--cyber);font-size:13px;margin-bottom:6px}
+.qcard3d .cen{font-size:14px;line-height:1.7;color:var(--fg);white-space:pre-wrap}
+.qcard3d .czh{font-size:13px;color:var(--fg2);margin-top:10px;line-height:1.7;white-space:pre-wrap}
+.qcard3d .canchor{margin-top:10px;font-size:12.5px;background:var(--bg3);border-left:3px solid var(--gold);padding:6px 9px;color:var(--fg2)}
+.qcard3d .cstar{color:var(--gold)}
+.cardtools{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;width:100%;max-width:520px}
+.cardpos{font-size:12.5px;color:var(--dim);text-align:center;margin:4px 0;font-variant-numeric:tabular-nums}
+.cardsearch{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+.cardsearch input{flex:1;min-width:160px;border:2px solid var(--border);background:var(--bg);color:var(--fg);font:inherit;font-size:13.5px;padding:7px 10px}
+.cardsearch select{border:2px solid var(--border);background:var(--bg3);color:var(--fg);font:inherit;font-size:13px;padding:7px}
+.fliphint{font-size:11.5px;color:var(--dim);text-align:center}
+
+/* ===== 吟游独立线 ===== */
+.oraltree .trow.oral{border-left:3px solid var(--cyber)}
+.fab{position:fixed;right:14px;bottom:calc(70px + env(safe-area-inset-bottom));z-index:50;width:56px;height:56px;border-radius:50%;
+  background:linear-gradient(180deg,var(--neon),#c91e6b);color:#fff;border:2px solid #fff;font-size:24px;
+  box-shadow:3px 3px 0 #000;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.fab:active{transform:translate(2px,2px)}
+.oralprog{height:10px;background:var(--bg3);border:1px solid var(--border);margin:6px 0}
+.oralprog div{height:100%;background:linear-gradient(90deg,var(--cyber),var(--neon))}
+
+/* ===== 内容编辑器 ===== */
+.editor textarea{width:100%;min-height:180px;border:2px solid var(--border);background:var(--bg);color:var(--fg);font:inherit;font-size:14px;line-height:1.7;padding:10px;resize:vertical}
+.editor .estatus{font-size:12px;margin:6px 0}
+.editor .estatus.saved{color:var(--ok)} .editor .estatus.dirty{color:var(--gold)}
+.vhist{margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;max-height:160px;overflow-y:auto}
+.vhist .vitem{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px dotted var(--border);font-size:12px}
+.vhist .vitem.cur{background:var(--bg3)}
+.vhist .vat{color:var(--dim);flex:none;width:96px}
+.vhist .vprev{flex:1;color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.editbtn{font-size:11px;padding:2px 8px}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div class="toasts" id="toasts"></div>
+<script src="game-data.js"></script>
+<script>
+
+"use strict";
+/* ================= 问道之旅 v2 · 对话流引擎 ================= */
+const D = window.GAME_DATA;
+const $ = (s,el=document)=>el.querySelector(s);
+/* 交互兼容垫片：全站按钮统一监听 pointerdown（消除 300ms 延迟）。
+   个别旧浏览器/内嵌 WebView 只派发 mouse 事件而无 pointer 事件，
+   此处于捕获阶段补发 pointerdown；现代浏览器原生 pointerdown 先行，
+   500ms 内的同源 mousedown 视为兼容事件直接忽略，杜绝重复触发。*/
+(function(){
+  let lastPD=0;
+  document.addEventListener("pointerdown",()=>{ lastPD=Date.now(); },true);
+  document.addEventListener("mousedown",e=>{
+    if(Date.now()-lastPD<500) return;
+    const t=e.target;
+    if(!t||!t.dispatchEvent) return;
+    try{ t.dispatchEvent(new (window.PointerEvent||MouseEvent)("pointerdown",{bubbles:true,cancelable:true,view:window})); }catch(_){}
+  },true);
+})();
+const esc = s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const mdClean = s=>String(s).replace(/\*\*/g,"").replace(/^#{1,6}\s+/gm,"").replace(/^[-*]\s+/gm,"· ").replace(/`/g,"");
+/* ================= 音效引擎（Web Audio 合成，无外部文件，离线可用） ================= */
+let _ac=null;
+function ac(){ if(!_ac){ try{ _ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(_ac&&_ac.state==="suspended") _ac.resume(); return _ac; }
+function tone(freq,dur,type,vol,when){
+  const c=ac(); if(!c) return;
+  const t0=c.currentTime+(when||0), o=c.createOscillator(), g=c.createGain();
+  o.type=type||"square"; o.frequency.value=freq;
+  g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(vol||0.06,t0+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+(dur||0.1));
+  o.connect(g).connect(c.destination); o.start(t0); o.stop(t0+(dur||0.1)+0.02);
+}
+const SFX={
+  tap:()=>tone(660,0.06,"square",0.04),
+  start:()=>{tone(523,0.09,"square",0.05);tone(784,0.12,"square",0.05,0.09);},
+  stop:()=>tone(392,0.12,"square",0.05),
+  ok:()=>{tone(523,0.08,"triangle",0.07);tone(659,0.08,"triangle",0.07,0.08);tone(784,0.16,"triangle",0.07,0.16);},
+  no:()=>{tone(220,0.15,"sawtooth",0.05);tone(180,0.2,"sawtooth",0.05,0.1);},
+  win:()=>{[523,659,784,1047].forEach((f,i)=>tone(f,0.14,"triangle",0.07,i*0.1));},
+  mask:()=>tone(880,0.05,"sine",0.04),
+  flip:()=>{tone(740,0.05,"triangle",0.05);tone(988,0.07,"triangle",0.05,0.05);},
+};
+const NPC = Object.fromEntries(D.npcs.map(n=>[n.id,n]));
+const DAYS = D.days, byDay = Object.fromEntries(DAYS.map(d=>[d.day,d]));
+const QMAP = Object.fromEntries(D.quests.map(q=>[q.id,q]));
+/* v2：任务以 day 字段关联，装载时挂回 day 对象（主线优先排序） */
+DAYS.forEach(d=>{ d.quests=[]; });
+D.quests.forEach(q=>{ const d=byDay[q.day]; if(d) d.quests.push(q); });
+DAYS.forEach(d=>{ d.quests.sort((a,b)=>(a.kind==="main"?0:1)-(b.kind==="main"?0:1)||a.id.localeCompare(b.id)); });
+const KEY = "wendao_v2_save";
+
+/* ---------- state ---------- */
+function defState(){
+  return {player:D.player, day:1, unlocked:1, xp:0, coin:0,
+    done:{}, fav:Object.fromEntries(D.npcs.map(n=>[n.id,0])),
+    ach:{}, notes:{}, wrong:[], cards:{}, seenHearts:{}, shop:[...D.shop],
+    edits:{}, _treeExp:{},
+    dsKey:"", personas:{}, aiBrief:{},
+    quizOk:0, created:new Date().toISOString()};
+}
+let st=null, view="chat";
+function save(){ try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){} }
+function load(){ try{const r=localStorage.getItem(KEY); if(r){st=JSON.parse(r); return true;}}catch(e){} return false; }
+/* 对账：已完成任务集是进度的唯一真相；xp/coin 据其重算，避免存档漂移导致等级误判 */
+function reconcile(){
+  if(!st) return;
+  /* 旧存档迁移：补齐新版本字段，杜绝下游渲染空引用 */
+  if(!st.done||typeof st.done!=="object") st.done={};
+  st.fav=st.fav||{}; st.ach=st.ach||{}; st.notes=st.notes||{};
+  st.cards=st.cards||{}; st.seenHearts=st.seenHearts||{};
+  st.edits=st.edits||{}; st._treeExp=st._treeExp||{};
+  st.personas=st.personas||{}; st.aiBrief=st.aiBrief||{};
+  if(typeof st.dsKey!=="string") st.dsKey="";
+  if(!Array.isArray(st.wrong)) st.wrong=[];
+  if(!Array.isArray(st.shop)||!st.shop.length) st.shop=[...D.shop];
+  if(typeof st.quizOk!=="number") st.quizOk=0;
+  // 极早版本存档 done 值为布尔 true，统一补成时间戳，streak() 依赖字符串切片
+  for(const id in st.done){ if(st.done[id]===true) st.done[id]=new Date().toISOString(); }
+  let xp=0, coin=0;
+  for(const id in st.done){ const q=QMAP[id]; if(q){ xp+=q.xp||0; coin+=q.coin||0; } }
+  // 只在数值偏低时纠偏（防止旧存档 xp 落后于已完成进度）
+  if(st.xp<xp) st.xp=xp;
+  if(st.coin<coin) st.coin=coin;
+  if(typeof st.xp!=="number"||st.xp<0) st.xp=xp;
+  if(typeof st.coin!=="number"||st.coin<0) st.coin=coin;
+}
+const level=()=>Math.floor(st.xp/50)+1;
+let lastLv=1;
+function checkLevelUp(){ const lv=level(); if(lv>lastLv){ record("等级提升","Lv."+lastLv+" → Lv."+lv+" · "+title()); toast("等级提升 · Lv."+lv+"「"+title()+"」","gold"); } lastLv=Math.max(lastLv,lv); }
+function title(){ return st.unlocked>=45?"金榜引路人":st.unlocked>=42?"问道行者·终章":st.unlocked>=31?"遗迹探索者":st.unlocked>=21?"行会行者":st.unlocked>=9?"律法塔学徒":"山河游学者"; }
+const qDone=id=>!!st.done[id];
+function dayProg(d){ let n=0; d.quests.forEach(q=>{if(qDone(q.id))n++;}); return {n,all:d.quests.length}; }
+function totals(){ let a=0,c=0; DAYS.forEach(d=>{const p=dayProg(d); a+=p.all; c+=p.n;}); return {c,a}; }
+function streak(){
+  const ds=[...new Set(Object.values(st.done).map(v=>v.slice(0,10)))].sort(); let s=0;
+  for(let i=ds.length-1;i>=0;i--){ if(i===ds.length-1||Math.round((new Date(ds[i+1])-new Date(ds[i]))/864e5)===1) s++; else break; }
+  return s;
+}
+function questUnlocked(q){
+  if(!q.prev||!q.prev.length) return true;
+  return q.prev.every(p=>qDone(p));
+}
+function fmtDur(m){ return m+" 分钟"; }
+
+/* ---------- stream derivation ---------- */
+function buildStream(d){
+  const out=[];
+  out.push({t:"sysday",x:`第 ${d.day} 日 · ${d.date} · 星期${d.week} · ${D.acts[d.act]}`});
+  out.push({t:"npc",npc:d.npc,x:d.line});
+  const prog=dayProg(d);
+  // 对话流简化：只呈现「当前发布的任务」一张卡片；已完成压缩为系统行；未解锁不剧透，引导至任务面板
+  let activeShown=false;
+  d.quests.forEach(q=>{
+    const un=questUnlocked(q), done=qDone(q.id);
+    if(done){
+      out.push({t:"sys",x:`✓ ${q.name} 已完成 · +${q.xp}修行 +${q.coin}铜钱`});
+      return;
+    }
+    if(un && !activeShown){
+      activeShown=true;
+      out.push({t:"npc",npc:q.npc,x:pubLine(q,d)});
+      out.push({t:"quest",qid:q.id});
+    }
+    // 其余未解锁 / 待解锁任务不在对话流剧透
+  });
+  if(!activeShown && prog.n<prog.all){
+    out.push({t:"sys",x:"其余任务环环相扣——点开下方「任务」卷查看全貌与入口"});
+  }
+  if(prog.n===prog.all&&prog.all>0){
+    out.push({t:"sys",x:`今日修行圆满（${prog.all}/${prog.all}）· 次日已解锁`});
+    if(d.day<45) out.push({t:"npc",npc:d.npc,x:"今日到此为止。去休息吧——明日我再来叫你。"});
+    else out.push({t:"npc",npc:"qingxuan",x:"四十五日，功德圆满。金榜台上，我为你备了一盏灯。"});
+  } else if(d.day<st.unlocked){
+    out.push({t:"sys",x:`此日已过，尚有 ${prog.all-prog.n} 项未竟——随时可补（见「任务」卷）`});
+  }
+  return out;
+}
+function pubLine(q,d){
+  const pool={study:["这里有一页新卷，读透它。","新的一页——慢慢地，别急。","这页交给你，读完了回来找我。"],
+    review:["旧页重读，温故一遍。","昨天的卷子，再过一眼。"],
+    drill:["试炼来了。答对才算数。","来，接这一关。","手别抖，题不难。"],
+    oral:["开口。声音是你的第二支笔。","这一段，读出声来。","吟游时刻——出声，才算数。"],
+    boss:["大试炼开启。全场肃静。","攻城时刻。一次过。"],
+    clue:["这里有一条线索，拓下来。","把这条线绣进你的地图。"],
+    gear:["先整备行囊。磨刀不误砍柴工。"],
+    flash:["夜巡时刻，过几张卡再睡。","睡前过卡，梦替你巩固。"],
+    reward:["今日圆满。去领赏吧。"]};
+  const arr=pool[q.type]||pool.study;
+  const idx=(hash(q.id)+d.day)%arr.length;
+  return arr[idx];
+}
+function doneLine(q,d){
+  const pool={study:["不错，这页你吃透了。","读完这页，你眼里多了点什么。"],
+    review:["温故有效。它现在是你的了。"],drill:["试炼通过。手感和脑子都在。"],
+    oral:["声音很稳。回听一次，你会听见自己的进步。"],boss:["城破！这一战打得漂亮。"],
+    clue:["线索入册。你的地图又密了一分。"],gear:["行囊齐整。上路吧。"],
+    flash:["夜巡完毕。安心睡。"],reward:["该赏的赏了。"]};
+  const arr=pool[q.type]||["很好。"];
+  return arr[hash(q.id+d.day)%arr.length];
+}
+function lockLine(q){
+  const p=q.prev&&q.prev[0]?QMAP[q.prev[0]]:null;
+  return p?`先完成「${p.name}」——后面的路，才会显形。`:"前面的路还没显形。";
+}
+function hash(s){ let h=0; for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>>>0;} return h; }
+
+/* ---------- render ---------- */
+const game=$("#game");
+function render(){
+  const d=byDay[st.day]||byDay[1];
+  const lv=level(), total=totals();
+  game.innerHTML=`
+  <div class="hd"><div class="t">问道之旅<small>四十五日 · ${esc(st.player)}</small></div>
+    <div class="stats"><span>第<b>${st.day}</b>/45日</span><span>Lv.<b>${lv}</b></span><span>修行<b>${st.xp}</b></span>
+    <span>铜钱<b>${st.coin}</b></span><span>连<b>${streak()}</b>日</span>
+    <button data-act="save">存档</button></div></div>
+  <div class="navline">
+    <button data-v="chat" class="on">对话</button>
+    <button data-v="board">任务</button>
+    <button data-v="oral">吟游</button>
+    <button data-v="lib">藏经阁</button>
+    <button data-v="night">巡夜</button>
+    <button data-v="star">星盘错题</button>
+    <button data-v="ach">成就</button>
+    <button data-v="heart">心语${heartNew()?'<span class="dot"></span>':""}</button>
+    <button data-v="shop">集市</button>
+    <button data-v="cal">旅程</button>
+  </div>
+  <div class="stream" id="stream"></div>
+  <div class="inputbar"><input id="chatInput" placeholder="${inputHint()}" autocomplete="off">
+  <button class="btn sm" id="sendBtn">记录</button></div>
+  <button class="fab" id="oralFab" title="吟游 · 英文导游词线" type="button">🎙️</button>
+  <footer>问道之旅 · 四十五日 · 金榜台于 ${D.examDate}</footer>`;
+  bindNav(); renderChat(d);
+  $("#oralFab").onpointerdown=()=>{ SFX.tap(); switchView("oral"); };
+  const inp=$("#chatInput");
+  inp.onkeydown=e=>{ if(e.key==="Enter"){ sendChat(); } };
+  $("#sendBtn").onpointerdown=sendChat;
+}
+function inputHint(){
+  const d=byDay[st.day]; if(!d) return "……";
+  const active=d.quests.find(q=>questUnlocked(q)&&!qDone(q.id));
+  if(active&&active.type==="study"&&(D.quizzes[active.id]||[]).some(z=>z.kind==="blank")) return "输入填空答案，或写下你的默写手记……";
+  return "写下此刻的手记（会收进修行录）……";
+}
+function sendChat(){
+  const inp=$("#chatInput"); const v=inp.value.trim(); if(!v) return;
+  st.notes[st.day+"_"+Date.now()]=v; save();
+  inp.value="";
+  toast("已记入修行录");
+  renderChat(byDay[st.day],true);
+}
+function renderChat(d,keep){
+  const view=$("#stream");
+  const stream=buildStream(d);
+  let html=stream.map(r=>{
+    if(r.t==="sysday") return `<div class="sys daysep">${esc(r.x)}</div>`;
+    if(r.t==="sys") return `<div class="msg sysline"><div class="bubble">${esc(r.x)}</div></div>`;
+    if(r.t==="npc"){ const n=NPC[r.npc]||NPC.qingxuan;
+      return `<div class="msg"><div class="avatar">${esc(n.name[0])}</div><div class="body">
+      <div class="name"><b>${esc(n.name)}</b> · ${esc(n.title)}</div>
+      <div class="bubble">${esc(r.x)}</div></div></div>`; }
+    if(r.t==="quest"){ const q=QMAP[r.qid]; if(!q) return ""; const done=qDone(q.id); const un=questUnlocked(q);
+      return `<div class="msg"><div class="avatar">　</div><div class="body" style="max-width:100%">
+      <div class="qcard${done?" done":""}${un?"":" locked"}" data-q="${q.id}">
+        <div class="qn">${esc(q.name)}<span class="rk">${q.rarity==="epic"?"✦":q.rarity==="fine"?"•":""}</span></div>
+        <div class="qg">${esc(q.goal)}</div>
+        <div class="qr"><span>+${q.xp} 修行</span><span>+${q.coin} 铜钱</span><span class="dur">${fmtDur(q.dur)}</span>
+        <span style="margin-left:auto">${done?"<span style='color:var(--ok)'>已完成</span>":un?`<button class="btn sm primary" data-open="${q.id}">进入</button>`:"🔒 前序未完"}</span></div>
+      </div></div></div>`; }
+    return "";
+  }).join("");
+  view.innerHTML=html;
+  bindChat(d);
+  if(!keep) view.scrollTop=view.scrollHeight;
+}
+function bindChat(d){
+  document.querySelectorAll("[data-open]").forEach(b=>{
+    b.onpointerdown=e=>{ e.stopPropagation(); openQuest(b.dataset.open); };
+  });
+  document.querySelectorAll(".qcard:not(.done)").forEach(c=>{
+    if(c.dataset.q&&questUnlocked(QMAP[c.dataset.q])) c.onpointerdown=()=>openQuest(c.dataset.q);
+  });
+}
+function heartNew(){
+  for(const nid in D.hearts){ const seen=st.seenHearts[nid]||[];
+    if(D.hearts[nid].some(h=>(st.fav[nid]||0)>=h.at&&!seen.includes(h.at))) return true; }
+  return false;
+}
+
+/* ---------- quest modal: 书页 + 试炼 ---------- */
+function openQuest(qid){
+  const q=QMAP[qid]; if(!q) return;
+  const readonly=qDone(qid);
+  if(!readonly){
+    if(!questUnlocked(q)){ toast("前序任务未完成——环环相扣，先破前关"); return; }
+    // 等级仅作进度参考：前置链完成即代表已沿路修得足够道行（xp 由 reconcile 对账保证）。
+    // 若因异常导致等级落后，先对账再判定，杜绝误拦正常流程。
+    reconcile();
+    if(level()<(q.minLv||1)){
+      toast(`修行等级不足：需 Lv.${q.minLv}，当前 Lv.${level()}——先完成前序任务积累道行`);
+      return;
+    }
+  }
+  const pages=D.lectures[qid]||[];
+  const quiz=D.quizzes[qid]||[];
+  const npc=NPC[q.npc]||NPC.qingxuan;
+  const ov=document.createElement("div"); ov.className="ov";
+  let pageIdx=0;
+  function renderPage(){
+    const p=pages[pageIdx]||{title:"卷尾",lines:[{t:"p",x:"本页无更多内容。"}]};
+    let body="";
+    if(p.lines) body=p.lines.map(l=> l.t==="n"?`<div class="npcnote">${esc(l.x)}</div>`:`<div class="pt" style="border:none">${esc(l.x)}</div>`).join("");
+    if(p.items) body=p.items.map(it=>{
+      const eff=/^S[1-5]/.test(it.id) ? getEdit("point:"+it.id, it.text) : it.text;   // 以藏经阁校订为基准同步
+      const t=hlKeywords(eff);
+      const edited=/^S[1-5]/.test(it.id) && hasEdit("point:"+it.id) ? '<span style="color:var(--ok);font-size:10px;margin-left:3px" title="已采用藏经阁校订版">✎</span>' : "";
+      return `<div class="pt"><span class="pid"><span class="${it.star==="3"?"s3":""}">${esc(it.id)}</span></span>${t}<span style="color:var(--ink2);font-size:11px">${"★".repeat(+it.star)}</span>${edited}</div>`;
+    }).join("");
+    if(p.oral) body=`<div class="oralrow">
+      <div class="oralkit">
+        <div class="kitbar" style="justify-content:space-between">
+          <div class="speedbtns" style="display:flex;gap:6px">
+            <button class="btn sm cur" data-mode="rec" type="button">🎙️ 录音复述</button>
+            <button class="btn sm ghost" data-mode="type" type="button">⌨️ 打字复述</button>
+          </div>
+          <div class="kitbar" style="margin:0">
+            <button class="btn sm ghost" data-fz="-" type="button">A-</button>
+            <button class="btn sm ghost" data-fz="+" type="button">A+</button>
+            <button class="btn sm ghost" data-mask type="button">遮文复述</button>
+          </div>
+        </div>
+        <div class="oraltxt" id="oralTxt">
+          <span class="en" id="oralEn" style="font-size:15px">${esc(p.oral.en)}</span>
+          <span class="zh">${esc(p.oral.zh)}</span>
+          <div class="maskhint">原文已遮蔽 · 凭记忆出声复述</div>
+        </div>
+        <canvas class="wave" id="waveCv"></canvas>
+        <div id="recZone">
+          <button class="btn primary recbig" id="recBtnBig" type="button">🎙️ 按住此处开始录音复述</button>
+          <div class="kitbar">
+            <button class="btn sm primary" id="recBtn" type="button">● 开始录音</button>
+            <button class="btn sm ghost" id="pauseBtn" type="button" disabled>暂停</button>
+            <button class="btn sm ghost" id="redoBtn" type="button" disabled>重录</button>
+            <span class="rectimer" id="recTimer">00:00</span>
+          </div>
+          <div class="kitbar speedbtns" id="playBar" style="display:none">
+            <span style="font-size:12px;color:var(--dim)">回放：</span>
+            <button class="btn sm ghost" data-rate="0.75" type="button">0.75x</button>
+            <button class="btn sm ghost cur" data-rate="1" type="button">1.0x</button>
+            <button class="btn sm ghost" data-rate="1.25" type="button">1.25x</button>
+            <button class="btn sm" id="playBtn" type="button">▶ 播放</button>
+          </div>
+        </div>
+        <div class="typezone" id="typeZone" style="display:none">
+          <textarea id="typeInput" placeholder="遮文后，凭记忆在此默打英文导游词……打完点「对照评分」"></textarea>
+          <div class="kitbar">
+            <button class="btn sm primary" id="typeCmp" type="button">对照评分</button>
+            <button class="btn sm ghost" id="typeClear" type="button">清空重打</button>
+          </div>
+          <div class="typecmp" id="typeCmpOut" style="display:none"></div>
+        </div>
+        <div id="recState" class="small" style="color:var(--dim);font-size:12px">录音/打字仅在本页练习，不留存 · 复述后勾选下方自评关键词</div>
+        <div class="kwgrid" id="kwGrid"></div>
+        <div id="scoreBox" style="display:none"></div>
+      </div>
+    </div>`;
+    if(p.clue) body=`<div class="anchor"><b>记忆锚 · ${esc(p.clue.title)}</b><br>${esc(p.clue.text)}</div>`;
+    return `<div class="book"><div class="bp">${esc(p.title)}</div>${body}</div>`;
+  }
+  function hlKeywords(text){
+    let out=esc(text);
+    out=out.replace(/([0-9０-９]+(?:\.\d+)?\s*(?:年|个|条|位|处|层|根|米|公里|平方米|万|%|时|分|日|倍|卷|题|间|次|元|级))/g,'<em>$1</em>');
+    out=out.replace(/(《[^》]{2,12}》)/g,'<b>$1</b>');
+    return out;
+  }
+  ov.innerHTML=`<div class="dlg">
+    <button class="close" id="qx">×</button>
+    <div class="mt">第 ${q.day} 日 · ${q.tlabel} · ${fmtDur(q.dur)} · 主线${q.kind==="main"?"":"支线"}</div>
+    <h2>${esc(q.name)}</h2>
+    <div id="aiBriefHost"></div>
+    ${q.wow ? q.wow : (q.desc&&q.desc.bg?`<div class="descbox">
+      <div class="dbg">${esc(q.desc.bg)}</div>
+      <div class="dgl"><b>目标</b>${esc(q.goal)}</div>
+      <div class="dst"><b>步骤</b><ul style="margin:2px 0 2px 16px;padding:0">${q.desc.steps.map(s2=>`<li style="font-size:13px">${esc(s2)}</li>`).join("")}</ul></div>
+      <div class="dac">验收：${esc(q.desc.accept)}</div>
+    </div>`:`<div style="font-size:13.5px;color:var(--ink2)">目标：${esc(q.goal)}</div>`)}
+    <div id="pageHost"></div>
+    <div class="pager" id="pageNav"></div>
+    ${q.type==="oral"?(function(){
+      const m={"TAM":"tiananmen-square","GUG":"forbidden-city","TAN":"temple-of-heaven","SUM":"summer-palace","WAL":"great-wall","TOM":"ming-tombs"};
+      const hit=(q.covers||[]).map(c=>c.split("-")[0]).find(k=>m[k]);
+      const o=hit?D.oralFull.find(x=>x.id===m[hit]):null;
+      let full="";
+      if(o){
+        full='<div class="descbox" style="margin-top:8px"><b style="font-family:var(--serif);color:var(--accent)">全文卷 · '+esc(o.name)+'</b>（'+o.words+' 词 / '+o.sections.length+' 节）'
+          +'<ul style="margin:4px 0 0 16px;padding:0">'
+          +o.sections.map(s2=>'<li style="font-size:12.5px">'+esc(s2.h)+'</li>').join("")
+          +'</ul><div style="margin-top:6px;font-size:12px;color:var(--ink2)">逐节背诵后回本页完成录音。</div></div>';
+      }
+      return '<div class="note">吟诵完毕后自评：能脱口而出 →「修习完成」；还生疏 → 多读两遍再完成。</div>'+full;
+    })():""}
+    ${quiz.length?`<div class="quiz" id="quizHost"></div>`:(q.type==="drill"?`<div class="note">本题组对应外部练习（百题斩/真题），游戏内不生成题目。完成后在外部做完练习，回到此处点击「已完成外部练习」。</div>`:"")}
+    <div class="foot" style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;align-items:center">
+      <span style="margin-right:auto;color:var(--gold);font-size:13px">${readonly?"<span style='color:var(--ok)'>✓ 已完成 · 回看模式（可复读/录音）</span>":"奖励 +"+q.xp+" 修行 · +"+q.coin+" 铜钱"}</span>
+      <button class="btn" id="qx2">${readonly?"关闭":"暂离"}</button>
+      ${readonly?"":`<button class="btn primary" id="finBtn" ${quiz.length?"disabled":""}>${quiz.length?"通过试炼以完成":(q.type==="drill"?"已完成外部练习":"修习完成")}</button>`}
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.onpointerdown=e=>{ if(e.target===ov) ov.remove(); };  // 点击遮罩背景关闭
+  // AI 任务说明 + NPC 实时台词（配置密钥时；缓存结果；失败/未配置则静默降级，不显示该区）
+  (function loadAiBrief(){
+    const host=$("#aiBriefHost",ov); if(!host) return;
+    if(!dsReady()){ host.innerHTML=""; return; }
+    const cached=st.aiBrief[q.id];
+    function render(o){
+      host.innerHTML=`<div class="descbox" style="border-left-color:var(--cyber);margin-bottom:10px">
+        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(npc.name)}：<span style="color:var(--fg)">${esc(o.line)}</span></div>
+        <div style="font-size:13px;color:var(--fg2)">${esc(o.brief)}</div>
+        <div style="font-size:10.5px;color:var(--dim);margin-top:4px">AI 生成 · 以界面点选为准，不偏离任务主线</div>
+      </div>`;
+    }
+    if(cached){ render(cached); return; }
+    host.innerHTML=`<div class="note" style="font-size:12px;color:var(--dim)">✦ ${esc(npc.name)} 正在斟酌开场…</div>`;
+    genQuestBrief(q).then(o=>{ st.aiBrief[q.id]=o; save(); if(ov.isConnected) render(o); })
+      .catch(()=>{ if(ov.isConnected) host.innerHTML=""; });   // 静默降级到内置目标描述
+  })();
+  const pageHost=$("#pageHost",ov), pageNav=$("#pageNav",ov);
+  function drawPage(){
+    pageHost.innerHTML=renderPage();
+    pageNav.innerHTML=pages.length>1?`
+      <button class="btn sm ghost" id="pgPrev" ${pageIdx===0?"disabled":""}>上一页</button>
+      <span class="pg">${pageIdx+1} / ${pages.length}</span>
+      <button class="btn sm ghost" id="pgNext" ${pageIdx===pages.length-1?"disabled":""}>下一页</button>`:"";
+    const pv=$("#pgPrev",pageNav), nx=$("#pgNext",pageNav);
+    if(pv) pv.onpointerdown=()=>{ pageIdx--; drawPage(); };
+    if(nx) nx.onpointerdown=()=>{ pageIdx++; drawPage(); };
+    const rec=$("#recBtn"); if(rec) bindOralKit(pageHost);
+    $("#pageHost").querySelectorAll(".gl").forEach(sp=>{
+      sp.onpointerdown=()=>{
+        const g=D.glossary[sp.dataset.g]; if(!g) return;
+        const gc=document.createElement("div"); gc.className="gcard";
+        gc.innerHTML='<div class="gw">'+esc(sp.dataset.g)+'</div>'
+          +'<div class="gs"><b>是什么</b>'+esc(g.what)+'</div>'
+          +'<div class="gs"><b>装到哪</b>'+esc(g.where)+'</div>'
+          +'<div class="gs"><b>为什么</b>'+esc(g.why)+'</div>';
+        document.body.appendChild(gc);
+        setTimeout(()=>{ try{gc.remove();}catch(e){} }, 6000);
+        gc.onpointerdown=()=>gc.remove();
+      };
+    });
+  }
+  /* ---------- 朗读/复述工作台：字号·遮文·录音(暂停/重录)·波形·倍速回放·关键词自评 ---------- */
+  function kwExtract(en){
+    const stop=new Set(["the","a","an","and","or","of","to","in","on","at","for","with","is","are","was","were","be","been","it","its","this","that","these","those","we","you","they","he","she","as","by","from","has","have","had","will","would","can","could","our","their","his","her","not","but","also","been","which","when","where","who","there","here","than","then","into","about"]);
+    const words=String(en).toLowerCase().replace(/[^a-z'\- ]/g," ").split(/\s+/).filter(w=>w.length>=4&&!stop.has(w));
+    const seen=new Set(), out=[];
+    for(const w of words){ const k=w.replace(/[^a-z']/g,""); if(!seen.has(k)){ seen.add(k); out.push(k); } if(out.length>=8) break; }
+    return out;
+  }
+  function drawWave(canvas, analyser){
+    const ctx2d=canvas.getContext("2d");
+    const W=canvas.width=canvas.offsetWidth, H=canvas.height=canvas.offsetHeight||48;
+    const data=new Uint8Array(analyser.frequencyBinCount);
+    function loop(){
+      analyser.getByteFrequencyData(data);
+      ctx2d.clearRect(0,0,W,H); ctx2d.fillStyle="#241845"; ctx2d.fillRect(0,0,W,H);
+      const bars=40, bw=W/bars;
+      for(let i=0;i<bars;i++){
+        const v=data[Math.floor(i/bars*data.length)]/255;
+        const h=Math.max(2,v*H);
+        ctx2d.fillStyle = v>0.6?"#ff5fa8":(v>0.3?"#3df0ff":"#4a2d7a");
+        ctx2d.fillRect(i*bw+1, H-h, bw-2, h);
+      }
+      if(canvas.dataset.live==="1") requestAnimationFrame(loop);
+    }
+    loop();
+  }
+  function fmtTime(s){ const m=Math.floor(s/60), ss=Math.floor(s%60); return String(m).padStart(2,"0")+":"+String(ss).padStart(2,"0"); }
+  function bindOralKit(host){
+    const enEl=$("#oralEn",host), txtBox=$("#oralTxt",host), cv=$("#waveCv",host);
+    const recBtn=$("#recBtn",host), pauseBtn=$("#pauseBtn",host), redoBtn=$("#redoBtn",host), timer=$("#recTimer",host);
+    const recBig=$("#recBtnBig",host);
+    const playBar=$("#playBar",host), playBtn=$("#playBtn",host), stateEl=$("#recState",host);
+    const kwGrid=$("#kwGrid",host), scoreBox=$("#scoreBox",host);
+    let fsz=15, rec=null, chunks=[], stream=null, analyser=null, audioUrl=null, audio=null, audioNode=false, rate=1, tick=null, secs=0, checked=new Set();
+    // 录音能力检测：浏览器仅在「安全上下文」（https 或 localhost）且授权麦克风后开放 MediaRecorder
+    const recCap = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.isSecureContext);
+    if(!recCap){
+      stateEl.innerHTML = "⚠️ 当前环境无法录音（浏览器要求 https 或 localhost，并需授权麦克风）。<br>解决：用 Safari 打开 https 链接 / 添加到主屏幕后允许麦克风；或直接点上方「⌨️ 打字复述」默写对照。";
+      stateEl.style.color = "var(--gold)";
+      [recBtn,recBig].forEach(b=>{ if(b){ b.disabled=true; b.textContent="🎙️ 录音不可用（见下方说明）"; } });
+    }
+    const kws=kwExtract(enEl.textContent);
+    // 关键词自评 chips
+    kwGrid.innerHTML=kws.map(k=>`<button class="kwchip" type="button" data-k="${esc(k)}">${esc(k)}</button>`).join("");
+    kwGrid.querySelectorAll(".kwchip").forEach(ch=>{
+      ch.onpointerdown=()=>{ SFX.tap(); ch.classList.toggle("hit"); const k=ch.dataset.k; if(ch.classList.contains("hit"))checked.add(k);else checked.delete(k); score(); };
+    });
+    function score(){
+      if(!checked.size){ scoreBox.style.display="none"; return; }
+      const pct=Math.round(checked.size/kws.length*100);
+      const cls=pct>=70?"good":(pct>=40?"":"bad");
+      const tip=pct>=70?"脱口而出——可以过关！":(pct>=40?"大半在口——再读两遍。":"卡壳较多——回到原文重读。");
+      if(pct>=70) SFX.ok(); else if(pct<40) SFX.no();
+      scoreBox.style.display="block"; scoreBox.className="recscore "+cls;
+      scoreBox.textContent=`复述覆盖率 ${pct}%（${checked.size}/${kws.length} 关键词）· ${tip}`;
+    }
+    // 字号
+    host.querySelectorAll("[data-fz]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); fsz=Math.max(11,Math.min(24,fsz+(b.dataset.fz==="+"?1.5:-1.5))); enEl.style.fontSize=fsz+"px"; });
+    // 遮文复述
+    const maskBtn=host.querySelector("[data-mask]");
+    maskBtn.onpointerdown=()=>{ SFX.mask(); const on=txtBox.classList.toggle("masked"); maskBtn.classList.toggle("primary",on); maskBtn.textContent=on?"显示原文":"遮文复述"; };
+    // 录音/打字 模式切换
+    const recZone=$("#recZone",host), typeZone=$("#typeZone",host);
+    host.querySelectorAll("[data-mode]").forEach(mb=>mb.onpointerdown=()=>{
+      SFX.tap();
+      host.querySelectorAll("[data-mode]").forEach(x=>{ const on=x===mb; x.classList.toggle("cur",on); x.classList.toggle("ghost",!on); });
+      const mode=mb.dataset.mode;
+      recZone.style.display = mode==="rec"?"block":"none";
+      typeZone.style.display = mode==="type"?"block":"none";
+    });
+    // 打字复述对照评分
+    const typeInput=$("#typeInput",host), typeCmpOut=$("#typeCmpOut",host);
+    $("#typeClear",host).onpointerdown=()=>{ SFX.tap(); typeInput.value=""; typeCmpOut.style.display="none"; typeInput.focus(); };
+    $("#typeCmp",host).onpointerdown=()=>{
+      const typed=typeInput.value.toLowerCase();
+      if(typed.trim().length<5){ toast("先默写几句再对照"); return; }
+      SFX.ok();
+      const orig=enEl.textContent.toLowerCase();
+      const origWords=orig.match(/[a-z']+/g)||[];
+      const typedWords=new Set(typed.match(/[a-z']+/g)||[]);
+      // 逐词命中（去停用词）
+      const stop=new Set(["the","a","an","and","or","of","to","in","on","at","for","with","is","are","was","it","its","this","that","we","you","as","by","our","be","been"]);
+      const contentWords=[...new Set(origWords)].filter(w=>w.length>=3&&!stop.has(w));
+      const hit=contentWords.filter(w=>typedWords.has(w));
+      const miss=contentWords.filter(w=>!typedWords.has(w));
+      const pct=Math.round(hit.length/contentWords.length*100);
+      const cls=pct>=70?"good":(pct>=40?"":"bad");
+      const tip=pct>=70?"默写扎实——可以过关！":(pct>=40?"骨架在，细节再补。":"缺口较大——回原文重读再默。");
+      if(pct>=70) SFX.win(); else if(pct<40) SFX.no();
+      typeCmpOut.style.display="block";
+      typeCmpOut.innerHTML=`<div class="recscore ${cls}" style="margin-bottom:6px">打字复述覆盖率 ${pct}%（${hit.length}/${contentWords.length} 实词）· ${tip}</div>
+        <div><span class="hit">● 已写出：</span>${hit.slice(0,20).map(w=>esc(w)).join(" ")||"—"}</div>
+        <div><span class="miss">● 遗漏：</span>${miss.slice(0,20).map(w=>esc(w)).join(" ")||"无"}</div>`;
+      // 同步勾选关键词
+      checked.clear();
+      kwGrid.querySelectorAll(".kwchip").forEach(c=>{ const on=typedWords.has(c.dataset.k); c.classList.toggle("hit",on); if(on)checked.add(c.dataset.k); });
+      score();
+    };
+    // 空闲波形（静态提示）
+    (function idle(){ const c2=cv.getContext("2d"); cv.width=cv.offsetWidth; cv.height=cv.offsetHeight||48; c2.fillStyle="#241845"; c2.fillRect(0,0,cv.width,cv.height); c2.fillStyle="#4a2d7a"; for(let i=0;i<40;i++) c2.fillRect(i*(cv.width/40)+1,cv.height/2-1,cv.width/40-2,2); })();
+    function startTimer(){ secs=0; timer.textContent="00:00"; tick=setInterval(()=>{ secs++; timer.textContent=fmtTime(secs); },1000); }
+    function stopTimer(){ clearInterval(tick); }
+    recBig.onpointerdown=()=>{ SFX.tap(); recBtn.onpointerdown(); };
+    recBtn.onpointerdown=async()=>{
+      ac();
+      if(rec&&rec.state==="recording"){ rec.stop(); return; }
+      if(rec&&(rec.state==="paused")){ rec.resume(); recBtn.textContent="■ 停止"; recBig.textContent="■ 停止录音"; pauseBtn.textContent="暂停"; startTimer(); SFX.tap(); return; }
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({audio:true});
+        const acx=ac(); const src=acx.createMediaStreamSource(stream);
+        analyser=acx.createAnalyser(); analyser.fftSize=128; src.connect(analyser);
+        rec=new MediaRecorder(stream); chunks=[];
+        rec.ondataavailable=e=>chunks.push(e.data);
+        rec.onstop=()=>{ stream.getTracks().forEach(t=>t.stop()); stopTimer(); cv.dataset.live="0";
+          const blob=new Blob(chunks,{type:rec.mimeType||"audio/webm"});
+          if(audioUrl) URL.revokeObjectURL(audioUrl);
+          audioUrl=URL.createObjectURL(blob);
+          if(!audio) audio=new Audio();
+          audio.src=audioUrl; audio.playbackRate=rate;
+          if(!audioNode){ try{ const acx=ac(); audio._an=acx.createAnalyser(); audio._an.fftSize=128;
+            acx.createMediaElementSource(audio).connect(audio._an); audio._an.connect(acx.destination); audioNode=true; }catch(e){} }
+          recBtn.textContent="● 重新录音"; recBig.textContent="🎙️ 重新录音复述"; pauseBtn.disabled=true; redoBtn.disabled=false; playBar.style.display="flex";
+          stateEl.textContent="录音完成——回放对照，或切换打字默写自评"; SFX.stop();
+        };
+        rec.start(); startTimer(); cv.dataset.live="1"; drawWave(cv,analyser);
+        recBtn.textContent="■ 停止"; recBig.textContent="■ 停止录音（点此结束）"; pauseBtn.disabled=false; redoBtn.disabled=false;
+        stateEl.textContent="正在录音…"; SFX.start();
+      }catch(e){ stateEl.textContent="无法启用录音（需授权麦克风）——可改用「打字复述」或出声朗读"; }
+    };
+    pauseBtn.onpointerdown=()=>{ if(!rec)return; if(rec.state==="recording"){ rec.pause(); pauseBtn.textContent="继续"; recBtn.textContent="● 继续"; recBig.textContent="🎙️ 继续录音"; stopTimer(); SFX.tap(); } };
+    redoBtn.onpointerdown=()=>{ SFX.no(); if(rec&&rec.state!=="inactive"){ try{rec.stop();}catch(e){} } chunks=[]; secs=0; timer.textContent="00:00";
+      rec=null; pauseBtn.disabled=true; redoBtn.disabled=true; playBar.style.display="none"; recBtn.textContent="● 开始录音"; recBig.textContent="🎙️ 按住此处开始录音复述";
+      checked.clear(); kwGrid.querySelectorAll(".kwchip").forEach(c=>c.classList.remove("hit")); scoreBox.style.display="none"; };
+    // 倍速回放
+    playBar.querySelectorAll("[data-rate]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); rate=parseFloat(b.dataset.rate); if(audio) audio.playbackRate=rate;
+      playBar.querySelectorAll("[data-rate]").forEach(x=>x.classList.toggle("cur",x===b)); });
+    playBtn.onpointerdown=()=>{ if(!audio)return; SFX.tap();
+      if(audio.paused){ audio.playbackRate=rate; audio.play(); playBtn.textContent="⏸ 暂停";
+        if(audio._an){ cv.dataset.live="1"; drawWave(cv,audio._an); }
+        audio.onended=()=>{ playBtn.textContent="▶ 播放"; cv.dataset.live="0"; };
+      } else { audio.pause(); playBtn.textContent="▶ 播放"; }
+    };
+  }
+  // quiz flow
+  let qi=0, okCount=0, answered=false;
+  const quizHost=$("#quizHost",ov), finBtn=$("#finBtn",ov);
+  function normalize(s){ return String(s).replace(/[\s，。、；：""''！？（）()（）·—…《》<>]/g,"").toLowerCase(); }
+  function drawQuiz(){
+    answered=false;
+    if(qi>=quiz.length){
+      quizHost.innerHTML=`<div class="note" style="border-left-color:var(--ok)">试炼通过（答对 ${okCount}/${quiz.length}）——错题已录入星盘，玄机夫人会安排它们再见你。</div>`;
+      finBtn.disabled=false; finBtn.textContent="修习完成"; SFX.win(); return;
+    }
+    const z=quiz[qi];
+    if(z.kind==="judge"){
+      quizHost.innerHTML=`<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · 是非断</span>${esc(z.q)}</div>
+        <div class="jbtns"><button class="btn" id="jTrue">真</button><button class="btn" id="jFalse">伪</button></div>
+        <div class="fb" id="fb"></div>`;
+      $("#jTrue",quizHost).onpointerdown=()=>answer(z.a===true);
+      $("#jFalse",quizHost).onpointerdown=()=>answer(z.a===false);
+    } else {
+      quizHost.innerHTML=`<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · 填空断</span>${esc(z.q)}</div>
+        <input id="blankIn" placeholder="填入 ▁ 处的词" autocomplete="off">
+        <div class="jbtns"><button class="btn sm" id="hintBtn">提示</button><button class="btn sm primary" id="subBtn">作答</button></div>
+        <div class="fb" id="fb"></div>`;
+      const inp=$("#blankIn",quizHost); inp.focus();
+      $("#hintBtn",quizHost).onpointerdown=()=>{ inp.value=z.a[0]; inp.placeholder=`${z.a.length} 字，首字「${z.a[0]}」`; };
+      const sub=()=>{
+        const v=normalize(inp.value);
+        const okv=z.accept.some(a=>normalize(a)===v)||v.includes(normalize(z.a));
+        answer(okv);
+      };
+      $("#subBtn",quizHost).onpointerdown=sub;
+      inp.onkeydown=e=>{ if(e.key==="Enter") sub(); };
+    }
+  }
+  function answer(ok){
+    if(answered) return; answered=true;   // 反馈态：锁定，避免重复作答
+    const z=quiz[qi];
+    const correct = z.kind==="judge" ? (z.a?"真":"伪") : z.a;
+    // 禁用作答控件
+    ["#jTrue","#jFalse","#subBtn","#hintBtn"].forEach(s=>{ const b=$(s,quizHost); if(b) b.disabled=true; });
+    const inp=$("#blankIn",quizHost); if(inp) inp.disabled=true;
+    const fb=$("#fb",quizHost);
+    const isLast = qi>=quiz.length-1;
+    if(ok){
+      okCount++; st.quizOk++; SFX.ok();
+      fb.className="fb ok";
+    } else {
+      SFX.no();
+      st.wrong.push({qid:q.id,pid:z.pid,text:z.q,okA:(z.kind==="judge"?(z.a?"真":"伪"):z.a),at:new Date().toISOString()});
+      fb.className="fb no";
+    }
+    // 展示对错 + 正确答案 + 解析，由「知道了」按钮关闭并进入下一题
+    fb.innerHTML=(ok?"✓ 答对了！":"✗ 答错了——")+`正确答案：<b style="color:var(--gold)">${esc(correct)}</b>。${esc(z.why)}`;
+    const next=document.createElement("button");
+    next.className="btn sm primary"; next.type="button";
+    next.textContent = isLast ? "知道了，完成试炼" : "知道了，继续";
+    next.style.marginTop="8px";
+    next.onpointerdown=()=>{ SFX.tap(); qi++; drawQuiz(); };
+    fb.appendChild(document.createTextNode(" ")); fb.appendChild(next);
+    save();
+  }
+  if(!readonly){
+    if(quiz.length) drawQuiz(); else { finBtn.disabled=false; }
+  } else if(quizHost){
+    quizHost.innerHTML=`<div class="note" style="border-left-color:var(--ok)">✓ 此任务已完成 · 回看模式下不必再答试炼，可向上翻看书页、录音复读。</div>`;
+  }
+  drawPage();
+  const closeQuest=()=>ov.remove();
+  $("#qx",ov).onpointerdown=closeQuest;
+  const qx2=$("#qx2",ov); if(qx2) qx2.onpointerdown=closeQuest;
+  if(finBtn) finBtn.onpointerdown=()=>{
+    st.xp+=q.xp; st.coin+=q.coin; st.done[q.id]=new Date().toISOString();
+    st.fav[q.npc]=(st.fav[q.npc]||0)+1;
+    record("任务完成", q.name+"（+"+q.xp+" 修行 +"+q.coin+" 铜钱）");
+    if(st.day===q.day&&q.kind==="main"&&st.unlocked===q.day&&st.unlocked<45) st.unlocked++;
+    maybeUnlockDay();
+    SFX.win(); ov.remove(); checkAch(); checkLevelUp(); save(); render();
+    toast(doneLine(q,byDay[q.day])||"完成");
+  };
+}
+function maybeUnlockDay(){
+  const d=byDay[st.unlocked];
+  if(d){ const p=dayProg(d); if(p.n===p.all&&p.all>0&&st.unlocked<45) st.unlocked++; }
+}
+function checkAch(){
+  D.achievements.forEach(a=>{
+    if(st.ach[a.id]) return;
+    let ok=false; const t=totals(); const c=streak();
+    switch(a.id){
+      case "first": ok=t.c>=1; break;
+      case "chain": ok=DAYS.some(d=>{const p=dayProg(d); return p.all>0&&p.n===p.all;}); break;
+      case "main10": ok=D.quests.filter(q=>q.kind==="main"&&qDone(q.id)).length>=10; break;
+      case "tower": ok=qDone("D20BOSS"); break;
+      case "guild": ok=qDone("D30BOSS"); break;
+      case "ruins": ok=qDone("D41BOSS"); break;
+      case "oral10": ok=D.quests.filter(q=>q.type==="oral"&&qDone(q.id)).length>=10; break;
+      case "quiz50": ok=st.quizOk>=50; break;
+      case "streak7": ok=c>=7; break;
+      case "streak14": ok=c>=14; break;
+      case "clueall": ok=(st.libSearches||0)>=10; break;
+      case "end": ok=fullDone(1,45); break;
+    }
+    if(ok){ st.ach[a.id]=new Date().toISOString(); record("成就解锁", a.name); toast("成就解锁 · "+a.name,"gold"); }
+  });
+}
+function fullDone(a,b){ for(let i=a;i<=b;i++){ const d=byDay[i]; const p=dayProg(d); if(p.n<p.all) return false; } return true; }
+
+/* ---------- panels ---------- */
+function panel(html){
+  const ov=document.createElement("div"); ov.className="ov";
+  ov.innerHTML=`<div class="dlg"><button class="close" type="button">×</button>${html}</div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  $(".close",ov).onpointerdown=close;
+  ov.onpointerdown=e=>{ if(e.target===ov) close(); };  // 点击遮罩背景关闭
+  return ov;
+}
+/* ==================== 内容编辑 / 版本系统 ==================== */
+/* st.edits[id] = [{at:ISO, text}, ...] 最新在前；默认永远显示最新版本 */
+function editVer(id){ return (st.edits&&st.edits[id])||[]; }
+function getEdit(id, original){
+  const v=editVer(id);
+  return v.length? v[0].text : original;
+}
+function hasEdit(id){ return editVer(id).length>0; }
+function saveEdit(id, text){
+  text=String(text);
+  if(!st.edits) st.edits={};
+  const arr=st.edits[id]||(st.edits[id]=[]);
+  if(arr.length && arr[0].text===text) return false;   // 与最新一致，不重复记录
+  arr.unshift({at:new Date().toISOString(), text});
+  save(); return true;
+}
+function rollbackEdit(id, index){
+  const arr=editVer(id); if(!arr[index]) return;
+  const text=arr[index].text;
+  arr.unshift({at:new Date().toISOString(), text});   // 回退即把旧版复制为最新
+  save();
+}
+/* ==================== 藏经阁内容卡片池 ==================== */
+const CATEGORIES=[
+  ["pts","考点卷"],["oral","吟游句"],["full","吟游卷全文"],["clue","线索册"]
+];
+function buildCardPool(){
+  const cards=[];
+  D.pointsLib.forEach(x=>{
+    cards.push({uid:"point:"+x.id, cat:"pts", catLabel:"考点卷 · "+x.id.slice(0,2), id:x.id,
+      title:"★".repeat(+x.star)+" "+x.id+(x.status==="⚠️"?" ⚠待核":""),
+      body:getEdit("point:"+x.id, mdClean(x.text)),
+      extra:x.anchor?("记忆锚："+mdClean(x.anchor)):"", editable:true, editId:"point:"+x.id});
+  });
+  D.oralLib.forEach(x=>{
+    cards.push({uid:"oral:"+x.id, cat:"oral", catLabel:"吟游句 · "+x.topic, id:x.id,
+      title:x.id+" · "+x.topic,
+      body:getEdit("oral:"+x.id+":en", x.en),
+      extra:getEdit("oral:"+x.id+":zh", x.zh), editable:true, editId:"oral:"+x.id+":en"});
+  });
+  D.oralFull.forEach(o=>{
+    o.sections.forEach((s,i)=>{
+      cards.push({uid:"full:"+o.id+":"+i, cat:"full", catLabel:"吟游卷 · "+o.name, id:o.id+" §"+(i+1),
+        title:o.name+" · 第"+(i+1)+"节"+(s.h?" · "+s.h:""),
+        body:getEdit("full:"+o.id+":"+i, s.text||s.en||""),
+        extra:s.h?("小节："+s.h):"", editable:true, editId:"full:"+o.id+":"+i});
+    });
+  });
+  D.clues.forEach(x=>{
+    cards.push({uid:"clue:"+x.id, cat:"clue", catLabel:"线索册", id:x.id,
+      title:x.id+" "+x.title, body:mdClean(x.text),
+      extra:"关联考点："+(x.covers||[]).join(" · "), editable:false});
+  });
+  return cards;
+}
+function renderLib(){
+  st._libCat = st._libCat || "all";
+  st._libQ = st._libQ || "";
+  st._libIdx = st._libIdx || 0;
+  const stream=$("#stream");
+  const all=buildCardPool();
+  const q=st._libQ.toLowerCase().trim();
+  const catSel=[["all","全部（"+all.length+"）"]].concat(CATEGORIES.map(c=>{
+    const n=all.filter(x=>x.cat===c[0]).length; return [c[0], c[1]+"（"+n+"）"];
+  }));
+  let pool=all.filter(c=>{
+    if(st._libCat!=="all" && c.cat!==st._libCat) return false;
+    if(q){ const hay=(c.id+c.title+c.body+c.extra+c.catLabel).toLowerCase(); if(!hay.includes(q)) return false; }
+    return true;
+  });
+  if(st._libIdx>=pool.length) st._libIdx=Math.max(0,pool.length-1);
+  const idx=st._libIdx, cur=pool[idx];
+
+  function cardHtml(c, cls){
+    if(!c) return "";
+    const edited=hasEdit(c.editId);
+    return `<div class="qcard3d ${cls}">
+      <div class="ccat">${esc(c.catLabel)}${edited?' <span style="color:var(--ok)">· 已校订</span>':""}</div>
+      <div class="cid">${esc(c.title)}</div>
+      <div class="cen">${esc(c.body)}</div>
+      ${c.extra?`<div class="czh">${esc(c.extra)}</div>`:""}
+    </div>`;
+  }
+  // 卡堆：当前 + 后两张预览
+  const stack=[0,1,2].map(k=>cardHtml(pool[idx+k], "c"+k)).join("");
+
+  stream.innerHTML=`
+  <div class="sys daysep">藏经阁 · 卡牌修行</div>
+  <div class="cardsearch">
+    <input id="cardQ" placeholder="搜索编号 / 关键词 / 英文句…" value="${esc(st._libQ)}">
+    <select id="cardCat">${catSel.map(o=>`<option value="${o[0]}"${st._libCat===o[0]?" selected":""}>${esc(o[1])}</option>`).join("")}</select>
+  </div>
+  <div class="carddeck">
+    <div class="cardstack" id="cardStack">${cur?stack:`<div class="qcard3d c0"><div class="cen" style="text-align:center;color:var(--dim)">没有匹配的卡片——换个词或类别</div></div>`}</div>
+    <div class="cardpos">${cur?`第 ${idx+1} / ${pool.length} 张`:"0 / 0"}</div>
+    <div class="cardtools">
+      <button class="btn sm ghost" id="cPrev" type="button" ${idx<=0?"disabled":""}>← 上一张</button>
+      <button class="btn sm primary" id="cFlip" type="button" ${pool.length===0?"disabled":""}>翻下一张 ⤵</button>
+      <button class="btn sm gold" id="cRand" type="button" ${pool.length===0?"disabled":""}>🎲 随机抽</button>
+      <button class="btn sm" id="cEdit" type="button" ${cur&&cur.editable?"":"disabled"}>✏️ 校订此卡</button>
+    </div>
+    <div class="fliphint">点「翻下一张」从卡堆顶部依次取出 · 「随机抽」从全部卡片中抽取 · 校订内容会自动存档并可回退版本</div>
+  </div>`;
+
+  const goto=(n)=>{ st._libIdx=Math.max(0,Math.min(n,pool.length-1)); save(); renderLib(); };
+  $("#cPrev",stream).onpointerdown=()=>{ SFX.tap(); goto(idx-1); };
+  $("#cFlip",stream).onpointerdown=()=>{ SFX.flip?SFX.flip():SFX.tap(); goto(idx+1); };
+  $("#cRand",stream).onpointerdown=()=>{ SFX.win?SFX.win():SFX.ok(); goto(Math.floor(Math.random()*pool.length)); };
+  $("#cEdit",stream).onpointerdown=()=>{ if(cur) openEditor(cur); };
+  $("#cardQ",stream).oninput=e=>{ st._libQ=e.target.value; st._libIdx=0; renderLib(); const inp=$("#cardQ",stream); inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); };
+  $("#cardCat",stream).onchange=e=>{ SFX.tap(); st._libCat=e.target.value; st._libIdx=0; save(); renderLib(); };
+}
+/* ==================== 内容编辑器（含版本历史 / 回退） ==================== */
+/* 据 editId 取官方原文（用于「恢复官方原文」） */
+function originalOf(editId){
+  const parts=editId.split(":");
+  if(parts[0]==="point"){ const x=D.pointsLib.find(p=>p.id===parts[1]); return x?mdClean(x.text):""; }
+  if(parts[0]==="oral"){ const x=D.oralLib.find(p=>p.id===parts[1]); return x?(parts[2]==="zh"?x.zh:x.en):""; }
+  if(parts[0]==="full"){ const o=D.oralFull.find(p=>p.id===parts[1]); const s=o&&o.sections[+parts[2]]; return s?(s.text||s.en||""):""; }
+  return "";
+}
+function openEditor(card){
+  const origText = originalOf(card.editId) || card.body;
+  const current = getEdit(card.editId, origText);
+  const ov=panel(`<h2>校订 · ${esc(card.id)}</h2><div class="mt">${esc(card.catLabel)} · 修改实时存档，默认永远显示最新版本，可随时回退</div>
+    <div class="editor">
+      <textarea id="edArea" placeholder="在此校订内容（导游词/考点原文）…">${esc(current)}</textarea>
+      <div class="estatus saved" id="edStatus">● 已加载当前版本</div>
+      <div class="kitbar">
+        <button class="btn sm primary" id="edSave" type="button">保存新版本</button>
+        <button class="btn sm ghost" id="edReset" type="button">恢复官方原文</button>
+        <button class="btn sm ghost" id="edClose" type="button">关闭</button>
+      </div>
+      <div class="vhist" id="vHist"></div>
+    </div>`);
+  const area=$("#edArea",ov), status=$("#edStatus",ov), hist=$("#vHist",ov);
+  let dirty=false;
+  const markDirty=()=>{ dirty=true; status.className="estatus dirty"; status.textContent="● 有未保存修改…"; };
+  area.oninput=markDirty;
+  function drawHist(){
+    const vers=editVer(card.editId);
+    if(!vers.length){ hist.innerHTML=`<div class="vitem"><span class="vat">官方原文</span><span class="vprev">（尚无校订版本）</span></div>`; return; }
+    hist.innerHTML=`<div style="font-size:12px;color:var(--cyber);margin-bottom:4px">版本历史（最新在前，点「恢复」回退）</div>`+
+      vers.map((v,i)=>`<div class="vitem ${i===0?"cur":""}">
+        <span class="vat">${i===0?"当前 · ":"v"+(vers.length-i)+" · "}${v.at.slice(0,16).replace("T"," ")}</span>
+        <span class="vprev">${esc(v.text.slice(0,40))}…</span>
+        <button class="btn sm ghost editbtn" data-v="${i}" type="button" ${i===0?"disabled":""}>${i===0?"最新":"恢复"}</button>
+      </div>`).join("");
+    hist.querySelectorAll("[data-v]").forEach(b=>b.onpointerdown=()=>{
+      SFX.tap(); rollbackEdit(card.editId, +b.dataset.v);
+      area.value=getEdit(card.editId,origText); dirty=false;
+      status.className="estatus saved"; status.textContent="● 已回退并保存为最新版本";
+      drawHist(); toast("已回退到所选版本");
+    });
+  }
+  $("#edSave",ov).onpointerdown=()=>{
+    const txt=area.value.trim();
+    if(!txt){ toast("内容不能为空"); return; }
+    if(saveEdit(card.editId, txt)){ SFX.ok(); dirty=false; status.className="estatus saved"; status.textContent="● 已保存 "+new Date().toLocaleTimeString(); drawHist(); toast("新版本已存档"); }
+    else { status.className="estatus saved"; status.textContent="● 内容未变化"; }
+  };
+  $("#edReset",ov).onpointerdown=()=>{
+    if(!confirm("恢复为官方原文？此操作会把原文存为最新版本。")) return;
+    SFX.tap(); saveEdit(card.editId, origText); area.value=origText; dirty=false;
+    status.className="estatus saved"; status.textContent="● 已恢复官方原文"; drawHist(); toast("已恢复官方原文");
+  };
+  $("#edClose",ov).onpointerdown=()=>{
+    if(dirty && !confirm("有未保存的修改，确定关闭？")) return;
+    ov.remove(); if(view==="lib") renderLib();
+  };
+  drawHist();
+}
+function renderNight(){
+  // due cards from completed study quests
+  const due=[], later=[];
+  const today=new Date().toISOString().slice(0,10);
+  D.quests.forEach(q=>{ if(q.type!=="study"||!qDone(q.id)) return;
+    (D.lectures[q.id]||[]).forEach(p=>{ (p.items||[]).forEach(it=>{
+      const rec=st.cards[it.id]||{due:"2026-01-01",iv:1};
+      if(rec.due<=today) due.push(it); else later.push(it);
+    });});
+  });
+  const ov=panel(`<h2>巡夜 · 记忆卡匣</h2><div class="mt">到期 ${due.length} 张 · 待来日 ${later.length} 张（间隔 1→3→7→15 日，由你的自评决定）</div><div id="fcHost"></div>`);
+  const host=$("#fcHost",ov);
+  let i=0, showRev=false;
+  function draw(){
+    if(i>=due.length){ host.innerHTML=`<div class="missing" style="text-align:center;padding:30px">今夜巡完。安心睡。</div>`; return; }
+    const it=due[i]; const rev=showRev;
+    host.innerHTML=`<div class="flashcard"><div class="fc-id">${esc(it.id)} · ${"★".repeat(+it.star)}</div>
+      <div class="fc-main">${esc(rev?it.text:"回忆这条考点……")}</div>
+      ${rev?`<div class="fc-rev">${esc(it.text)}</div>`:""}
+      <div style="margin-top:12px">${rev?`
+        <button class="btn sm" id="fAgain">生疏（明日再来）</button>
+        <button class="btn sm primary" id="fGood">记住了（延后间隔）</button>`
+        :`<button class="btn sm primary" id="fFlip">翻面</button>`}</div></div>
+      <div class="tstate">${i+1} / ${due.length}</div>`;
+    const flip=$("#fFlip",host); if(flip) flip.onpointerdown=()=>{ showRev=true; draw(); };
+    const ag=$("#fAgain",host); if(ag) ag.onpointerdown=()=>{ st.cards[it.id]={due:new Date(Date.now()+864e5).toISOString().slice(0,10),iv:1}; i++; showRev=false; save(); draw(); };
+    const gd=$("#fGood",host); if(gd) gd.onpointerdown=()=>{ const r=st.cards[it.id]||{iv:1}; const nv=Math.min(15,r.iv*2); st.cards[it.id]={due:new Date(Date.now()+nv*864e5).toISOString().slice(0,10),iv:nv}; i++; showRev=false; save(); draw(); };
+  }
+  draw();
+}
+function renderStar(){
+  const ov=panel(`<h2>星盘 · 错题</h2><div class="mt">玄机夫人记下的每一道错题，答对后方可移出星盘</div><div id="wHost"></div>`);
+  const host=$("#wHost",ov);
+  // 列表视图
+  function listView(){
+    const w=st.wrong.slice(-40).reverse();
+    host.innerHTML=w.length? w.map((x,i)=>`<div class="wrongrow"><div><b>${esc(x.pid||"")}</b> ${esc(x.text.slice(0,70))}<br><span style="color:var(--ink2);font-size:12px">正确：${esc(String(x.okA).slice(0,40))} · ${esc(x.at.slice(0,10))}</span></div><button class="btn sm retry" data-i="${st.wrong.length-1-i}">再答</button></div>`).join(""):`<div class="missing" style="text-align:center;padding:30px">星盘干净——继续保持</div>`;
+    host.querySelectorAll(".retry").forEach(b=>{ b.onpointerdown=()=>{ SFX.tap(); retryView(+b.dataset.i); }; });
+  }
+  // 再答视图（同一弹窗内切换，避免叠加）
+  function retryView(idx){
+    const x=st.wrong[idx]; if(!x){ listView(); return; }
+    const isJudge=(x.okA==="真"||x.okA==="伪");
+    host.innerHTML=`<button class="btn sm ghost" id="rBack" type="button">← 返回错题列表</button>
+      <div class="qz" style="margin-top:10px"><span class="kk">出自 ${esc(x.qid||"")} ${esc(x.pid||"")}</span>${esc(x.text)}</div>
+      ${isJudge
+        ? `<div class="jbtns"><button class="btn" id="rt" type="button">真</button><button class="btn" id="rf" type="button">伪</button></div>`
+        : `<input id="rin" style="width:100%;border:1px solid var(--hair);font:inherit;padding:8px" placeholder="作答" autocomplete="off"><div style="margin-top:8px"><button class="btn primary" id="rok" type="button">作答</button></div>`}
+      <div class="fb" id="rfb" style="display:block;margin-top:10px;line-height:1.7"></div>`;
+    $("#rBack",host).onpointerdown=()=>{ SFX.tap(); listView(); };
+    let rAns=false;
+    const rfb=$("#rfb",host);
+    const finish=(ok)=>{
+      if(rAns) return; rAns=true;   // 反馈态锁定
+      const rt=$("#rt",host), rf=$("#rf",host), rok=$("#rok",host), rin=$("#rin",host);
+      [rt,rf,rok].forEach(b=>{ if(b) b.disabled=true; }); if(rin) rin.disabled=true;
+      if(ok) SFX.ok(); else SFX.no();
+      rfb.className = ok ? "fb ok" : "fb no";
+      rfb.style.color = ok ? "var(--ok)" : "var(--danger)";
+      rfb.innerHTML=(ok?"✓ 这次对了——错题移出星盘。":"✗ 仍不对——再记一次。")
+        +`正确答案：<b style="color:var(--gold)">${esc(String(x.okA))}</b>。`;
+      const got=document.createElement("button");
+      got.className="btn sm primary"; got.type="button"; got.textContent="知道了";
+      got.style.marginTop="6px";
+      got.onpointerdown=()=>{
+        SFX.tap();
+        if(ok){ st.wrong.splice(idx,1); }      // 答对：移除该错题
+        else { x.at=new Date().toISOString(); } // 答错：更新时间置顶，不重复新增
+        save(); listView();
+      };
+      rfb.appendChild(document.createTextNode(" ")); rfb.appendChild(got);
+    };
+    const rt=$("#rt",host);
+    if(rt){
+      rt.onpointerdown=()=>finish(x.okA==="真");
+      $("#rf",host).onpointerdown=()=>finish(x.okA==="伪");
+    } else {
+      const rin=$("#rin",host); rin.focus();
+      const sub=()=>finish(normalize(rin.value)===normalize(x.okA));
+      $("#rok",host).onpointerdown=sub;
+      rin.onkeydown=e=>{ if(e.key==="Enter") sub(); };
+    }
+  }
+  listView();
+}
+function normalize(s){ return String(s).replace(/[\s，。、；：""''！？（）()·—…《》<>]/g,"").toLowerCase(); }
+function renderAch(){
+  const ov2=panel('<h2>徽章墙</h2><div class="mt">'+Object.keys(st.ach).length+'/'+D.achievements.length+' 枚已取得</div><div class="badgewall">'
+    + D.achievements.map(function(a){ const got=st.ach[a.id];
+      return '<div class="badge'+(got?" got":"")+'"><div class="bic">'+(got?"✦":"·")+'</div><b>'+esc(a.name)+'</b><div class="bd">'+esc(a.desc)+'</div></div>'; }).join("")
+    + '</div>');
+  return "";
+}
+function renderHeart(){
+  const ov=panel(`<h2>心语</h2><div class="mt">好感对话 · 完成任务可提升好感</div>`+
+    D.npcs.map(n=>{ const fav=st.fav[n.id]||0; const hs=D.hearts[n.id]||[]; const seen=st.seenHearts[n.id]||[];
+      return `<div class="heart"><div class="hn">${esc(n.name)} <span class="ht">${esc(n.title)} · 好感 ${fav}</span></div></div>`+
+        hs.map(h=>{ const ok=fav>=h.at;
+          return `<div class="heart${ok?"":" locked"}"><div class="ht">${ok?`好感 ≥ ${h.at}`:`好感 ≥ ${h.at} 解锁`}</div>
+          <div class="hl">${ok?esc(h.t):"？？？"}</div></div>`;}).join("");
+    }).join(""));
+  // mark seen
+  D.npcs.forEach(n=>{ st.seenHearts[n.id]=(D.hearts[n.id]||[]).filter(h=>(st.fav[n.id]||0)>=h.at).map(h=>h.at); });
+  save();
+}
+function renderShop(){
+  const ov=panel(`<h2>集市</h2><div class="mt">铜钱 ${st.coin} · 兑换现实奖励（自己写，自己兑）</div>`+
+    st.shop.map((item,i)=>{ const cost=(i+1)*80;
+      return `<div class="shoprow"><input data-i="${i}" value="${esc(item)}"><span class="cost">${cost} 文</span><button class="btn sm" data-buy="${i}" data-cost="${cost}">兑换</button></div>`;}).join("")+
+    `<div style="margin-top:10px"><button class="btn sm" id="shopAdd">+ 添加奖励</button></div>`);
+  ov.querySelectorAll(".shoprow input").forEach(inp=>inp.onchange=()=>{ st.shop[+inp.dataset.i]=inp.value||"（空）"; save(); });
+  ov.querySelectorAll("[data-buy]").forEach(b=>b.onpointerdown=()=>{
+    const i=+b.dataset.buy, cost=+b.dataset.cost;
+    if(st.coin<cost){ toast("铜钱不足——再修习一日"); return; }
+    st.coin-=cost; save(); toast("已兑换：「"+st.shop[i]+"」——记得真的奖励自己","gold"); render();
+  });
+  $("#shopAdd",ov).onpointerdown=()=>{ st.shop.push("新奖励"); save(); ov.remove(); renderShop(); };
+}
+/* ==================== DeepSeek 集成 ====================
+   可选增强：配置密钥后，NPC 人设/对话与任务说明由 DeepSeek 生成。
+   无密钥 / 离线 / 接口失败时全部自动降级为内置内容，核心离线流程不受影响。
+   密钥仅存本浏览器 localStorage（本地个人 PWA），不上传任何第三方。 */
+const DS_MODEL="deepseek-chat";
+function dsReady(){ return !!(st.dsKey && st.dsKey.trim()); }
+async function dsChat(messages, wantJson){
+  if(!dsReady()) throw new Error("未配置密钥");
+  const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(), 22000);
+  try{
+    const r=await fetch("https://api.deepseek.com/chat/completions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+st.dsKey.trim()},
+      body:JSON.stringify({model:DS_MODEL,messages,temperature:0.85,
+        ...(wantJson?{response_format:{type:"json_object"}}:{})}),
+      signal:ctrl.signal});
+    if(r.status===401) throw new Error("密钥无效(401)");
+    if(r.status===402||r.status===429) throw new Error("额度不足或限流("+r.status+")");
+    if(!r.ok) throw new Error("接口异常("+r.status+")");
+    const j=await r.json();
+    const c=j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content;
+    if(!c) throw new Error("返回为空");
+    return c.trim();
+  }finally{ clearTimeout(timer); }
+}
+/* 结构化游戏背景信息文件（供 DeepSeek 读取世界观/机制/NPC 基础） */
+function buildWorldBrief(){
+  return {
+    游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
+    世界观:"现代京城被『遗忘之雾』笼罩，唯有『问道录』可照见旧京文脉。玩家是求道的引路人（准导游），在六位守灯者（NPC）引导下，用四十五日历经五个幕次——山河游学、律法塔、行会风云、遗迹探秘、金榜台前，最终赴考。",
+    游戏机制:["读卷：翻页研习考点，关键词高亮、记忆锚助记","试炼：是非+填空，答错录入星盘错题","吟游：英文导游词朗读、录音、打字复述自评","巡夜：按1/3/7/15日间隔重刷记忆卡","五幕四十五日任务链，主线环环前置解锁","修行=经验值升级，铜钱可在集市兑换"],
+    NPC基础信息:D.npcs.map(n=>({id:n.id,姓名:n.name,称号:n.title,背景:n.intro})),
+    叙事约束:"NPC 对话必须服务当日任务目标，不剧透未解锁环节，不跑题，不出现考试答案。",
+    语言要求:"单句≤60字、古风而通俗、可带鼓励；禁用现代网络梗；不得提及 AI/模型/接口；玩家只通过点选操作，不进行自由文本对话。"
+  };
+}
+/* 生成 NPC 人设卡片（可带修改意见重生成） */
+async function genPersona(npcId, feedback){
+  const npc=D.npcs.find(n=>n.id===npcId)||NPC[npcId];
+  const persona=st.personas[npcId];
+  const sys="你是游戏角色设定师。基于给定的游戏世界背景与NPC基础信息，产出严谨的角色人设卡片。只输出JSON。";
+  const user="游戏背景信息：\n"+JSON.stringify(buildWorldBrief(),null,1)
+    +"\n\n要设定的NPC："+JSON.stringify({姓名:npc.name,称号:npc.title,背景:npc.intro})
+    +(persona?("\n\n当前已有人设（供参考）："+JSON.stringify(persona.card)):"")
+    +(feedback?("\n\n用户的修改意见（必须采纳）："+feedback):"")
+    +"\n\n请输出JSON，字段：name(姓名)、identity(身份背景，30-50字)、personality(性格特征，3-4个短语)、style(对话风格描述)、relations(与其他角色关系数组，每项{name,rel})。人设要贴合北京导游备考世界观，性格鲜明、可信。";
+  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], true);
+  let card;
+  try{ card=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
+  catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) card=JSON.parse(m[0]); else throw e; }
+  card.id=npcId; card.name=card.name||npc.name;
+  return card;
+}
+/* 生成任务说明（≤100字）+ NPC 实时台词（点选触发，不自由对话） */
+async function genQuestBrief(q){
+  const npc=NPC[q.npc]||NPC.qingxuan;
+  const persona=st.personas[q.npc]&&st.personas[q.npc].card;
+  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容，不剧透、不跑题、不给考试答案。只输出JSON。";
+  const user="游戏背景信息：\n"+JSON.stringify(buildWorldBrief())
+    +"\n\n当前任务："+JSON.stringify({日次:q.day,环节:q.name,类型:q.tlabel,目标:q.goal,NPC:npc.name+"·"+npc.title})
+    +(persona?("\n\n该NPC已确认人设，台词必须符合："+JSON.stringify(persona)):"")
+    +"\n\n请输出JSON：{line:string(该NPC以人设口吻对玩家说的一句任务指引，≤60字，古风鼓励),brief:string(任务说明，≤100字，突出核心目标与关键步骤，符合游戏氛围)}。";
+  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], true);
+  let o;
+  try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
+  catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else throw e; }
+  o.line=(o.line||"").slice(0,80); o.brief=(o.brief||"").slice(0,120);
+  o.at=new Date().toISOString();
+  return o;
+}
+function renderSave(){
+  const t=totals();
+  const ov=panel(`<h2>设置 · 存档</h2><div class="mt">自动保存在本浏览器 · 可导出备份</div>
+  <div class="statbar"><span>修行<b>${st.xp}</b></span><span>完成<b>${t.c}/${t.a}</b></span><span>铜钱<b>${st.coin}</b></span></div>
+
+  <div class="boardgroup"><h3>存档管理</h3>
+  <div class="savegrid"><button class="btn" id="exp">导出存档</button><button class="btn" id="ledger">导出修行录</button><button class="btn" id="imp">导入存档</button>
+  <button class="btn ghost" id="rst">重置旅程</button></div><input type="file" id="impF" accept=".json" class="hidden">
+  <div class="note">重置为单向门——先导出，再重置。</div></div>
+
+  <div class="boardgroup"><h3>DeepSeek 智能引擎</h3>
+    <div class="note">配置后可让 NPC 人设、对话与任务说明由 AI 生成。密钥仅存本浏览器，不经过任何第三方；未配置或离线时自动使用内置内容，不影响修行。</div>
+    <div class="cardsearch" style="margin-top:8px">
+      <input id="dsKey" type="password" placeholder="粘贴 DeepSeek API Key（sk-…）" value="${esc(st.dsKey||"")}" autocomplete="off">
+      <button class="btn sm primary" id="dsSave" type="button">保存</button>
+    </div>
+    <div class="estatus ${dsReady()?"saved":"dirty"}" id="dsStatus">${dsReady()?"● 已配置 · AI 功能可用":"○ 未配置 · 使用内置内容"}</div>
+    <div class="savegrid" style="margin-top:6px">
+      <button class="btn sm" id="dsBrief" type="button" ${dsReady()?"":"disabled"}>📜 查看游戏背景信息</button>
+      <button class="btn sm" id="dsPersona" type="button" ${dsReady()?"":"disabled"}>🎭 生成 NPC 人设</button>
+    </div>
+  </div>
+
+  <div class="boardgroup"><h3>藏经阁内容同步校验</h3>
+    <div class="note">任务书页与藏经阁卡片共享同一数据源；你在藏经阁的校订会自动作为基准同步到任务书页。可随时生成差异报告。</div>
+    <div class="savegrid" style="margin-top:6px">
+      <button class="btn sm" id="syncCheck" type="button">🔍 一致性检查</button>
+      <button class="btn sm ghost" id="syncNow" type="button">🔄 以藏经阁为准刷新</button>
+    </div>
+    <div id="syncReport" class="small" style="margin-top:8px;font-size:12.5px;color:var(--dim)"></div>
+  </div>`);
+
+  $("#dsSave",ov).onpointerdown=()=>{
+    const v=$("#dsKey",ov).value.trim();
+    st.dsKey=v; save(); SFX.tap();
+    const s=$("#dsStatus",ov);
+    if(dsReady()){ s.className="estatus saved"; s.textContent="● 已保存 · 正在连通性测试…";
+      dsChat([{role:"user",content:"只回复：ok"}]).then(()=>{ s.textContent="● 已配置并连通 · AI 功能可用"; s.className="estatus saved"; toast("密钥有效"); })
+        .catch(e=>{ s.textContent="● 已保存，但调用失败："+e.message+"（仍可离线使用）"; s.className="estatus dirty"; toast("连通测试失败："+e.message); });
+    } else { s.className="estatus dirty"; s.textContent="○ 未配置 · 使用内置内容"; toast("已清除密钥"); }
+    $("#dsBrief",ov).disabled=!dsReady(); $("#dsPersona",ov).disabled=!dsReady();
+  };
+  $("#dsBrief",ov).onpointerdown=()=>{ SFX.tap();
+    panel(`<h2>游戏背景信息（供 DeepSeek）</h2><div class="mt">结构化世界观 · 机制 · NPC 基础 · 叙事约束</div>
+      <div class="book"><div class="cen" style="white-space:pre-wrap;font-size:13px;line-height:1.7">${esc(JSON.stringify(buildWorldBrief(),null,2))}</div></div>`);
+  };
+  $("#dsPersona",ov).onpointerdown=()=>{ SFX.tap(); openPersonaPanel(); };
+
+  /* 同步校验 */
+  function runCheck(){
+    const rep=$("#syncReport",ov);
+    rep.textContent="检查中…";
+    let total=0, diverged=0; const list=[];
+    const srcPoint=id=>{ const x=D.pointsLib.find(p=>p.id===id); return x?mdClean(x.text):null; };
+    Object.values(D.lectures).forEach(pages=>pages.forEach(p=>(p.items||[]).forEach(it=>{
+      if(!/^S[1-5]/.test(it.id)) return;
+      total++;
+      const src=srcPoint(it.id); if(src==null) return;
+      const eff=getEdit("point:"+it.id, src);   // 任务书页渲染时实际展示（以藏经阁校订为基准）
+      if(eff!==src){ diverged++; if(list.length<8) list.push(it.id); }
+    })));
+    const pct=total?Math.round((total-diverged)/total*100):100;
+    rep.innerHTML=`共 <b style="color:var(--cyber)">${total}</b> 处任务书页↔藏经阁关联点；<b style="color:var(--ok)">${total-diverged}</b> 一致，<b style="color:var(--gold)">${diverged}</b> 为藏经阁校订版（已同步为基准）。<br>一致率 ${pct}%。${diverged?("校订项示例："+list.join("、")+"…"):"全部一致。"}`;
+    SFX.ok();
+  }
+  $("#syncCheck",ov).onpointerdown=()=>{ SFX.tap(); runCheck(); };
+  $("#syncNow",ov).onpointerdown=()=>{ SFX.tap(); save(); runCheck(); toast("已以藏经阁内容为基准刷新所有任务书页"); };
+
+  $("#ledger",ov).onpointerdown=()=>{
+    const rows=[["时间","事件","明细"]].concat((st.log||[]).map(l=>[l.at,l.ev,l.x]));
+    const csv="\ufeff"+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(",")).join("\n");
+    const blob=new Blob([csv],{type:"text/csv"}); const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob); a.download="wendao-ledger.csv"; a.click(); toast("修行录已导出");
+  };
+  $("#exp",ov).onpointerdown=()=>{
+    const blob=new Blob([JSON.stringify(st,null,1)],{type:"application/json"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download=`wendao-save-${new Date().toISOString().slice(0,10)}.json`; a.click();
+  };
+  $("#imp",ov).onpointerdown=()=>$("#impF",ov).click();
+  $("#impF",ov).onchange=e=>{ const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader(); r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o.player) throw 0; st=o; save(); toast("存档已导入"); ov.remove(); render(); }catch(err){ toast("导入失败：无效存档"); } }; r.readAsText(f); };
+  $("#rst",ov).onpointerdown=()=>{ if(confirm("确定重置？导出后仍可恢复。")){ try{localStorage.removeItem(KEY);}catch(e){} st=defState(); save(); ov.remove(); intro(); } };
+}
+
+/* ==================== NPC 人设卡片：生成 → 确认/修改重生成 ==================== */
+function openPersonaPanel(){
+  const ov=panel(`<h2>NPC 人设卡片</h2><div class="mt">由 DeepSeek 据游戏背景信息生成 · 确认后作为该 NPC 对话行为基础</div>
+    <div id="npcList"></div>`);
+  const host=$("#npcList",ov);
+  function cardHtml(n){
+    const p=st.personas[n.id];
+    const c=p&&p.card;
+    const status = p? (p.confirmed?'<span style="color:var(--ok)">✓ 已确认</span>':'<span style="color:var(--gold)">待确认</span>'):'<span style="color:var(--dim)">未生成（使用内置）</span>';
+    return `<div class="book" id="pc_${n.id}">
+      <div class="bp"><span class="pid">${esc(n.name)}</span><em>${esc(n.title)}</em> ${status}</div>
+      ${c?`<div style="font-size:13px;line-height:1.7">
+        <div><b style="color:var(--neon)">身份：</b>${esc(c.identity||"")}</div>
+        <div><b style="color:var(--neon)">性格：</b>${esc(Array.isArray(c.personality)?c.personality.join("、"):c.personality)}</div>
+        <div><b style="color:var(--neon)">对话风格：</b>${esc(c.style||"")}</div>
+        ${c.relations&&c.relations.length?`<div><b style="color:var(--neon)">关系：</b>${c.relations.map(r=>esc((r.name||"")+"·"+(r.rel||""))).join("；")}</div>`:""}
+      </div>`:`<div class="npcnote">${esc(n.intro)}</div>`}
+      <div class="kitbar" style="margin-top:8px">
+        <button class="btn sm primary" data-gen="${n.id}" type="button">${c?"重新生成":"生成人设"}</button>
+        ${c&&!p.confirmed?`<button class="btn sm" data-ok="${n.id}" type="button">✓ 确认采用</button>
+          <button class="btn sm ghost" data-edit="${n.id}" type="button">✎ 提修改意见</button>`:""}
+        ${c&&p.confirmed?`<button class="btn sm ghost" data-edit="${n.id}" type="button">✎ 调整重生成</button>
+          <button class="btn sm ghost" data-clear="${n.id}" type="button">恢复内置</button>`:""}
+      </div>
+      <div id="fb_${n.id}" class="small" style="font-size:12px;color:var(--gold);margin-top:6px"></div>
+    </div>`;
+  }
+  function draw(){ host.innerHTML=D.npcs.map(cardHtml).join(""); bind(); }
+  function bind(){
+    host.querySelectorAll("[data-gen],[data-ok]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
+      const id=b.dataset.gen||b.dataset.ok;
+      if(b.dataset.ok){ st.personas[id].confirmed=true; save(); SFX.ok(); toast("已确认，该 NPC 将依此人设对话"); draw(); return; }
+      genFlow(id,"");
+    });
+    host.querySelectorAll("[data-edit]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
+      const id=b.dataset.edit;
+      const fb=prompt("请输入对该人设的修改意见（如：让他更严厉些 / 增加与玄机夫人的师徒线）：");
+      if(fb&&fb.trim()) genFlow(id, fb.trim());
+    });
+    host.querySelectorAll("[data-clear]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
+      const id=b.dataset.clear; if(confirm("恢复为内置人设？")){ delete st.personas[id]; save(); draw(); toast("已恢复内置"); }
+    });
+  }
+  async function genFlow(id, feedback){
+    const box=$("#fb_"+id,host);
+    if(box){ box.textContent="DeepSeek 正在构思人设…"; }
+    try{
+      const card=await genPersona(id, feedback);
+      st.personas[id]={card, confirmed:false, at:new Date().toISOString()}; save(); SFX.win(); draw();
+    }catch(e){ if(box){ box.textContent="生成失败："+e.message+"（已保留原人设，可重试）"; } SFX.no(); }
+  }
+  draw();
+}
+
+function toast(msg, cls){
+  const t=document.createElement("div");
+  t.className="toast "+(cls||""); t.textContent=msg;
+  $("#toasts").appendChild(t);
+  setTimeout(()=>{ try{ t.remove(); }catch(e){} }, 3600);
+}
+
+/* ---------- nav / boot ---------- */
+function switchView(v){
+  view=v;
+  document.querySelectorAll(".navline button").forEach(x=>x.classList.toggle("on",x.dataset.v===v));
+  if(view==="chat") renderChat(byDay[st.day]);
+  if(view==="board") renderBoard();
+  if(view==="oral") renderOralLine();
+  if(view==="lib") renderLib();
+  if(view==="night") renderNight();
+  if(view==="star") renderStar();
+  if(view==="ach") renderAch();
+  if(view==="heart") renderHeart();
+  if(view==="shop") renderShop();
+  if(view==="cal") renderCal();
+  if(view==="save") renderSave();
+}
+function bindNav(){
+  document.querySelectorAll(".navline button").forEach(b=>{ b.onpointerdown=()=>{ SFX.tap(); switchView(b.dataset.v); }; });
+  document.querySelector('[data-act="save"]').onpointerdown=renderSave;
+}
+function intro(){
+  st=defState();
+  const ov=document.createElement("div"); ov.className="ov";
+  ov.innerHTML=`<div class="dlg" style="max-width:540px;text-align:center">
+    <div class="mt" style="letter-spacing:.3em">序 章</div>
+    <h2 style="font-size:24px;letter-spacing:.2em">问道之旅 · 四十五日</h2>
+    <div class="sec" style="text-align:left;font-size:14.5px">
+      <p>燕京古城被「遗忘迷雾」笼罩。山河的记忆、律法的回响、行会的技艺，正在消散。</p>
+      <p>四十五日之内，修满一方问道录、踏上金榜台的人，能唤回这座城的光。</p>
+      <p>你是新一代行吟者——<b>${esc(st.player)}</b>。青玄先生在书院门口等你。</p>
+      <p class="note" style="border-left-color:var(--hair)">一切修行都在此处完成：读卷、试炼、录音、巡夜、星盘。无需他物。</p>
+    </div>
+    <div class="foot" style="justify-content:center"><button class="btn primary" id="begin">接过问道录，启程</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  $("#begin",ov).onpointerdown=()=>{ ov.remove(); save(); render(); };
+}
+function record(ev, x){ st.log=st.log||[]; st.log.push({at:new Date().toISOString(), ev, x}); }
+function boot(){
+  const has=load();
+  if(!has){ st=defState(); save(); intro(); }
+  else{ if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,45); if(st.day>st.unlocked) st.unlocked=st.day; save(); render(); checkAch(); }
+}
+/* ---------- 任务面板（行者手札 · 任务卷）：对话流之外的独立任务总览 ---------- */
+function dayMemoryPoints(day){
+  const set=new Set();
+  (byDay[day].quests||[]).forEach(q=>{
+    (D.quizzes[q.id]||[]).forEach(z=>{ if(z.pid) set.add(z.pid); });
+  });
+  return set.size;
+}
+function qStage(q){
+  if(qDone(q.id)) return {key:"done", label:"✓ 已完成"};
+  if(questUnlocked(q)) return {key:"active", label:"▶ 进行中"};
+  return {key:"locked", label:"🔒 未解锁"};
+}
+/* ==================== 可折叠层级任务树 ==================== */
+/* 节点：{id,label,meta,state('done'|'cur'|'locked'|''),leaf,children:[]} */
+function treeDefaultExpanded(node){
+  if(!st._treeExp) st._treeExp={};
+  if(st._treeExp[node.id]===undefined){
+    // 默认：幕级展开；日级仅当日展开
+    st._treeExp[node.id] = node.level===0 ? true : (node._defaultOpen===true);
+  }
+  return st._treeExp[node.id];
+}
+function setTreeExp(id,val){ if(!st._treeExp) st._treeExp={}; st._treeExp[id]=val; save(); }
+function renderTreeNode(node){
+  const hasKids = node.children && node.children.length>0;
+  const expanded = hasKids && treeDefaultExpanded(node);
+  const stateCls = node.state ? " "+node.state : "";
+  const leafCls = node.leaf ? " leaf" : "";
+  return `<div class="tnode" data-level="${node.level}" data-has-children="${hasKids}" data-expanded="${expanded}" data-tid="${esc(node.id)}">
+    <div class="trow${stateCls}${leafCls}" data-toggle="${esc(node.id)}" ${node.leaf?`data-leaf="${esc(node.id)}"`:""}>
+      <span class="ttog" data-toggle="${esc(node.id)}">${hasKids?'<span class="tcar">▶</span>':''}</span>
+      <span class="tdot"></span>
+      <span class="tlabel">${esc(node.label)}</span>
+      ${node.meta?`<span class="tmeta">${esc(node.meta)}</span>`:""}
+    </div>
+    ${hasKids?`<div class="tchildren">${node.children.map(renderTreeNode).join("")}</div>`:""}
+  </div>`;
+}
+function bindTree(container, onLeaf){
+  container.onpointerdown=e=>{
+    const tog=e.target.closest("[data-toggle]");
+    const leaf=e.target.closest("[data-leaf]");
+    if(tog){
+      const n=tog.closest(".tnode"); if(!n) return;
+      e.stopPropagation();
+      const id=n.dataset.tid; const cur=n.dataset.expanded==="true";
+      n.dataset.expanded=String(!cur); setTreeExp(id,!cur); SFX.tap();
+      return;
+    }
+    if(leaf){ e.stopPropagation(); SFX.tap(); onLeaf&&onLeaf(leaf.dataset.leaf); }
+  };
+}
+function setAllTreeExpanded(nodes, val){
+  const walk=ns=>ns.forEach(n=>{ if(!st._treeExp) st._treeExp={}; st._treeExp[n.id]=val; if(n.children) walk(n.children); });
+  walk(nodes); save();
+}
+/* 构建 幕→日→任务 三级树 */
+function buildQuestTree(){
+  const acts=[...new Set(DAYS.map(d=>d.act))];
+  return acts.map(act=>{
+    const days=DAYS.filter(d=>d.act===act);
+    let actDone=0, actAll=0;
+    const dayNodes=days.map(d=>{
+      const prog=dayProg(d); actDone+=prog.n; actAll+=prog.all;
+      const isCur = d.day===st.day;
+      const qNodes=d.quests.map(q=>{
+        const s=qStage(q);
+        return {id:q.id, level:2, leaf:true, state:s.key, label:q.name, meta:q.tlabel+"·"+q.dur+"分"};
+      });
+      return {id:"day:"+d.day, level:1, label:`第 ${d.day} 日 · 星期${d.week}`, meta:prog.n+"/"+prog.all,
+        state: prog.n===prog.all?"done":(isCur?"cur":""), _defaultOpen:isCur, children:qNodes};
+    });
+    return {id:"act:"+act, level:0, label:D.acts[act], meta:actDone+"/"+actAll,
+      state: actDone===actAll?"done":"", _defaultOpen:true, children:dayNodes};
+  });
+}
+function renderBoard(){
+  const stream=$("#stream");
+  const d=byDay[st.day];
+  const qs=d.quests;
+  const totalMin=qs.reduce((s,q)=>s+q.dur,0);
+  const memPts=dayMemoryPoints(st.day);
+  const prog=dayProg(d);
+  // 负载指数：时长 60%（基准 180 分钟）+ 记忆体量 40%（基准 25 考点）
+  const load=Math.min(160, Math.round(totalMin/180*60 + memPts/25*40));
+  const heavy=load>100;
+  const active=qs.find(q=>qStage(q).key==="active");
+  const oral=qs.find(q=>q.type==="oral");
+
+  // 今日任务行
+  const rows=qs.map(q=>{
+    const stg=qStage(q);
+    const enter = stg.key==="active"
+      ? `<button class="btn sm primary" data-enter="${q.id}">进入</button>`
+      : stg.key==="done"
+      ? `<button class="btn sm ghost" data-enter="${q.id}">回看</button>`
+      : `<span style="font-size:11px;color:var(--dim)">前序未完</span>`;
+    return `<div class="qrow ${stg.key}">
+      <span class="qstage">${stg.label}</span>
+      <div class="qinfo"><div class="qn">${esc(q.name)}</div>
+      <div class="qmeta">${esc(q.tlabel)} · ${fmtDur(q.dur)}${q.type==="oral"?" · 含英文导游词背诵":""}</div></div>
+      <span class="qrew">+${q.xp}修行 +${q.coin}铜钱</span>
+      ${enter}
+    </div>`;
+  }).join("");
+
+  // 多入口（g2）：不锁定唯一线索，从任一法器进入当日修行
+  const entries=[
+    {ic:"📜",t:"今日修习",go:()=>{ if(active) openQuest(active.id); else toast("今日已圆满，可去巡夜温故"); }},
+    {ic:"🎙️",t:"英文背诵",go:()=>{ if(oral&&qStage(oral).key!=="locked") openQuest(oral.id); else toast("英文背诵随今日进度解锁"); }},
+    {ic:"📚",t:"藏经阁",go:()=>renderLib()},
+    {ic:"🌙",t:"巡夜卡匣",go:()=>renderNight()},
+    {ic:"⭐",t:"星盘错题",go:()=>renderStar()},
+    {ic:"🗺️",t:"旅程总览",go:()=>renderCal()},
+  ];
+  const entryHtml=entries.map((e,i)=>`<button class="entrybtn" data-entry="${i}"><span class="ei">${e.ic}</span>${e.t}</button>`).join("");
+
+  // 可折叠任务树（幕→日→任务），替换原扁平链条
+  const tree=buildQuestTree();
+  const treeHtml=`<div class="treetools">
+      <button class="btn sm ghost" id="treeExpand" type="button">▸ 展开全部</button>
+      <button class="btn sm ghost" id="treeCollapse" type="button">▾ 折叠全部</button>
+    </div>
+    <div class="tree" id="questTree">${tree.map(renderTreeNode).join("")}</div>`;
+
+  stream.innerHTML=`
+  <div class="sys daysep">行者手札 · 任务卷 · 第 ${st.day} 日</div>
+  <div class="loadmeter ${heavy?"heavy":""}">
+    <div class="lmrow"><span>今日负荷（时长 ${totalMin} 分钟 · 记忆点 ${memPts} 个）</span><span>${heavy?"偏重，可拆两段":"适中"} ${load}%</span></div>
+    <div class="lmtrack"><div class="lmfill" style="width:${Math.min(100,load)}%"></div></div>
+    <div class="ad">任务量按时长与记忆体量综合估算 · 完成进度 ${prog.n}/${prog.all}</div>
+  </div>
+  <div class="boardgroup"><h3>快捷入口</h3>
+    <div class="entrygrid">${entryHtml}</div>
+    <div class="ad">不必拘于一条线索——从任一法器切入，系统据你所选指引后续内容。</div>
+  </div>
+  <div class="boardgroup"><h3>今日任务（${prog.n}/${prog.all}）</h3>${rows}</div>
+  <div class="boardgroup"><h3>任务树 · 全程（幕 / 日 / 任务，点击三角折叠）</h3>
+    ${treeHtml}
+  </div>`;
+
+  // 绑定入口
+  stream.querySelectorAll("[data-entry]").forEach(b=>{
+    b.onpointerdown=()=>{ SFX.tap(); entries[+b.dataset.entry].go(); };
+  });
+  stream.querySelectorAll("[data-enter]").forEach(b=>{
+    b.onpointerdown=e=>{ e.stopPropagation(); SFX.tap(); openQuest(b.dataset.enter); };
+  });
+  // 任务树：事件委托 + 展开状态记忆
+  const treeEl=$("#questTree",stream);
+  bindTree(treeEl, (qid)=>{
+    const q=QMAP[qid];
+    if(qDone(q.id)||questUnlocked(q)) openQuest(q.id);
+    else toast("该环节尚未解锁——先破当前关");
+  });
+  $("#treeExpand",stream).onpointerdown=()=>{ SFX.tap(); setAllTreeExpanded(tree,true); renderBoard(); };
+  $("#treeCollapse",stream).onpointerdown=()=>{ SFX.tap(); setAllTreeExpanded(tree,false); renderBoard(); };
+}
+/* ==================== 吟游 · 英文导游词独立任务线 ==================== */
+function renderOralLine(){
+  const stream=$("#stream");
+  // 严格按日顺序（即原有先后与依赖），分离所有 oral 任务
+  const orals=D.quests.filter(q=>q.type==="oral").sort((a,b)=>a.day-b.day||a.id.localeCompare(b.id));
+  const doneN=orals.filter(q=>qDone(q.id)).length;
+  const pct=Math.round(doneN/orals.length*100);
+  // 按幕分组展示顺序链
+  const groups=[];
+  orals.forEach(q=>{
+    let g=groups.find(x=>x.act===q.act);
+    if(!g){ g={act:q.act, items:[]}; groups.push(g); }
+    g.items.push(q);
+  });
+  const listHtml=groups.map(g=>{
+    const actDay=DAYS.find(d=>d.act===g.act);
+    const rows=g.items.map((q,i)=>{
+      const s=qStage(q);
+      const btn = s.key==="done" ? `<button class="btn sm ghost" data-oral="${q.id}" type="button">回看</button>`
+        : s.key==="active" ? `<button class="btn sm primary" data-oral="${q.id}" type="button">进入背诵</button>`
+        : `<span style="font-size:11px;color:var(--dim)">🔒 随主线解锁</span>`;
+      return `<div class="qrow oral ${s.key}" style="border-left:3px solid var(--cyber)">
+        <span class="qstage">${s.label}</span>
+        <div class="qinfo"><div class="qn">第${q.day}日 · ${esc(q.name)}</div>
+        <div class="qmeta">${fmtDur(q.dur)} · 出声朗读 + 复述自评</div></div>
+        <span class="qrew">+${q.xp}修行</span>
+        ${btn}
+      </div>`;
+    }).join("");
+    return `<div class="boardgroup"><h3>${D.acts[g.act]}</h3>${rows}</div>`;
+  }).join("");
+
+  // 六篇吟游卷全文入口（卡片直达藏经阁导游词）
+  const fullHtml=`<div class="boardgroup"><h3>吟游卷 · 六篇全文</h3>
+    <div class="entrygrid">${D.oralFull.map((o,i)=>`<button class="entrybtn" data-full="${i}" type="button"><span class="ei">📖</span>${esc(o.name)}<br><span style="font-size:10px;opacity:.7">${o.words}词 · ${o.sections.length}节</span></button>`).join("")}</div>
+    <div class="ad">点景点名可直接进入该篇全文（在藏经阁卡牌中逐节浏览、可校订）。</div>
+  </div>`;
+
+  stream.innerHTML=`
+  <div class="sys daysep">吟游 · 英文导游词任务线</div>
+  <div class="boardgroup">
+    <div class="lmrow"><span>背诵进度（独立计算，与主修行同步存档）</span><span>${doneN}/${orals.length} · ${pct}%</span></div>
+    <div class="oralprog"><div style="width:${pct}%"></div></div>
+    <div class="ad">此线从主任务树独立呈现，但顺序与解锁依赖不变——完成主线前环，对应吟游才会开放。随时点右下角 🎙️ 可回到这里。</div>
+  </div>
+  ${listHtml}
+  ${fullHtml}`;
+
+  stream.querySelectorAll("[data-oral]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); openQuest(b.dataset.oral); });
+  stream.querySelectorAll("[data-full]").forEach(b=>b.onpointerdown=()=>{
+    SFX.tap();
+    const idx=+b.dataset.full;
+    // 跳藏经阁并定位到该篇第一张卡
+    const cards=buildCardPool();
+    const target=cards.findIndex(c=>c.cat==="full" && c.id.startsWith(D.oralFull[idx].id+" §1"));
+    st._libCat="full"; st._libQ=""; st._libIdx= target>=0?target:0; save();
+    switchView("lib");
+  });
+}
+function renderCal(){
+  const acts=[["act1","山河游学",1,8],["act2","律法塔",9,20],["act3","行会风云",21,30],["act4","遗迹探秘",31,41],["act5","金榜台前",42,45]];
+  const scene={act1:"M12 3 L20 17 H4 Z",act2:"M9 20 V8 L12 4 L15 8 V20 M6 20 H18",act3:"M4 20 V10 Q12 2 20 10 V20",act4:"M5 20 Q5 8 12 8 Q19 8 19 20 M12 8 V20",act5:"M6 20 V12 L12 6 L18 12 V20 H6 Z"};
+  let h='<div class="dayinfo">旅程地图 · 五幕四十五站 · 点击节点前往</div><div class="journey">';
+  acts.forEach(function(a2){
+    const aid=a2[0], aname=a2[1], a2a=a2[2], b2=a2[3];
+    h+='<div class="jrow"><div class="jact"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="'+scene[aid]+'"/></svg><div class="an">'+esc(aname)+'</div></div><div class="jnodes">';
+    for(let i=a2a;i<=b2;i++){
+      const dd=byDay[i], pp=dayProg(dd);
+      let cls = i===st.day?"cur":(i>st.unlocked?"future":(pp.n===pp.all&&pp.all>0?"done":(pp.n>0?"part":"")));
+      const isBoss=dd.quests.some(q2=>q2.type==="boss"&&q2.kind==="main");
+      h+='<div class="jnode '+cls+(isBoss?" boss":"")+'" data-day="'+i+'">'+i+'</div>';
+    }
+    h+='</div></div>';
+  });
+  h+='</div><div class="note">图例：墨块=圆满 · 朱框=今日 · 浅朱=进行中 · 双框=章节大试炼 · 半透明=未解锁</div>';
+  const ov=panel('<h2>旅程</h2><div class="mt">五幕四十五站 · 当前第 '+st.day+' 日（已解锁至第 '+st.unlocked+' 日）</div>'+h);
+  ov.querySelectorAll("[data-day]").forEach(n=>{
+    n.addEventListener("pointerdown",e=>{
+      e.preventDefault();
+      const day=+n.dataset.day;
+      if(day>st.unlocked){ return; }
+      st.day=day; save();
+      ov.remove();
+      document.querySelectorAll(".navline button").forEach(x=>x.classList.toggle("on",x.dataset.v==="chat"));
+      view="chat";
+      renderChat(byDay[st.day]);
+    });
+  });
+}
+boot();
+// 注册 Service Worker 实现 PWA 离线
+if("serviceWorker" in navigator){
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# 回滚前本地备份（非运行所需，不入库）
+_backup-before-rollback-20260909-1320/
+
+# macOS
+.DS_Store

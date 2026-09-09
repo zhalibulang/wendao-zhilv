@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回滚与修复诊断报告 · 问道之旅（2026-09-09）</title>
+<style>
+  :root{
+    --ink:#1e2a35; --navy:#16405e; --slate:#5d6f80; --line:#d9dfe5;
+    --paper:#f2f4f6; --card:#ffffff; --ok:#2c7a51; --warn:#9c4221;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:"Helvetica Neue",-apple-system,"PingFang SC",sans-serif;line-height:1.7;padding:44px 20px}
+  .wrap{max-width:980px;margin:0 auto}
+  header{border-bottom:2px solid var(--navy);padding-bottom:20px;margin-bottom:30px}
+  header h1{font-size:24px;color:var(--navy);letter-spacing:.5px;font-weight:700}
+  header .sub{color:var(--slate);font-size:13px;margin-top:6px}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:26px 0}
+  .metric{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--navy);padding:14px 16px}
+  .metric .num{font-size:24px;font-weight:700;color:var(--navy);font-family:Georgia,serif}
+  .metric .lab{font-size:12px;color:var(--slate);margin-top:4px}
+  section{background:var(--card);border:1px solid var(--line);padding:24px 26px;margin-bottom:22px}
+  h2{font-size:16px;color:var(--navy);margin-bottom:12px}
+  h2 .no{color:var(--slate);font-size:12px;margin-right:8px;font-family:Georgia,serif}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+  th{background:#edf1f4;color:var(--navy);text-align:left;padding:7px 10px;border-bottom:2px solid var(--navy);font-weight:600;white-space:nowrap}
+  td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .mono{font-family:Menlo,Consolas,monospace;font-size:12px}
+  .ok{color:var(--ok);font-weight:600}
+  .diff{color:var(--warn);font-weight:600}
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  @media(max-width:640px){.compare{grid-template-columns:1fr}}
+  .cmp{border:1px solid var(--line);padding:14px 16px;background:#fafbfc}
+  .cmp h3{font-size:12.5px;color:var(--slate);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+  .cmp p{font-size:13px}
+  .steps{list-style:none;margin-top:12px}
+  .steps li{position:relative;padding:0 0 16px 28px}
+  .steps li::before{content:"";position:absolute;left:7px;top:5px;bottom:-1px;width:1px;background:var(--line)}
+  .steps li:last-child::before{display:none}
+  .steps li::after{content:"";position:absolute;left:2px;top:5px;width:11px;height:11px;border-radius:50%;background:var(--card);border:2px solid var(--navy)}
+  .steps b{color:var(--navy)}
+  .note{font-size:12px;color:var(--slate);margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+  footer{color:var(--slate);font-size:11.5px;text-align:center;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>回滚与修复诊断报告</h1>
+    <div class="sub">问道之旅 · 独立交付文件夹 ~/Downloads/问道之旅-v2.1/ ｜ 2026-09-09 ｜ 依据：仅保留授权文本修改，界面完整还原</div>
+  </header>
+
+  <div class="metrics">
+    <div class="metric"><div class="num">8/9</div><div class="lab">文件与原版逐字节一致</div></div>
+    <div class="metric"><div class="num">1</div><div class="lab">唯一差异文件（game-data.js，仅文本）</div></div>
+    <div class="metric"><div class="num">0</div><div class="lab">界面/逻辑/玩法改动</div></div>
+    <div class="metric"><div class="num">6 项</div><div class="lab">验收标准全部达成</div></div>
+  </div>
+
+  <section>
+    <h2><span class="no">01</span>问题诊断结论</h2>
+    <div class="compare">
+      <div class="cmp"><h3>你看到的现象</h3><p>游戏完全不能运行、卡在第一步；界面与记忆中的不同，疑似被改动。</p></div>
+      <div class="cmp"><h3>实际根因</h3><p>① 新文件夹是全新目录，浏览器存档按来源隔离——无存档时游戏从<b>序章</b>开始，与有存档时"直接进主界面"不同；② 修复方当时额外引入了三个不必要变量：带空格的入口文件名 Index v2.1.html、被改写的 sw.js 与 manifest.json。现已全部回滚。</p></div>
+    </div>
+    <p class="note">界面 UI 代码自始至终未被改动：交付的 index.html 与你的原版逐字节一致（md5：<span class="mono">6b75a4b9641e1bd33c18f6bb2edae079</span>，两侧相同），这是可独立复核的硬证据。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>逐文件比对（交付文件夹 vs 原始项目 game/）</h2>
+    <table>
+      <tr><th>文件</th><th>md5 比对</th><th>状态</th></tr>
+      <tr><td class="mono">index.html</td><td class="ok">一致</td><td>原样回归（入口恢复原文件名）</td></tr>
+      <tr><td class="mono">sw.js</td><td class="ok">一致</td><td>原样回归（恢复 wdzx-v4，此前被改为 v6+新文件名引用）</td></tr>
+      <tr><td class="mono">manifest.json</td><td class="ok">一致</td><td>原样回归（此前 start_url 被改指向带空格文件名）</td></tr>
+      <tr><td class="mono">icon-180/192/512.png、zpix.ttf、zpix.woff2</td><td class="ok">一致</td><td>原样（5 个文件逐个 md5 核对）</td></tr>
+      <tr><td class="mono">game-data.js</td><td class="diff">不同</td><td class="diff">唯一差异：知识点文本修订（授权范围内）</td></tr>
+    </table>
+    <p class="note">结论：与原版相比，只差 game-data.js 一个文件的文本内容——即已授权的知识点文本修改。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">03</span>"第一步"点击流程验证（真实浏览器自动化）</h2>
+    <ul class="steps">
+      <li><b>冷启动</b>：Chrome 打开 file://…/问道之旅-v2.1/index.html —— 序章正常渲染，控制台除 file:// 下 manifest 的 CORS 提示（浏览器正常行为）外无任何 JS 报错、无资源 404</li>
+      <li><b>定位按钮</b>：document.getElementById('begin') 存在（"接过问道录，启程"）</li>
+      <li><b>真实点击</b>：派发 pointerdown + click —— 返回 clicked</li>
+      <li><b>结果</b>：hasMain:true（进入主界面）、storage:true（存档写入成功）、截图《验证记录-点击启程后主界面.png》显示对话流/任务卡/导航/状态栏完整</li>
+      <li><b>渲染断言</b>：藏经阁搜 S1-03-04 显示完整段落 ✓、旧碎片"①文旅市场发"零残留 ✓、四书五经/民族节日/颐和园沿革新段落渲染 ✓ —— ALL PASS</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="no">04</span>授权文本修改保留核对</h2>
+    <table>
+      <tr><th>批次</th><th>条数</th><th>核对结果</th></tr>
+      <tr><td>第 1 批（割裂碎片重写）</td><td>67 条</td><td class="ok">全部保留，文本与台账一致</td></tr>
+      <tr><td>第 2 批（罗列/对照式改写＋2 个文号联网核实）</td><td>39 条</td><td class="ok">全部保留，渲染断言逐条命中</td></tr>
+      <tr><td>记忆锚卡修复（CL-04/11/13）</td><td>3 条</td><td class="ok">全部保留，口诀/表格文字化/抽查题完整</td></tr>
+      <tr><td>丢失条目恢复入库</td><td>19 条</td><td class="ok">全部保留（374 卡池）</td></tr>
+      <tr><td>长文截断恢复（120→240）</td><td>全局长文</td><td class="ok">定金罚则/民法典年龄/珠峰高程等关键内容完整</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="no">05</span>备份与后续规则</h2>
+    <table>
+      <tr><th>项</th><th>位置/内容</th></tr>
+      <tr><td>回滚前备份</td><td class="mono">问道之旅-v2.1/_backup-before-rollback-20260909-1320/</td></tr>
+      <tr><td>原始项目</td><td class="mono">~/Downloads/Guide Game/beijing-guide-exam-2026/</td></tr>
+      <tr><td>后续授权规则</td><td>《授权规则说明.md》：只改文本；任何界面改动无论大小先经确认；动手前必留时间戳备份；所有改动进台账</td></tr>
+      <tr><td>签收方式</td><td>双击 index.html → 点"接过问道录，启程" → 藏经阁搜 S1-03-04 查看新文本；如仍有异常，告知浏览器与具体卡点</td></tr>
+    </table>
+  </section>
+
+  <footer>回滚与修复诊断报告 ｜ 2026-09-09 ｜ 配套文档：改动台账.md · 验证记录.md · 条目总清单.md · 修订对照台账-batch2.md</footer>
+</div>
+</body>
+</html>
