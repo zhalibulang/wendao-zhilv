@@ -1,6 +1,6 @@
 // 问道之旅 Service Worker — 离线缓存 + 即时更新
 // 版本号每次内容变更必须 +1，activate 时据此清除旧缓存
-const CACHE = "wdzx-v4";
+const CACHE = "wdzx-v5";
 const CORE = [
   "./",
   "./index.html",

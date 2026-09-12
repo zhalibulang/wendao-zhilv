@@ -43,7 +43,7 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .navline button .dot{display:inline-block;width:6px;height:6px;background:var(--neon);border-radius:50%;margin-left:4px;vertical-align:2px}
 
 /* chat stream */
-.stream{flex:1;overflow-y:auto;padding:14px 4px 8px;scroll-behavior:smooth}
+.stream{flex:1;min-height:0;overflow-y:auto;padding:14px 4px 8px;scroll-behavior:smooth;overscroll-behavior:contain}
 .sys{font-size:12px;color:var(--dim);text-align:center;margin:12px 0;letter-spacing:.08em}
 .sys.daysep{border-bottom:1px dashed var(--border);padding-bottom:8px;margin-top:22px;letter-spacing:.15em}
 .msg{display:flex;gap:10px;margin:10px 0;align-items:flex-start}
@@ -408,6 +408,7 @@ function defState(){
     ach:{}, notes:{}, wrong:[], cards:{}, seenHearts:{}, shop:[...D.shop],
     edits:{}, _treeExp:{},
     dsKey:"", personas:{}, aiBrief:{},
+    dialogue:[],
     quizOk:0, created:new Date().toISOString()};
 }
 let st=null, view="chat";
@@ -422,6 +423,7 @@ function reconcile(){
   st.cards=st.cards||{}; st.seenHearts=st.seenHearts||{};
   st.edits=st.edits||{}; st._treeExp=st._treeExp||{};
   st.personas=st.personas||{}; st.aiBrief=st.aiBrief||{};
+  if(!Array.isArray(st.dialogue)) st.dialogue=[];
   if(typeof st.dsKey!=="string") st.dsKey="";
   if(!Array.isArray(st.wrong)) st.wrong=[];
   if(!Array.isArray(st.shop)||!st.shop.length) st.shop=[...D.shop];
@@ -455,36 +457,34 @@ function questUnlocked(q){
 function fmtDur(m){ return m+" 分钟"; }
 
 /* ---------- stream derivation ---------- */
-function buildStream(d){
+function buildStream(){
   const out=[];
-  out.push({t:"sysday",x:`第 ${d.day} 日 · ${d.date} · 星期${d.week} · ${D.acts[d.act]}`});
-  out.push({t:"npc",npc:d.npc,x:d.line});
-  const prog=dayProg(d);
-  // 对话流简化：只呈现「当前发布的任务」一张卡片；已完成压缩为系统行；未解锁不剧透，引导至任务面板
-  let activeShown=false;
-  d.quests.forEach(q=>{
-    const un=questUnlocked(q), done=qDone(q.id);
-    if(done){
-      out.push({t:"sys",x:`✓ ${q.name} 已完成 · +${q.xp}修行 +${q.coin}铜钱`});
-      return;
+  for(let day=1;day<=st.unlocked;day++){
+    const d=byDay[day]; if(!d) continue;
+    const prog=dayProg(d);
+    const hasUndone=d.quests.some(q=>!qDone(q.id));
+    out.push({t:"sysday",x:`第 ${d.day} 日 · ${d.date} · 星期${d.week} · ${D.acts[d.act]}`});
+    if(hasUndone) out.push({t:"npc",npc:d.npc,x:d.line});
+    d.quests.forEach(q=>{
+      const un=questUnlocked(q), done=qDone(q.id);
+      if(done){
+        out.push({t:"sys",x:`✓ ${q.name} 已完成 · +${q.xp}修行 +${q.coin}铜钱`});
+        return;
+      }
+      if(un){
+        out.push({t:"npc",npc:q.npc,x:pubLine(q,d)});
+        out.push({t:"quest",qid:q.id});
+      }
+    });
+    if(prog.n===prog.all&&prog.all>0){
+      out.push({t:"sys",x:`第${d.day}日修行圆满（${prog.all}/${prog.all}）`});
+      if(day===45) out.push({t:"npc",npc:"qingxuan",x:"四十五日，功德圆满。金榜台上，我为你备了一盏灯。"});
+    } else if(prog.n<prog.all&&day<st.unlocked){
+      out.push({t:"sys",x:`此日尚有 ${prog.all-prog.n} 项未竟——随时可补`});
     }
-    if(un && !activeShown){
-      activeShown=true;
-      out.push({t:"npc",npc:q.npc,x:pubLine(q,d)});
-      out.push({t:"quest",qid:q.id});
-    }
-    // 其余未解锁 / 待解锁任务不在对话流剧透
-  });
-  if(!activeShown && prog.n<prog.all){
-    out.push({t:"sys",x:"其余任务环环相扣——点开下方「任务」卷查看全貌与入口"});
   }
-  if(prog.n===prog.all&&prog.all>0){
-    out.push({t:"sys",x:`今日修行圆满（${prog.all}/${prog.all}）· 次日已解锁`});
-    if(d.day<45) out.push({t:"npc",npc:d.npc,x:"今日到此为止。去休息吧——明日我再来叫你。"});
-    else out.push({t:"npc",npc:"qingxuan",x:"四十五日，功德圆满。金榜台上，我为你备了一盏灯。"});
-  } else if(d.day<st.unlocked){
-    out.push({t:"sys",x:`此日已过，尚有 ${prog.all-prog.n} 项未竟——随时可补（见「任务」卷）`});
-  }
+  const t=totals();
+  if(t.c===t.a&&t.a>0) out.push({t:"sys",x:`全程圆满（${t.a}/${t.a}）· 问道录已满`});
   return out;
 }
 function pubLine(q,d){
@@ -543,34 +543,60 @@ function render(){
   <button class="btn sm" id="sendBtn">记录</button></div>
   <button class="fab" id="oralFab" title="吟游 · 英文导游词线" type="button">🎙️</button>
   <footer>问道之旅 · 四十五日 · 金榜台于 ${D.examDate}</footer>`;
-  bindNav(); renderChat(d);
+  bindNav(); renderChat();
   $("#oralFab").onpointerdown=()=>{ SFX.tap(); switchView("oral"); };
   const inp=$("#chatInput");
   inp.onkeydown=e=>{ if(e.key==="Enter"){ sendChat(); } };
   $("#sendBtn").onpointerdown=sendChat;
 }
 function inputHint(){
-  const d=byDay[st.day]; if(!d) return "……";
-  const active=d.quests.find(q=>questUnlocked(q)&&!qDone(q.id));
-  if(active&&active.type==="study"&&(D.quizzes[active.id]||[]).some(z=>z.kind==="blank")) return "输入填空答案，或写下你的默写手记……";
-  return "写下此刻的手记（会收进修行录）……";
+  for(let day=1;day<=st.unlocked;day++){
+    const d=byDay[day]; if(!d) continue;
+    const active=d.quests.find(q=>questUnlocked(q)&&!qDone(q.id));
+    if(active&&active.type==="study"&&(D.quizzes[active.id]||[]).some(z=>z.kind==="blank")) return "输入填空答案，或@角色名提问…";
+  }
+  return "写下手记，或@角色名提问（如 @青玄 这关怎么过）…";
 }
 function sendChat(){
   const inp=$("#chatInput"); const v=inp.value.trim(); if(!v) return;
   st.notes[st.day+"_"+Date.now()]=v; save();
   inp.value="";
-  toast("已记入修行录");
-  renderChat(byDay[st.day],true);
+  const mentioned=parseMention(v);
+  if(mentioned){
+    // 玩家提问永久入档，固定显示在最新位置
+    st.dialogue.push({role:"player",text:v,at:new Date().toISOString(),day:st.day});
+    if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+    save(); renderChat(true);
+    toast("正在请教"+NPC[mentioned].name+"……");
+    aiRespond(mentioned,v).then(resp=>{
+      st.dialogue.push({role:"npc",npc:mentioned,text:resp,at:new Date().toISOString(),day:st.day});
+      if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+      save();
+      renderChat();
+    }).catch(()=>{
+      st.dialogue.push({role:"npc",npc:mentioned,text:"（此刻雾重，我没能接上话——配置 DeepSeek 密钥或联网后再问一次。）",at:new Date().toISOString(),day:st.day});
+      save();
+      toast("NPC暂未回应（离线或未配置AI）");
+      renderChat();
+    });
+  } else {
+    toast("已记入修行录");
+    renderChat(true);
+  }
 }
-function renderChat(d,keep){
+function renderChat(keep){
   const view=$("#stream");
-  const stream=buildStream(d);
-  let html=stream.map(r=>{
+  const stream=buildStream();
+  // Append persisted dialogue (player questions + NPC AI responses)
+  const allMsgs=stream.concat(st.dialogue.map(d=>({t:d.role,npc:d.npc,x:d.text,qid:d.qid})));
+  let html=allMsgs.map(r=>{
     if(r.t==="sysday") return `<div class="sys daysep">${esc(r.x)}</div>`;
     if(r.t==="sys") return `<div class="msg sysline"><div class="bubble">${esc(r.x)}</div></div>`;
     if(r.t==="npc"){ const n=NPC[r.npc]||NPC.qingxuan;
       return `<div class="msg"><div class="avatar">${esc(n.name[0])}</div><div class="body">
       <div class="name"><b>${esc(n.name)}</b> · ${esc(n.title)}</div>
+      <div class="bubble">${esc(r.x)}</div></div></div>`; }
+    if(r.t==="player"){ return `<div class="msg me"><div class="body">
       <div class="bubble">${esc(r.x)}</div></div></div>`; }
     if(r.t==="quest"){ const q=QMAP[r.qid]; if(!q) return ""; const done=qDone(q.id); const un=questUnlocked(q);
       return `<div class="msg"><div class="avatar">　</div><div class="body" style="max-width:100%">
@@ -583,10 +609,10 @@ function renderChat(d,keep){
     return "";
   }).join("");
   view.innerHTML=html;
-  bindChat(d);
+  bindChat();
   if(!keep) view.scrollTop=view.scrollHeight;
 }
-function bindChat(d){
+function bindChat(){
   document.querySelectorAll("[data-open]").forEach(b=>{
     b.onpointerdown=e=>{ e.stopPropagation(); openQuest(b.dataset.open); };
   });
@@ -691,12 +717,6 @@ function openQuest(qid){
     <div class="mt">第 ${q.day} 日 · ${q.tlabel} · ${fmtDur(q.dur)} · 主线${q.kind==="main"?"":"支线"}</div>
     <h2>${esc(q.name)}</h2>
     <div id="aiBriefHost"></div>
-    ${q.wow ? q.wow : (q.desc&&q.desc.bg?`<div class="descbox">
-      <div class="dbg">${esc(q.desc.bg)}</div>
-      <div class="dgl"><b>目标</b>${esc(q.goal)}</div>
-      <div class="dst"><b>步骤</b><ul style="margin:2px 0 2px 16px;padding:0">${q.desc.steps.map(s2=>`<li style="font-size:13px">${esc(s2)}</li>`).join("")}</ul></div>
-      <div class="dac">验收：${esc(q.desc.accept)}</div>
-    </div>`:`<div style="font-size:13.5px;color:var(--ink2)">目标：${esc(q.goal)}</div>`)}
     <div id="pageHost"></div>
     <div class="pager" id="pageNav"></div>
     ${q.type==="oral"?(function(){
@@ -721,22 +741,43 @@ function openQuest(qid){
   </div>`;
   document.body.appendChild(ov);
   ov.onpointerdown=e=>{ if(e.target===ov) ov.remove(); };  // 点击遮罩背景关闭
-  // AI 任务说明 + NPC 实时台词（配置密钥时；缓存结果；失败/未配置则静默降级，不显示该区）
+  // NPC 任务说明（统一模块）：AI 可用时由 NPC 智能生成游戏隐喻叙事；未配置/离线时以内置内容降级
   (function loadAiBrief(){
     const host=$("#aiBriefHost",ov); if(!host) return;
-    if(!dsReady()){ host.innerHTML=""; return; }
-    const cached=st.aiBrief[q.id];
+    function fallback(){
+      const d0=byDay[q.day];
+      const opening=pubLine(q,d0)||"这一程，交给你了。";
+      let body="";
+      if(q.wow){ body=q.wow; }
+      else if(q.desc&&q.desc.bg){
+        body=`<div class="descbox" style="margin:8px 0 0">
+          <div class="dbg">${esc(q.desc.bg)}</div>
+          <div class="dgl"><b>目标</b>${esc(q.goal)}</div>
+          ${q.desc.steps?`<div class="dst"><b>步骤</b><ul style="margin:2px 0 2px 16px;padding:0">${q.desc.steps.map(s2=>`<li style="font-size:13px">${esc(s2)}</li>`).join("")}</ul></div>`:""}
+          ${q.desc.accept?`<div class="dac">验收：${esc(q.desc.accept)}</div>`:""}
+        </div>`;
+      } else {
+        body=`<div style="font-size:13.5px;color:var(--ink2);margin-top:6px"><b style="color:var(--neon)">目标 · </b>${esc(q.goal)}</div>`;
+      }
+      host.innerHTML=`<div class="descbox" style="border-left-color:var(--cyber);margin-bottom:10px">
+        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(npc.name)}：<span style="color:var(--fg)">${esc(opening)}</span></div>
+        ${body}
+      </div>`;
+    }
     function render(o){
       host.innerHTML=`<div class="descbox" style="border-left-color:var(--cyber);margin-bottom:10px">
         <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(npc.name)}：<span style="color:var(--fg)">${esc(o.line)}</span></div>
-        <div style="font-size:13px;color:var(--fg2)">${esc(o.brief)}</div>
+        ${o.metaphor?`<div style="font-size:12px;color:var(--gold);margin-bottom:6px;font-style:italic">「${esc(o.metaphor)}」</div>`:""}
+        <div style="font-size:13px;color:var(--fg2);line-height:1.7">${esc(o.brief)}</div>
         <div style="font-size:10.5px;color:var(--dim);margin-top:4px">AI 生成 · 以界面点选为准，不偏离任务主线</div>
       </div>`;
     }
+    if(!dsReady()){ fallback(); return; }
+    const cached=st.aiBrief[q.id];
     if(cached){ render(cached); return; }
     host.innerHTML=`<div class="note" style="font-size:12px;color:var(--dim)">✦ ${esc(npc.name)} 正在斟酌开场…</div>`;
     genQuestBrief(q).then(o=>{ st.aiBrief[q.id]=o; save(); if(ov.isConnected) render(o); })
-      .catch(()=>{ if(ov.isConnected) host.innerHTML=""; });   // 静默降级到内置目标描述
+      .catch(()=>{ if(ov.isConnected) fallback(); });   // 失败时降级到内置 NPC 叙事
   })();
   const pageHost=$("#pageHost",ov), pageNav=$("#pageNav",ov);
   function drawPage(){
@@ -981,6 +1022,16 @@ function openQuest(qid){
     record("任务完成", q.name+"（+"+q.xp+" 修行 +"+q.coin+" 铜钱）");
     if(st.day===q.day&&q.kind==="main"&&st.unlocked===q.day&&st.unlocked<45) st.unlocked++;
     maybeUnlockDay();
+    // 三节点之②：玩家提交 → NPC 认可（永久记入对话流）
+    const ackNpc=NPC[q.npc]||NPC.qingxuan;
+    st.dialogue.push({role:"npc",npc:q.npc,text:(doneLine(q,byDay[q.day])||"很好。")+"「"+q.name+"」已交付（+"+q.xp+"修行 +"+q.coin+"铜钱）",at:new Date().toISOString(),day:st.day});
+    // 三节点之③：前置刚满足、由此任务解锁的新任务，由对应 NPC 发布
+    const fresh=D.quests.filter(qq=>!qDone(qq.id)&&questUnlocked(qq)&&qq.prev&&qq.prev.includes(q.id));
+    fresh.slice(0,1).forEach(nq=>{
+      const nd=byDay[nq.day];
+      st.dialogue.push({role:"npc",npc:nq.npc,text:(pubLine(nq,nd)||"新的一程开启了。")+"——新任务「"+nq.name+"」已现形。",at:new Date().toISOString(),day:st.day,qid:nq.id});
+    });
+    if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
     SFX.win(); ov.remove(); checkAch(); checkLevelUp(); save(); render();
     toast(doneLine(q,byDay[q.day])||"完成");
   };
@@ -988,6 +1039,7 @@ function openQuest(qid){
 function maybeUnlockDay(){
   const d=byDay[st.unlocked];
   if(d){ const p=dayProg(d); if(p.n===p.all&&p.all>0&&st.unlocked<45) st.unlocked++; }
+  if(st.day<st.unlocked) st.day=st.unlocked;
 }
 function checkAch(){
   D.achievements.forEach(a=>{
@@ -1365,20 +1417,37 @@ async function genPersona(npcId, feedback){
   card.id=npcId; card.name=card.name||npc.name;
   return card;
 }
-/* 生成任务说明（≤100字）+ NPC 实时台词（点选触发，不自由对话） */
+/* 生成任务说明：游戏隐喻叙事 + 背景故事 + 知识拓展（替代旧版独立任务描述模块） */
 async function genQuestBrief(q){
   const npc=NPC[q.npc]||NPC.qingxuan;
   const persona=st.personas[q.npc]&&st.personas[q.npc].card;
-  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容，不剧透、不跑题、不给考试答案。只输出JSON。";
+  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容。要求：\n1. 用游戏隐喻解释任务（如『这卷书记载着京城山河的脉络』而非『请复习景点知识』）\n2. 描述任务背景故事，融入『遗忘迷雾/问道录/守灯者』世界观\n3. 根据任务知识点提供适度拓展信息，帮助理解记忆\n4. 不剧透未解锁环节，不跑题，不给考试答案\n5. NPC台词自然生动、有温度，符合角色性格，避免机械死板\n6. 只输出JSON";
+  // 汇总本任务试炼涉及的考点，供 AI 拓展
+  const quiz=D.quizzes[q.id]||[];
+  const pids=[...new Set(quiz.map(z=>z.pid).filter(Boolean))];
+  const knowledge=pids.map(pid=>{
+    const p=D.pointsLib.find(x=>x.id===pid);
+    return p?(p.id+"："+p.text.slice(0,100)):"";
+  }).filter(Boolean).join("\n");
+  // 关联英文导游词
+  const oralMap={"TAM":"tiananmen-square","GUG":"forbidden-city","TAN":"temple-of-heaven","SUM":"summer-palace","WAL":"great-wall","TOM":"ming-tombs"};
+  const oralInfo=(q.covers||[]).map(c=>{
+    const key=c.split("-")[0];
+    const o=D.oralFull.find(x=>x.id===oralMap[key]);
+    return o?(o.name+" "+o.words+"词"):"";
+  }).filter(Boolean).join("、");
   const user="游戏背景信息：\n"+JSON.stringify(buildWorldBrief())
     +"\n\n当前任务："+JSON.stringify({日次:q.day,环节:q.name,类型:q.tlabel,目标:q.goal,NPC:npc.name+"·"+npc.title})
     +(persona?("\n\n该NPC已确认人设，台词必须符合："+JSON.stringify(persona)):"")
-    +"\n\n请输出JSON：{line:string(该NPC以人设口吻对玩家说的一句任务指引，≤60字，古风鼓励),brief:string(任务说明，≤100字，突出核心目标与关键步骤，符合游戏氛围)}。";
+    +(knowledge?("\n\n任务涉及知识点（可在说明中自然拓展）：\n"+knowledge):"")
+    +(oralInfo?("\n\n涉及英文导游词："+oralInfo):"")
+    +"\n\n请输出JSON：{line:string(该NPC以人设口吻发布任务的指引，用游戏隐喻，≤80字，自然生动有温度),brief:string(任务说明，用游戏化叙事讲清背景故事、核心目标与知识点拓展，≤200字),metaphor:string(一句游戏化比喻，概括此任务在修行路上的意义，≤30字)}。";
   const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], true);
   let o;
   try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else throw e; }
-  o.line=(o.line||"").slice(0,80); o.brief=(o.brief||"").slice(0,120);
+  o.line=(o.line||"").slice(0,100); o.brief=(o.brief||"").slice(0,250);
+  if(o.metaphor) o.metaphor=String(o.metaphor).slice(0,50);
   o.at=new Date().toISOString();
   return o;
 }
@@ -1521,6 +1590,51 @@ function openPersonaPanel(){
   draw();
 }
 
+/* ==================== @角色名 AI 互动 ==================== */
+/* 角色别名 → npcId（含全名与常用称呼，均取自 D.npcs 真实名，避免错字） */
+const MENTION_ALIASES={
+  qingxuan:["青玄先生","青玄","qingxuan"],
+  smq:["司马青衫","司马","smq"],
+  tiemian:["铁面先生","铁面","tiemian"],
+  liuruyan:["柳如烟","liuruyan"],
+  moxiaogu:["墨小骨","小骨","moxiaogu"],
+  xuanji:["玄机夫人","玄机","xuanji"]
+};
+function parseMention(text){
+  const m=/@([A-Za-z0-9_\u4e00-\u9fa5]{2,8})/.exec(text);
+  if(!m) return null;
+  const tok=m[1];
+  for(const id in MENTION_ALIASES){ if(MENTION_ALIASES[id].some(a=>tok===a||tok.startsWith(a)||a.startsWith(tok)&&tok.length>=2)) return id; }
+  return null;
+}
+async function aiRespond(npcId,userText){
+  if(!dsReady()) throw new Error("未配置AI");
+  const npc=NPC[npcId]||NPC.qingxuan;
+  const persona=st.personas[npcId]&&st.personas[npcId].card;
+  const sys="你是游戏『问道之旅·四十五日』中的NPC角色「"+npc.name+"」。你必须始终以该角色身份回答，符合其人设和性格。基于游戏世界观和北京导游考试知识库回答。回答要自然、生动，像真实对话，避免机械死板。禁用现代网络梗，不得提及AI/模型/接口。单次回复≤200字。";
+  const context="游戏背景：\n"+JSON.stringify(buildWorldBrief())
+    +"\n\n角色信息："+JSON.stringify({姓名:npc.name,称号:npc.title,背景:npc.intro})
+    +(persona?("\n已确认人设："+JSON.stringify(persona)):"")
+    +"\n\n当前游戏状态：第"+st.day+"日，已解锁至第"+st.unlocked+"日，修行"+st.xp+"，等级Lv."+level()
+    +"\n\n相关知识点库（供参考，回答时可拓展）："
+    +getRelevantKnowledge(userText);
+  const user="玩家说："+userText+"\n\n请以"+npc.name+"的身份自然地回应。结合你掌握的北京导游知识，给出符合角色性格的回答。如果是关于任务的问题，用游戏隐喻的方式解释。";
+  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:context+"\n\n"+user}],false);
+  return raw;
+}
+function getRelevantKnowledge(text){
+  const kw=text.replace(/@[^\s]+/g,"").trim().toLowerCase();
+  if(!kw) return "（无特定关键词）";
+  const pts=D.pointsLib.filter(p=>p.text&&p.text.toLowerCase().includes(kw)).slice(0,3)
+    .map(p=>p.id+"："+p.text.slice(0,80)).join("\n");
+  const orals=D.oralLib.filter(o=>(o.en||"").toLowerCase().includes(kw)||(o.zh||"").toLowerCase().includes(kw)).slice(0,2)
+    .map(o=>o.id+"："+(o.zh||o.en||"").slice(0,80)).join("\n");
+  let result="";
+  if(pts) result+="考点：\n"+pts+"\n";
+  if(orals) result+="导游词：\n"+orals+"\n";
+  return result||"（未找到直接匹配的知识点，可结合角色背景自由发挥）";
+}
+
 function toast(msg, cls){
   const t=document.createElement("div");
   t.className="toast "+(cls||""); t.textContent=msg;
@@ -1532,7 +1646,7 @@ function toast(msg, cls){
 function switchView(v){
   view=v;
   document.querySelectorAll(".navline button").forEach(x=>x.classList.toggle("on",x.dataset.v===v));
-  if(view==="chat") renderChat(byDay[st.day]);
+  if(view==="chat") renderChat();
   if(view==="board") renderBoard();
   if(view==="oral") renderOralLine();
   if(view==="lib") renderLib();
@@ -1815,7 +1929,7 @@ function renderCal(){
       ov.remove();
       document.querySelectorAll(".navline button").forEach(x=>x.classList.toggle("on",x.dataset.v==="chat"));
       view="chat";
-      renderChat(byDay[st.day]);
+      renderChat();
     });
   });
 }
