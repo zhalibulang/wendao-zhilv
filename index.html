@@ -904,7 +904,7 @@ function openQuest(qid){
   /* NPC 记忆：任务进入（在途态）+ 修习时长心跳（每 30 秒入账 0.5 分钟，归属当前任务 NPC）。回看模式不记在途 */
   if(window.WDMem&&!readonly){ WDMem.enter(q.npc,q.id); if(questTimer)clearInterval(questTimer);
     questTimer=setInterval(()=>WDMem.tick(0.5),30000); }
-  let quizPerfect=false;   // 本次试炼是否全对（供一次性通关标识）
+  let quizPerfect=(quiz.length===0);   // 本次试炼是否全对（无题任务视为一次通关）
   const ov=document.createElement("div"); ov.className="ov";
   let pageIdx=0;
   function renderPage(){
