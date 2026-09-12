@@ -15,6 +15,7 @@ function makeEl(tag){
     getContext(){return{clearRect(){},fillRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},fill(){},arc(){},closePath(){},createLinearGradient(){return{addColorStop(){}}},fillText(){},save(){},restore(){},translate(){},scale(){},setTransform(){}};},
     set onpointerdown(f){},get onpointerdown(){return null;},
     set onclick(f){},set oninput(f){},set onchange(f){},set onkeydown(f){},set onload(f){},set onerror(f){},set onended(f){},
+    toDataURL(){return "data:image/png;base64,x";},
     isConnected:true,
   };
   return el;
@@ -37,6 +38,10 @@ global.confirm=()=>true;global.prompt=()=>null;global.alert=()=>{};
 const dataSrc=fs.readFileSync(process.argv[2],'utf8');
 const html=fs.readFileSync(process.argv[3],'utf8');
 const js=html.match(/<script>\n([\s\S]*?)<\/script>/)[1];
+/* 独立模块（wd-chat/wd-map）随主脚本一并装载，保持与线上运行时一致 */
+const chatSrc=fs.readFileSync(require('path').join(__dirname,'wd-chat.js'),'utf8');
+const mapSrc=fs.readFileSync(require('path').join(__dirname,'wd-map.js'),'utf8');
+const fxSrc=fs.readFileSync(require('path').join(__dirname,'wd-fx.js'),'utf8');
 
 const driver=`
 ;(function(){
@@ -138,11 +143,45 @@ const driver=`
     if(typeof st.done['D01M']!=='string')throw new Error('布尔done未归一化');
     if(!Array.isArray(st.wrong))throw new Error('wrong未修复');
   });
-  console.log('\\n===== RESULT =====');
-  if(errors.length){console.log('FAILURES '+errors.length);errors.forEach(e=>console.log(' - '+e));process.exit(1);}
-  else console.log('ALL TESTS PASSED');
+  /* ===== 对话模块 + 像素地图（wd-chat / wd-map）===== */
+  run('WDChat 成长数据+故事线',()=>{
+    reset(); const g=WDChat.growthOf('smq'); g.talks=7;
+    WDChat.storyAppend('smq','并肩见证「试炼」交付'); WDChat.storyAppend('smq','桥上论剑');
+    if(!st.npcGrowth||st.npcGrowth.smq.story.length!==2)throw new Error('故事线未落存档');
+    if(WDChat.historyOf('smq',5).length!==0)throw new Error('历史互动应为空');
+  });
+  run('WDChat 降级话术人设化',()=>{
+    reset(); const t=WDChat.fallback('xuanji','颐和园长廊有多长');
+    if(!t||!t.includes('星'))throw new Error('降级话术不符合玄机夫人人设');
+    const t2=WDChat.fallback('moxiaogu','完全不相干词组zzz');
+    if(!t2)throw new Error('降级话术为空');
+  });
+  run('WDMap 头像URL缓存',()=>{
+    const a=WDMap.avatarURL('qingxuan'), b=WDMap.avatarURL('qingxuan');
+    if(!a.startsWith('data:image/png')||a!==b)throw new Error('dataURL异常');
+    if(!WDMap.avatarURL('moxiaogu'))throw new Error('其他NPC头像生成失败');
+  });
+  run('WDMap NPC现身判定',()=>{
+    reset(); st.unlocked=1;
+    if(!WDMap.npcVisible('qingxuan'))throw new Error('act1 NPC应现身');
+    if(WDMap.npcVisible('tiemian'))throw new Error('act2 NPC不应提前现身');
+    st.unlocked=11;
+    if(!WDMap.npcVisible('tiemian'))throw new Error('解锁后应现身');
+  });
+  /* 异步收尾：respond 未配置 AI 时应同步降级为本地话术（永不 reject） */
+  (async()=>{
+    try{
+      reset(); const r=await WDChat.respond('tiemian','请教律法');
+      if(!r||typeof r.text!=="string"||!r.text)throw new Error('无降级文本');
+      if(r.degraded!==true)throw new Error('未标记 degraded');
+      console.log('PASS  WDChat respond未配置AI自动降级');
+    }catch(e){ errors.push('WDChat respond未配置AI自动降级 => '+e.message); console.log('FAIL  WDChat respond未配置AI自动降级 : '+e.message); }
+    console.log('\\n===== RESULT =====');
+    if(errors.length){console.log('FAILURES '+errors.length);errors.forEach(e=>console.log(' - '+e));process.exit(1);}
+    else console.log('ALL TESTS PASSED');
+  })();
 })();
 `;
 
-try { eval(dataSrc + '\n' + js + '\n' + driver); }
+try { eval(dataSrc + '\n' + chatSrc + '\n' + mapSrc + '\n' + fxSrc + '\n' + js + '\n' + driver); }
 catch(e){ console.log('FATAL LOAD ERROR:\n'+e.stack); process.exit(1); }

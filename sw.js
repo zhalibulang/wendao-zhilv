@@ -1,10 +1,13 @@
 // 问道之旅 Service Worker — 离线缓存 + 即时更新
 // 版本号每次内容变更必须 +1，activate 时据此清除旧缓存
-const CACHE = "wdzx-v10";
+const CACHE = "wdzx-v12";
 const CORE = [
   "./",
   "./index.html",
   "./game-data.js",
+  "./wd-chat.js",
+  "./wd-map.js",
+  "./wd-fx.js",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png"
@@ -66,6 +69,15 @@ self.addEventListener("fetch", e => {
       )
     );
   } else {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    // 非core（assets/ 角色素材等）：network-first，成功响应也回填缓存 → 素材上传 GitHub 后离线仍可用
+    e.respondWith(
+      fetch(e.request).then(resp => {
+        if (resp.ok) {
+          const copy = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy));
+        }
+        return resp;
+      }).catch(() => caches.match(e.request))
+    );
   }
 });

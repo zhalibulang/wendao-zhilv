@@ -75,8 +75,11 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .qcard .qg{font-size:12.5px;color:var(--fg2);margin:4px 0 8px}
 .qcard .qr{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--gold)}
 .qcard .qr .dur{color:var(--dim)}
-.qcard.done{opacity:.65;border-color:var(--border)}
+.qcard.done{opacity:.75;border-color:var(--border)}
 .qcard.done .qn::after{content:" ✓";color:var(--ok)}
+.qcard.now{border-color:var(--neon)}
+.nowtag{font-size:10.5px;color:#1a0f2e;background:var(--neon);padding:2px 8px;margin-left:8px;letter-spacing:.12em;box-shadow:1px 1px 0 #000;font-weight:600}
+.donetag{color:var(--ok);font-size:12px;margin-right:8px;white-space:nowrap}
 .btn{display:inline-block;border:2px solid var(--border-lit);background:linear-gradient(180deg,var(--bg3) 0%,var(--bg2) 100%);color:var(--fg);font:inherit;font-size:13.5px;
   padding:6px 16px;cursor:pointer;letter-spacing:.06em;transition:none;
   box-shadow:inset 2px 2px 0 var(--border-lit),inset -2px -2px 0 #000,3px 3px 0 #000}
@@ -348,12 +351,70 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 .vhist .vat{color:var(--dim);flex:none;width:96px}
 .vhist .vprev{flex:1;color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .editbtn{font-size:11px;padding:2px 8px}
+
+/* ===== 主页像素地图 ===== */
+.mapinfo{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:10px 0 8px;font-size:13px;color:var(--fg2);flex-wrap:wrap}
+.mapinfo b{color:var(--gold)}
+.mapinfo .dim{font-size:11.5px;color:var(--dim)}
+.maplegend{display:flex;gap:14px;font-size:11.5px;color:var(--dim);margin:8px 0 4px;flex-wrap:wrap}
+.maplegend .lg{display:inline-block;width:10px;height:10px;margin-right:4px;vertical-align:-1px;border:1px solid var(--border-lit)}
+.maplegend .lg.lit{background:var(--cyber)}
+.maplegend .lg.fog{background:#5a5578}
+.maplegend .lg.me{background:var(--neon)}
+.mapnpcs{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px}
+.mapnpc{display:flex;align-items:center;gap:6px;border:2px solid var(--border-lit);background:var(--bg2);color:var(--fg);font:inherit;font-size:12.5px;padding:5px 10px 5px 6px;cursor:pointer;box-shadow:2px 2px 0 #000}
+.mapnpc img{width:28px;height:28px;image-rendering:pixelated;display:block}
+.mapnpc:active{transform:translate(1px,1px)}
+.mapnpc.lock{opacity:.55;color:var(--dim)}
+.pixav{width:100%;height:100%;image-rendering:pixelated;display:block}
+/* typing 提示 */
+.bubble.typing{display:flex;gap:5px;padding:10px 14px}
+.bubble.typing span{width:6px;height:6px;background:var(--cyber);animation:typ 1s infinite}
+.bubble.typing span:nth-child(2){animation-delay:.2s}
+.bubble.typing span:nth-child(3){animation-delay:.4s}
+@keyframes typ{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+/* NPC 角色成长 */
+.growth{font-size:12.5px;color:var(--fg2);background:var(--bg3);border-left:3px solid var(--gold);padding:6px 9px;margin-top:8px}
+.growth b{color:var(--gold)}
+.gstory{font-size:12px;color:var(--dim);margin-top:4px;line-height:1.6}
+/* ===== 玩家角色状态栏 ===== */
+.playercard{display:flex;gap:12px;border:2px solid var(--border-lit);background:var(--bg2);padding:10px;margin:10px 0 4px;box-shadow:3px 3px 0 #000;align-items:center}
+.playercard .pport{width:76px;height:76px;flex:none;border:2px solid var(--border-lit);background:var(--bg3);display:flex;align-items:center;justify-content:center;overflow:hidden;animation:pbreath 3.4s ease-in-out infinite;position:relative}
+.playercard .pport::after{content:"";position:absolute;inset:0;box-shadow:inset 0 0 14px rgba(61,240,255,.18);pointer-events:none}
+.playercard .pport img{width:100%;height:100%;image-rendering:pixelated;object-fit:contain}
+@keyframes pbreath{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+.playercard .pname{font-size:14.5px;color:var(--cyber);font-weight:600;letter-spacing:.06em}
+.playercard .pname em{font-style:normal;font-size:11.5px;color:var(--gold);margin-left:8px;letter-spacing:.14em}
+.playercard .pstats{display:flex;gap:12px;font-size:12px;color:var(--fg2);margin:5px 0 6px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.playercard .pstats b{color:var(--gold)}
+.playercard .pgear{display:flex;gap:6px;flex-wrap:wrap}
+.gslot{font-size:10.5px;color:var(--dim);border:1px dashed var(--border);padding:2px 7px;letter-spacing:.08em}
+.gslot i{font-style:normal;margin-left:4px;color:var(--border);letter-spacing:0}
+/* ===== 特效层 ===== */
+#fxlayer{position:fixed;inset:0;pointer-events:none;z-index:98;overflow:hidden}
+.fxf{position:absolute;font-weight:600;color:var(--gold);text-shadow:2px 2px 0 #000,0 0 10px rgba(255,210,63,.35);animation:fxfUp 1.4s ease-out forwards;font-size:clamp(16px,4.6vw,22px);letter-spacing:.1em;transform:translate(-50%,0);white-space:nowrap}
+.fxf.cy{color:var(--cyber);text-shadow:2px 2px 0 #000,0 0 10px rgba(61,240,255,.35)}
+.fxf.ok{color:var(--ok)}
+@keyframes fxfUp{0%{opacity:0;transform:translate(-50%,6px) scale(.8)}15%{opacity:1;transform:translate(-50%,-12px) scale(1.05)}100%{opacity:0;transform:translate(-50%,-84px) scale(1)}}
+.fxp{position:absolute;width:8px;height:8px;box-shadow:2px 2px 0 rgba(0,0,0,.45);animation:fxpFly 1.05s ease-out forwards;will-change:transform,opacity}
+@keyframes fxpFly{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(240deg)}}
+.fxflash{position:absolute;inset:0;background:radial-gradient(circle,rgba(255,210,63,.22),transparent 70%);animation:fxfo .95s ease-out forwards}
+@keyframes fxfo{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
+.fxlv{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);text-align:center;animation:fxlvIn 2.3s ease-out forwards;width:100%}
+.fxlv .l1{font-size:clamp(26px,8vw,46px);color:var(--gold);text-shadow:3px 3px 0 #000,0 0 22px rgba(255,210,63,.55);letter-spacing:.24em;font-weight:700}
+.fxlv .l2{font-size:clamp(13px,4vw,18px);color:var(--cyber);text-shadow:2px 2px 0 #000;margin-top:8px;letter-spacing:.3em}
+@keyframes fxlvIn{0%{opacity:0;transform:translate(-50%,-28%) scale(.7)}16%{opacity:1;transform:translate(-50%,-50%) scale(1.07)}28%{transform:translate(-50%,-50%) scale(1)}76%{opacity:1}100%{opacity:0;transform:translate(-50%,-72%) scale(.96)}}
+.fxseal{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%) rotate(-14deg);border:4px solid var(--ok);color:var(--ok);font-size:clamp(30px,9vw,54px);font-weight:700;padding:6px 20px;letter-spacing:.34em;text-shadow:2px 2px 0 #000;box-shadow:0 0 0 2px rgba(127,255,127,.25),4px 4px 0 rgba(0,0,0,.5);background:rgba(20,30,20,.35);animation:fxsealIn 1.65s ease-out forwards}
+@keyframes fxsealIn{0%{opacity:0;transform:translate(-50%,-50%) rotate(-14deg) scale(2.3)}22%{opacity:.96;transform:translate(-50%,-50%) rotate(-14deg) scale(1)}72%{opacity:.96}100%{opacity:0;transform:translate(-50%,-50%) rotate(-14deg) scale(.94)}}
 </style>
 </head>
 <body>
 <div id="game"></div>
 <div class="toasts" id="toasts"></div>
 <script src="game-data.js"></script>
+<script src="wd-chat.js"></script>
+<script src="wd-map.js"></script>
+<script src="wd-fx.js"></script>
 <script>
 
 "use strict";
@@ -414,9 +475,10 @@ function defState(){
     edits:{}, _treeExp:{},
     dsKey:"", personas:{}, aiBrief:{},
     dialogue:[],
+    npcGrowth:{},
     quizOk:0, quizAttempts:{}, created:new Date().toISOString()};
 }
-let st=null, view="chat";
+let st=null, view="map";
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){} }
 function load(){ try{const r=localStorage.getItem(KEY); if(r){st=JSON.parse(r); return true;}}catch(e){} return false; }
 /* 对账：已完成任务集是进度的唯一真相；xp/coin 据其重算，避免存档漂移导致等级误判 */
@@ -428,6 +490,7 @@ function reconcile(){
   st.cards=st.cards||{}; st.seenHearts=st.seenHearts||{};
   st.edits=st.edits||{}; st._treeExp=st._treeExp||{};
   st.personas=st.personas||{}; st.aiBrief=st.aiBrief||{};
+  if(!st.npcGrowth||typeof st.npcGrowth!=="object") st.npcGrowth={};
   if(!Array.isArray(st.dialogue)) st.dialogue=[];
   /* 对话流迁移清洗：老版本存档中残留的教师腔/旧话术，按映射表就地换为仙侠版（重复执行幂等） */
   const DIALECT_FIX=[["你吃透了","这页残卷已被你收进袖中"],["读透它","翻开它"],["读透","读穿"],
@@ -473,8 +536,11 @@ function reconcile(){
 const level=()=>Math.floor(st.xp/50)+1;
 let lastLv=1;
 function checkLevelUp(){ const lv=level(); if(lv>lastLv){ record("等级提升","Lv."+lastLv+" → Lv."+lv+" · "+title()); toast("等级提升 · Lv."+lv+"「"+title()+"」","gold");
-    pushAction("境界突破——Lv."+lv+"「"+title()+"」。"); renderChat(); } lastLv=Math.max(lastLv,lv); }
+    pushAction("境界突破——Lv."+lv+"「"+title()+"」。"); WDChat.storyAppend("qingxuan","玩家境界突破至Lv."+lv+"——引灯人的灯又亮了一分。");
+    WDFx.levelUp(lv,title()); renderChat(); } lastLv=Math.max(lastLv,lv); }
 function title(){ return st.unlocked>=45?"金榜引路人":st.unlocked>=42?"问道行者·终章":st.unlocked>=31?"遗迹探索者":st.unlocked>=21?"行会行者":st.unlocked>=9?"律法塔学徒":"山河游学者"; }
+/* 玩家立绘阶段（1-5）：随称号进阶换装，供 wd-map 素材探测 assets/player/player-<stage>.png */
+function stage(){ return st.unlocked>=42?5:st.unlocked>=31?4:st.unlocked>=21?3:st.unlocked>=9?2:1; }
 const qDone=id=>!!st.done[id];
 function dayProg(d){ let n=0; d.quests.forEach(q=>{if(qDone(q.id))n++;}); return {n,all:d.quests.length}; }
 function totals(){ let a=0,c=0; DAYS.forEach(d=>{const p=dayProg(d); a+=p.all; c+=p.n;}); return {c,a}; }
@@ -501,7 +567,7 @@ function buildStream(){
     d.quests.forEach(q=>{
       const un=questUnlocked(q), done=qDone(q.id);
       if(done){
-        out.push({t:"sys",x:`✓ ${q.name} 已完成 · +${q.xp}修行 +${q.coin}铜钱`});
+        out.push({t:"sys",x:`✓ ${q.name} 已完成 · +${q.xp}修行 +${q.coin}铜钱`,qid:q.id});
         return;
       }
       if(un){
@@ -575,7 +641,8 @@ function render(){
     <span>铜钱<b>${st.coin}</b></span><span>连<b>${streak()}</b>日</span>
     <button data-act="save">存档</button></div></div>
   <div class="navline">
-    <button data-v="chat" class="on">对话</button>
+    <button data-v="map">地图</button>
+    <button data-v="chat">对话</button>
     <button data-v="board">任务</button>
     <button data-v="oral">吟游</button>
     <button data-v="lib">藏经阁</button>
@@ -591,7 +658,7 @@ function render(){
   <button class="btn sm" id="sendBtn">记录</button></div>
   <button class="fab" id="oralFab" title="吟游 · 英文导游词线" type="button">🎙️</button>
   <footer>问道之旅 · 四十五日 · 金榜台于 ${D.examDate}</footer>`;
-  bindNav(); renderChat();
+  bindNav(); switchView(view);
   $("#oralFab").onpointerdown=()=>{ SFX.tap(); switchView("oral"); };
   const inp=$("#chatInput");
   inp.onkeydown=e=>{ if(e.key==="Enter"){ sendChat(); } };
@@ -605,6 +672,12 @@ function inputHint(){
   }
   return "写下手记，或@角色名提问（@青玄 这关怎么过 · @所有人 全员接话）…";
 }
+/* typing 指示：AI 接话期间在流尾显示省略气泡（不落存档） */
+let TYPING=null;
+function typing(on,multi){
+  TYPING=on?{multi:!!multi}:null;
+  if($("#stream")) renderChat(true);
+}
 function sendChat(){
   const inp=$("#chatInput"); const v=inp.value.trim(); if(!v) return;
   st.notes[st.day+"_"+Date.now()]=v; save();
@@ -615,32 +688,22 @@ function sendChat(){
     st.dialogue.push({role:"player",text:v,at:new Date().toISOString(),day:st.day});
     if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
     save(); renderChat(true);
-    // 群聊应答：@全员 → 各 NPC 依次接话（各一条）；@单人 → 单独回应
-    const targets=mentioned==="__ALL__"?Object.keys(MENTION_ALIASES):[mentioned];
-    toast(mentioned==="__ALL__"?"各位已收到喊话……":"正在与"+NPC[mentioned].name+"对话……");
-    if(mentioned==="__ALL__"){
-      let done=0;
-      targets.forEach(id=>{
-        aiRespond(id,v,true).then(resp=>{
-          st.dialogue.push({role:"npc",npc:id,text:resp,at:new Date().toISOString(),day:st.day});
-          if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-          save(); if(++done===targets.length) renderChat(); else renderChat(true);
-        }).catch(()=>{ if(++done===targets.length) renderChat(); });
-      });
-      if(!dsReady()) toast("NPC暂未回应（未配置AI）");
-    } else {
-      aiRespond(mentioned,v).then(resp=>{
-        st.dialogue.push({role:"npc",npc:mentioned,text:resp,at:new Date().toISOString(),day:st.day});
+    // 群聊应答：@全员 → 各 NPC 并行接话（各一条）；@单人 → 单独回应
+    // respond 永不 reject：AI 不可用/失败自动降级为 NPC 本地话术，对话不断流
+    const all=mentioned==="__ALL__";
+    const targets=all?Object.keys(MENTION_ALIASES):[mentioned];
+    typing(true,all);
+    toast(all?"各位已收到喊话……":"正在与"+NPC[mentioned].name+"对话……");
+    let done=0;
+    targets.forEach(id=>{
+      aiRespond(id,v,all).then(r=>{
+        st.dialogue.push({role:"npc",npc:id,text:r.text,at:new Date().toISOString(),day:st.day});
         if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
         save();
-        renderChat();
-      }).catch(()=>{
-        st.dialogue.push({role:"npc",npc:mentioned,text:"（此刻雾重，我没能接上话——配置 DeepSeek 密钥或联网后再问一次。）",at:new Date().toISOString(),day:st.day});
-        save();
-        toast("NPC暂未回应（离线或未配置AI）");
-        renderChat();
-      });
-    }
+        if(r.degraded) toast(NPC[id].name+"以本地话术接了话（AI暂不可用）");
+        if(++done===targets.length){ typing(false); renderChat(); } else renderChat(true);
+      }).catch(()=>{ if(++done===targets.length){ typing(false); renderChat(); } });
+    });
   } else {
     toast("已记入修行录");
     renderChat(true);
@@ -676,30 +739,43 @@ function renderChat(keep){
   const view=$("#stream");
   if(!view) return; // 非对话视图（任务/星盘/弹层中触发行动报等）时静默跳过，下次进入对话视图重渲染
   const stream=buildStream();
+  // 进程感：全链路中第一个「已解锁未完成」的任务即当前关卡
+  let firstActive=null;
+  for(let day=1;day<=st.unlocked&&!firstActive;day++){
+    const d=byDay[day]; if(!d) continue;
+    for(const q of d.quests){ if(!qDone(q.id)&&questUnlocked(q)){ firstActive=q.id; break; } }
+  }
   // Append persisted dialogue (player questions + NPC AI responses)
   const allMsgs=stream.concat(st.dialogue.map(d=>({t:d.role,npc:d.npc,x:d.text,qid:d.qid,refs:d.refs})));
   let html=allMsgs.map(r=>{
     if(r.t==="sysday") return `<div class="sys daysep">${esc(r.x)}</div>`;
-    if(r.t==="sys") return `<div class="msg sysline"><div class="bubble">${esc(r.x)}</div></div>`;
+    if(r.t==="sys") return `<div class="msg sysline"><div class="bubble" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>${esc(r.x)}</span>${r.qid?`<button class="btn sm ghost" data-open="${r.qid}" style="flex:none">回看</button>`:""}</div></div>`;
     if(r.t==="npc"){ const n=NPC[r.npc]||NPC.qingxuan;
       const rlist=r.refs&&r.refs.length?r.refs:(r.qid?[{qid:r.qid}]:[]);
       const chips=rlist.map(x=>{ const qq=QMAP[x.qid]; return qq?`<button class="qref" data-ref="${qq.id}">📜 ${esc(qq.name)}</button>`:""; }).join("");
-      return `<div class="msg"><div class="avatar">${esc(n.name[0])}</div><div class="body">
+      const av=(window.WDMap&&WDMap.avatarURL)?`<img class="pixav" src="${WDMap.avatarURL(r.npc)}" alt="">`:esc(n.name[0]);
+      return `<div class="msg"><div class="avatar">${av}</div><div class="body">
       <div class="name"><b>${esc(n.name)}</b> · ${esc(n.title)}</div>
       <div class="bubble">${esc(r.x)}</div>
       ${chips?`<div class="qrefs">${chips}</div>`:""}</div></div>`; }
     if(r.t==="player"){ return `<div class="msg me"><div class="body">
       <div class="bubble">${esc(r.x)}</div></div></div>`; }
     if(r.t==="quest"){ const q=QMAP[r.qid]; if(!q) return ""; const done=qDone(q.id); const un=questUnlocked(q);
+      const now=!done&&un&&r.qid===firstActive;
       return `<div class="msg"><div class="avatar">　</div><div class="body" style="max-width:100%">
-      <div class="qcard${done?" done":""}${un?"":" locked"}" data-q="${q.id}">
-        <div class="qn">${esc(q.name)}<span class="rk">${q.rarity==="epic"?"✦":q.rarity==="fine"?"•":""}</span></div>
+      <div class="qcard${done?" done":""}${un?"":" locked"}${now?" now":""}" data-q="${q.id}">
+        <div class="qn">${esc(q.name)}<span class="rk">${q.rarity==="epic"?"✦":q.rarity==="fine"?"•":""}</span>${now?'<span class="nowtag">进行中</span>':""}</div>
         <div class="qg">${esc(q.goal)}</div>
         <div class="qr"><span>+${q.xp} 修行</span><span>+${q.coin} 铜钱</span><span class="dur">${fmtDur(q.dur)}</span>
-        <span style="margin-left:auto">${done?"<span style='color:var(--ok)'>已完成</span>":un?`<button class="btn sm primary" data-open="${q.id}">进入</button>`:"🔒 前序未完"}</span></div>
+        <span style="margin-left:auto">${done?"<span class='donetag'>✓ 已完成</span><button class='btn sm ghost' data-open='"+q.id+"'>回看</button>":un?`<button class="btn sm primary" data-open="${q.id}">进入</button>`:"🔒 前序未完"}</span></div>
       </div></div></div>`; }
     return "";
   }).join("");
+  if(TYPING){
+    html+=`<div class="msg"><div class="avatar">…</div><div class="body">
+      <div class="name"><b>${TYPING.multi?"诸位 NPC":"NPC"}</b> 接话中</div>
+      <div class="bubble typing"><span></span><span></span><span></span></div></div></div>`;
+  }
   view.innerHTML=html;
   bindChat();
   if(!keep) view.scrollTop=view.scrollHeight;
@@ -1164,6 +1240,10 @@ function openQuest(qid){
     }
     st.dialogue.push({role:"npc",npc:q.npc,text:ackText,refs,at:new Date().toISOString(),day:st.day});
     if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+    // NPC 个人故事线：随任务里程碑自然续写
+    WDChat.storyAppend(q.npc,"与玩家并肩，见证了「"+q.name+"」的交付");
+    // 交付特效：完成印章 + 修行/铜钱飘字 + 金粒子
+    WDFx.questDone(q.xp,q.coin);
     SFX.win(); ov.remove(); checkAch(); checkLevelUp(); save(); render();
     toast(doneLine(q,byDay[q.day])||"完成");
   };
@@ -1522,19 +1602,8 @@ async function dsChat(messages, wantJson){
     return c.trim();
   }finally{ clearTimeout(timer); }
 }
-/* 结构化游戏背景信息文件（供 DeepSeek 读取世界观/机制/NPC 基础） */
-function buildWorldBrief(){
-  return {
-    游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
-    游戏目的:"玩家在游戏中备考北京导游资格证。做任务就是网络游戏行为：研习新考点=开荒新副本，复习=回炉重刷副本并重新封印苏醒的旧妖，题组试炼=砍怪打谜题妖，英文背诵=施法吟咒，大试炼=攻城团战，巡夜=日常巡逻任务。玩家与NPC是游戏世界里并肩作战的关系（队友/接头人/引路人），绝非老师与学生——没有人在上课，大家在同一个江湖里打怪升级。",
-    世界观:"现代京城被『遗忘之雾』笼罩，唯有『问道录』可照见旧京文脉。玩家是执灯求道的行路人（准导游），在六位仙侠引灯人（NPC：掌灯真人/山河剑客/镇塔尊者/幻纱行首座/机关童子/观星者）引导下，用四十五日历经五个幕次——山河游学、律法塔、行会风云、遗迹探秘、金榜台前，最终赴考。",
-    隐喻系统:"每个复习任务都是一个游戏化关卡：新学任务=秘境探幽/残卷修复；复习任务=封印重临（知识封印松动，妖物探头，回去再钉一钉）；题组练习=谜题斩妖（妖兽拦路，以题作剑）；英文背诵=咒文吟诵（咒不成声，护罩不生）；大试炼=攻城之战（守关妖王）；线索卡=符文拓印；行囊准备=法器整备；巡夜记忆卡=夜巡驱雾。难度层级按稀有度：common=雾卒、fine=妖将、epic=妖王。",
-    游戏机制:["读卷：翻页研习考点，关键词高亮、记忆锚助记","试炼：是非+填空，答错录入星盘错题","吟游：英文导游词朗读、录音、打字复述自评","巡夜：按1/3/7/15日间隔重刷记忆卡","五幕四十五日任务链，主线环环前置解锁","修行=经验值升级，铜钱可在集市兑换"],
-    NPC基础信息:D.npcs.map(n=>({id:n.id,姓名:n.name,称号:n.title,背景:n.intro})),
-    叙事约束:"NPC 是游戏NPC不是教师：像网游NPC那样简短、有性格、有江湖气地说话；对话服务当日任务目标，不剧透未解锁环节，不跑题，不出现考试答案；禁止教书先生式表达（掌握了/要记住/同学们/认真听讲/布置作业/劳逸结合等）。",
-    语言要求:"像真人玩家交流：口语化、句子长短错落、可用游戏黑话（开荒/副本/掉落/翻车/通关/团战）；严禁AI腔——不用'首先/其次/总之/综上/值得注意的是'，不排比堆砌，不空洞夸奖（非常棒/说得好），不自我总结，不问'还有什么可以帮你的'；单句≤60字；禁现代网络梗；不提AI/模型/接口；玩家只通过点选操作，不进行自由文本对话。"
-  };
-}
+/* 结构化游戏背景信息文件（供 DeepSeek 读取世界观/机制/NPC 基础）——正文装配在 wd-chat.js */
+function buildWorldBrief(){ return WDChat.worldBrief(); }
 /* 生成 NPC 人设卡片（可带修改意见重生成） */
 async function genPersona(npcId, feedback){
   const npc=D.npcs.find(n=>n.id===npcId)||NPC[npcId];
@@ -1754,14 +1823,24 @@ function openPersonaPanel(){
     const p=st.personas[n.id];
     const c=p&&p.card;
     const status = p? (p.confirmed?'<span style="color:var(--ok)">✓ 已确认</span>':'<span style="color:var(--gold)">待确认</span>'):'<span style="color:var(--dim)">未生成（使用内置）</span>';
+    const g=st.npcGrowth&&st.npcGrowth[n.id];
+    const growHtml=`<div class="growth"><b>角色成长</b> · 对话 ${g?(g.talks||0):0} 次${g&&g.evolved?(" · 上次推演 "+esc(g.evolved.slice(0,10))):""}
+      ${g&&g.traits&&g.traits.length?`<br>性格演进：${esc(g.traits.join("、"))}`:""}
+      ${g&&g.speech?`<br>语言演进：${esc(g.speech)}`:""}
+      ${g&&g.shift?`<br>行为倾向：${esc(g.shift)}`:""}
+      ${g&&g.story&&g.story.length?`<div class="gstories">${g.story.slice(-3).map(s=>"· "+esc(s.ev)).join("<br>")}</div>`:""}
+    </div>
+    <div class="kitbar" style="margin-top:6px"><button class="btn sm" data-grow="${n.id}" type="button">🌙 推演角色成长</button></div>
+    <div id="gr_${n.id}" class="small" style="font-size:12px;color:var(--gold)"></div>`;
     return `<div class="book" id="pc_${n.id}">
-      <div class="bp"><span class="pid">${esc(n.name)}</span><em>${esc(n.title)}</em> ${status}</div>
+      <div class="bp"><img src="${(window.WDMap&&WDMap.avatarURL)?WDMap.avatarURL(n.id):""}" alt="" style="width:24px;height:24px;image-rendering:pixelated;vertical-align:-6px;margin-right:6px"><span class="pid">${esc(n.name)}</span><em>${esc(n.title)}</em> ${status}</div>
       ${c?`<div style="font-size:13px;line-height:1.7">
         <div><b style="color:var(--neon)">身份：</b>${esc(c.identity||"")}</div>
         <div><b style="color:var(--neon)">性格：</b>${esc(Array.isArray(c.personality)?c.personality.join("、"):c.personality)}</div>
         <div><b style="color:var(--neon)">对话风格：</b>${esc(c.style||"")}</div>
         ${c.relations&&c.relations.length?`<div><b style="color:var(--neon)">关系：</b>${c.relations.map(r=>esc((r.name||"")+"·"+(r.rel||""))).join("；")}</div>`:""}
       </div>`:`<div class="npcnote">${esc(n.intro)}</div>`}
+      ${growHtml}
       <div class="kitbar" style="margin-top:8px">
         <button class="btn sm primary" data-gen="${n.id}" type="button">${c?"重新生成":"生成人设"}</button>
         ${c&&!p.confirmed?`<button class="btn sm" data-ok="${n.id}" type="button">✓ 确认采用</button>
@@ -1786,6 +1865,16 @@ function openPersonaPanel(){
     });
     host.querySelectorAll("[data-clear]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
       const id=b.dataset.clear; if(confirm("恢复为内置人设？")){ delete st.personas[id]; save(); draw(); toast("已恢复内置"); }
+    });
+    // 角色成长推演：AI 依互动历史迭代性格/语言/行为并续写故事线
+    host.querySelectorAll("[data-grow]").forEach(b=>b.onpointerdown=async ()=>{
+      SFX.tap();
+      const id=b.dataset.grow, box=$("#gr_"+id,host);
+      b.disabled=true; if(box) box.textContent="推演中……";
+      const o=await WDChat.evolve(id,true);
+      b.disabled=false;
+      if(o){ SFX.win(); if(box) box.textContent="推演完成——性格/语言/行为已更新，对话中将自然体现"; draw(); }
+      else { SFX.no(); if(box) box.textContent=WDChat.historyOf(id,1).length?"推演失败（AI 未响应，稍后再试）":"尚无互动记录——先在对话里与这位 NPC 多聊几句"; }
     });
   }
   async function genFlow(id, feedback){
@@ -1818,45 +1907,9 @@ function parseMention(text){
   for(const id in MENTION_ALIASES){ if(MENTION_ALIASES[id].some(a=>tok===a||tok.startsWith(a)||a.startsWith(tok)&&tok.length>=2)) return id; }
   return null;
 }
-/* 网络检索（中文维基 API，CORS 开放；大陆网络不通时静默降级为仅资料库） */
-async function webSearch(query){
-  try{
-    const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),6000);
-    const r=await fetch("https://zh.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srlimit=3&srsearch="+encodeURIComponent(query),{signal:ctl.signal});
-    clearTimeout(t);
-    const j=await r.json();
-    return (j.query&&j.query.search||[]).map(x=>("【"+x.title+"】"+x.snippet.replace(/<[^>]+>/g,"").slice(0,110))).join("\n")||null;
-  }catch(e){ return null; }
-}
-async function aiRespond(npcId,userText,brief){
-  if(!dsReady()) throw new Error("未配置AI");
-  const npc=NPC[npcId]||NPC.qingxuan;
-  const persona=st.personas[npcId]&&st.personas[npcId].card;
-  const sys="你是游戏『问道之旅·四十五日』里的游戏NPC「"+npc.name+"」（"+npc.title+"）。这不是课堂：玩家是并肩刷任务的游戏者，你们是同一游戏世界里的角色，绝非师生。像网络游戏NPC那样说话——简短、有性格、有江湖气，句子长短错落。严禁AI腔：不用'首先/其次/总之/综上/值得注意的是'，不排比堆砌，不空洞夸奖（非常棒/说得好），不自我总结，不问'还有什么可以帮你的'，不解释自己是什么身份。严禁教书先生口吻（掌握了/要记住/同学们/认真复习/布置作业/劳逸结合）。谈知识用仙侠比喻（考点=封印符文，错题=妖物，背诵=咒文，复习=回炉重刷副本）。"+(brief?"这是多人召唤场景，回复务必精炼≤80字，只说你最有资格说的一段。":"单次回复≤160字。")+"禁现代网络梗，不提AI/模型/接口。";
-  const web=await webSearch(userText.replace(/@[^\s，。,,]+/g,"").trim());
-  const context="游戏背景：\n"+JSON.stringify(buildWorldBrief())
-    +"\n\n角色信息："+JSON.stringify({姓名:npc.name,称号:npc.title,背景:npc.intro})
-    +(persona?("\n已确认人设："+JSON.stringify(persona)):"")
-    +"\n\n当前游戏状态：第"+st.day+"日，已解锁至第"+st.unlocked+"日，修行"+st.xp+"，等级Lv."+level()
-    +"\n\n游戏资料库（本地优先，与检索冲突时以此为准）："
-    +getRelevantKnowledge(userText)
-    +(web?("\n\n网络检索补充（供参考，不确定可不采用）：\n"+web):"");
-  const user="玩家说："+userText+"\n\n以"+npc.name+"的身份像游戏NPC一样回应——把它当成一次队内喊话，不是答疑课。";
-  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:context+"\n\n"+user}],false);
-  return raw;
-}
-function getRelevantKnowledge(text){
-  const kw=text.replace(/@[^\s]+/g,"").trim().toLowerCase();
-  if(!kw) return "（无特定关键词）";
-  const pts=D.pointsLib.filter(p=>p.text&&p.text.toLowerCase().includes(kw)).slice(0,3)
-    .map(p=>p.id+"："+p.text.slice(0,80)).join("\n");
-  const orals=D.oralLib.filter(o=>(o.en||"").toLowerCase().includes(kw)||(o.zh||"").toLowerCase().includes(kw)).slice(0,2)
-    .map(o=>o.id+"："+(o.zh||o.en||"").slice(0,80)).join("\n");
-  let result="";
-  if(pts) result+="考点：\n"+pts+"\n";
-  if(orals) result+="导游词：\n"+orals+"\n";
-  return result||"（未找到直接匹配的知识点，可结合角色背景自由发挥）";
-}
+/* 网络检索 / 资料库匹配 / 对话生成已整体移入独立模块 wd-chat.js（window.WDChat），
+   此处仅保留薄委托：本文件专注 UI 粘合，模块可在任意宿主复用。 */
+async function aiRespond(npcId,userText,brief){ return WDChat.respond(npcId,userText,brief); }
 
 function toast(msg, cls){
   const t=document.createElement("div");
@@ -1866,9 +1919,26 @@ function toast(msg, cls){
 }
 
 /* ---------- nav / boot ---------- */
+/* 地图点击 NPC → 切至对话视图并预填 @提及 */
+function tapNpc(id){
+  SFX.tap();
+  switchView("chat");
+  const inp=$("#chatInput");
+  if(inp&&(NPC[id]||{}).name){ inp.value="@"+NPC[id].name+" "; inp.focus(); }
+  toast("与"+((NPC[id]||{}).name||"NPC")+"对话——直接提问即可");
+}
+function fogNpc(id,act){
+  SFX.mask();
+  toast(((NPC[id]||{}).name||"此人")+"尚在雾中——"+(D.acts["act"+act]||"前路")+"开启后现身");
+}
 function switchView(v){
   view=v;
   document.querySelectorAll(".navline button").forEach(x=>x.classList.toggle("on",x.dataset.v===v));
+  const ib=$(".inputbar"), fab=$("#oralFab");
+  if(ib) ib.classList.toggle("hidden",v==="map");
+  if(fab) fab.classList.toggle("hidden",v==="map");
+  if(v==="map") WDMap.mount($("#stream"),{onNpcTap:tapNpc,onFogTap:fogNpc});
+  else WDMap.unmount();
   if(view==="chat") renderChat();
   if(view==="board") renderBoard();
   if(view==="oral") renderOralLine();
@@ -1904,6 +1974,9 @@ function intro(){
 }
 function record(ev, x){ st.log=st.log||[]; st.log.push({at:new Date().toISOString(), ev, x}); }
 function boot(){
+  // 独立模块依赖注入：对话生成（WDChat）与像素地图（WDMap）低耦合接入
+  WDChat.init({D,NPC,getSt:()=>st,save,dsChat,dsReady,level});
+  WDMap.init({D,NPC,getSt:()=>st,stage});
   const has=load();
   if(!has){ st=defState(); save(); intro(); }
   else{ if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,45); if(st.day>st.unlocked) st.unlocked=st.day; save(); render(); checkAch(); }
