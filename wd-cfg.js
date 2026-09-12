@@ -1,0 +1,140 @@
+/* ==========================================================================
+   wd-cfg.js —— 问道之旅 · 配置中心（WDCfg）
+   职责：NPC/用户头像（校验+居中裁剪+压缩）、称呼偏好+历史、自称/自我描述、
+        NPC 语气·风格·深度分析、角色初始属性分配、JSON 导入导出、修改历史。
+   低耦合：不引用页面全局；加载即校验拒收异常；变更发 wd:cfg 事件实时生效。
+   存储域：wdzx.cfg.v1（schema 版本化）。
+   ========================================================================== */
+(function(){
+"use strict";
+const KEY="wdzx.cfg.v1", VER=1;
+const MAX_BYTES=5*1024*1024, MIN_SIDE=200, OUT=240, QUALITY=0.86;
+const PRESET_ADDR=["道友","少侠","上仙","掌门"];
+const PRESET_SELF=["我","在下","本座","贫道"];
+const ATTR_BUDGET=12, ATTR_MIN=1;
+
+let cfg=null;
+
+function defaults(){
+  return {ver:VER, npcAvatar:{}, userAvatar:null,
+    address:"", addressHist:[], selfName:"", bio:"",
+    style:{tone:"",humor:"",depth:""},
+    attr:{str:2,agi:2,int:2}, hist:[], rejected:0};
+}
+function sanitize(recount){
+  if(!cfg.npcAvatar||typeof cfg.npcAvatar!=="object"){ if(recount&&cfg.npcAvatar!==undefined)cfg.rejected++; cfg.npcAvatar={}; }
+  if(!Array.isArray(cfg.addressHist)){ if(recount)cfg.rejected++; cfg.addressHist=[]; }
+  if(!cfg.style||typeof cfg.style!=="object"){ if(recount&&cfg.style!==undefined)cfg.rejected++; cfg.style={tone:"",humor:"",depth:""}; }
+  if(!cfg.attr||typeof cfg.attr!=="object"){ if(recount&&cfg.attr!==undefined)cfg.rejected++; cfg.attr={str:2,agi:2,int:2}; }
+  ["str","agi","int"].forEach(k=>{ if(typeof cfg.attr[k]!=="number"||!(cfg.attr[k]>=0)){ if(recount)cfg.rejected++; cfg.attr[k]=2; } });
+  if(!Array.isArray(cfg.hist)){ if(recount)cfg.rejected++; cfg.hist=[]; }
+  if(typeof cfg.address!=="string")cfg.address="";
+  if(typeof cfg.selfName!=="string")cfg.selfName="";
+  if(typeof cfg.bio!=="string")cfg.bio="";
+}
+function save(){ try{ localStorage.setItem(KEY,JSON.stringify(cfg)); }catch(e){} }
+function emit(keys){ try{ window.dispatchEvent(new CustomEvent("wd:cfg",{detail:{keys:keys||[]}})); }catch(e){} }
+function summ(v){ const s=typeof v==="string"?v:JSON.stringify(v); return s==null?"":String(s).slice(0,40); }
+function histPush(k,from,to,reason){
+  cfg.hist.unshift({t:new Date().toISOString(),k:k,from:summ(from),to:summ(to),r:reason||""});
+  if(cfg.hist.length>60)cfg.hist.length=60;
+}
+/* NPC 听音辨调：依据自我描述关键词推断 语气/风格/深度 */
+function analyzeBio(text){
+  const t=String(text||""), sc={formal:0,casual:0,humor:0,serious:0,deep:0,basic:0};
+  (t.match(/您|请|贵|敬|职业|备考|考试|证书|上岸|规范/g)||[]).forEach(()=>sc.formal++);
+  (t.match(/哈|嘿|玩|梗|乐|嗨|呀|啦|嘛/g)||[]).forEach(()=>sc.casual++);
+  (t.match(/幽默|段子|搞笑|有趣|逗|乐子/g)||[]).forEach(()=>sc.humor++);
+  (t.match(/严谨|认真|冲刺|努力|自律|踏实|稳/g)||[]).forEach(()=>sc.serious++);
+  (t.match(/原理|深入|进阶|逻辑|为什么|本质|体系|溯源/g)||[]).forEach(()=>sc.deep++);
+  (t.match(/入门|基础|小白|新手|简单|先会|口诀/g)||[]).forEach(()=>sc.basic++);
+  const pick=(a,b,ka,kb)=>{ if(sc[ka]===0&&sc[kb]===0)return""; return sc[ka]>=sc[kb]?a:b; };
+  return {tone:pick("formal","casual","formal","casual"),
+          humor:pick("humor","serious","humor","serious"),
+          depth:pick("deep","basic","deep","basic")};
+}
+/* 图片管线：JPG/PNG ≤5MB、≥200px → 居中裁剪+缩放(默认240px JPEG) → dataURL（重编码抹除 EXIF/GPS）
+   zoom: 裁剪缩放系数(1=cover)——配置中心的简易裁剪。失败 reject Error(E_CFG_*) */
+function processImageFile(file,opt){
+  opt=opt||{};
+  return new Promise((res,rej)=>{
+    if(!file) return rej(new Error("E_CFG_NOFILE"));
+    if(!/image\/(png|jpe?g)/.test(file.type)) return rej(new Error("E_CFG_TYPE"));
+    if(file.size>MAX_BYTES) return rej(new Error("E_CFG_SIZE"));
+    const url=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{
+      try{
+        const side=Math.min(img.naturalWidth,img.naturalHeight);
+        if(side<MIN_SIDE){ URL.revokeObjectURL(url); return rej(new Error("E_CFG_SMALL")); }
+        const out=OUT, zoom=Math.max(1,Math.min(3,opt.zoom||1));
+        const cv=document.createElement("canvas"); cv.width=out; cv.height=out;
+        const g=cv.getContext("2d");
+        const k=(out/side)*zoom, w=img.naturalWidth*k, h=img.naturalHeight*k;
+        g.imageSmoothingEnabled=true;
+        g.drawImage(img,(out-w)/2,(out-h)/2,w,h);
+        const url2=cv.toDataURL("image/jpeg",QUALITY);
+        URL.revokeObjectURL(url);
+        res({url:url2, w:img.naturalWidth, h:img.naturalHeight, kb:Math.round(url2.length/1024)});
+      }catch(e){ URL.revokeObjectURL(url); rej(e); }
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_DECODE")); };
+    img.src=url;
+  });
+}
+function load(){
+  try{
+    const r=localStorage.getItem(KEY);
+    if(r){ const o=JSON.parse(r);
+      if(o&&o.ver===VER){ cfg=Object.assign(defaults(),o); sanitize(true); return; }
+    }
+  }catch(e){}
+  cfg=defaults();
+}
+const WDCfg={
+  init(){ load(); },
+  /* 同步快照（对话 prompt 每次调用时读取，<1ms） */
+  ready(){ return cfg?{address:cfg.address,selfName:cfg.selfName,bio:cfg.bio,style:cfg.style,attr:cfg.attr}:null; },
+  all(){ return cfg; },
+  get(path){ return path.split(".").reduce((o,x)=>o&&o[x],cfg); },
+  set(path,val,reason){
+    const keys=path.split("."), last=keys.pop();
+    let o=cfg; keys.forEach(x=>{ o=o[x]=o[x]||{}; });
+    const from=o[last];
+    if(path==="address"&&val&&cfg.address&&val!==cfg.address&&cfg.addressHist.indexOf(cfg.address)<0){
+      cfg.addressHist.unshift(cfg.address); if(cfg.addressHist.length>8)cfg.addressHist.length=8;
+    }
+    o[last]=val;
+    histPush(path,from,val,reason); save(); emit([path]);
+  },
+  addressPresets:PRESET_ADDR,
+  selfPresets:PRESET_SELF,
+  analyzeBio:analyzeBio,
+  attrBudget(){ return ATTR_BUDGET; },
+  attrMin(){ return ATTR_MIN; },
+  attrSum(){ const a=cfg.attr; return a.str+a.agi+a.int; },
+  /* 属性派生上限（预览与状态栏共用） */
+  attrCaps(){ const a=cfg.attr; return {hp:80+a.str*4, energy:20+a.agi*2, xpBonus:a.int*3}; },
+  avatarURL(id){ return id==="_player"?(cfg.userAvatar||null):(cfg.npcAvatar[id]||null); },
+  setAvatar(id,file,zoom){
+    const self=this;
+    return processImageFile(file,{zoom:zoom||1}).then(r=>{
+      if(id==="_player") self.set("userAvatar",r.url,"我的头像");
+      else self.set("npcAvatar."+id,r.url,"NPC头像");
+      return r;
+    });
+  },
+  clearAvatar(id){ if(id==="_player") this.set("userAvatar",null,"移除我的头像"); else this.set("npcAvatar."+id,null,"移除NPC头像"); },
+  export(){
+    return JSON.stringify({ver:VER, exportedAt:new Date().toISOString(), cfg:cfg},null,1);
+  },
+  import(text){
+    let o; try{ o=JSON.parse(text); }catch(e){ throw new Error("E_CFG_JSON"); }
+    const c=o&&(o.cfg||o);
+    if(!c||typeof c!=="object") throw new Error("E_CFG_SHAPE");
+    cfg=Object.assign(defaults(),c); cfg.ver=VER; sanitize(true);
+    save(); emit(["*"]); return true;
+  },
+  _testGet:()=>cfg
+};
+window.WDCfg=WDCfg;
+})();

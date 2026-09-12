@@ -115,11 +115,26 @@ const SPR={
     ".BBBBBBBB...",
     ".BBBBBBBB...",
     ".BB....BB...",
+    "............"]},
+  /* 云蘅 · 引路人：月白衣裙青绦，双鬓簪灯 */
+  yunheng:{c:{H:"#2a1f3f",F:"#f5e8d8",E:"#1a0f2e",V:"#7de8e0",B:"#e8e2f5",L:"#ffd23f",s:"#3df0ff"},p:[
+    "....HHHH....",
+    "...HHHHHH...",
+    "..HHFFFFHH..",
+    "..HFEFFEFH..",
+    "..HFFFFFFH..",
+    "..HVLVLVH...",
+    "...sBBBBs...",
+    "..BBBBBBBB..",
+    "..BBBBBBBB..",
+    "..BBBBBBBB..",
+    "...B....B...",
     "............"]}
 };
 
 /* ---------- NPC 地图布点（tile 坐标）与所属幕 ---------- */
 const SPOTS={
+  yunheng:{x:2.4,y:4.5},    // 城门内引路（全程引导者）
   qingxuan:{x:3.2,y:6.9},   // 城门灯下（第一幕 · 山河游学）
   smq:{x:5.4,y:5.3},        // 山河桥上（游历剑客）
   moxiaogu:{x:7.3,y:5.2},   // 藏经阁门口（机关童子）
@@ -127,7 +142,7 @@ const SPOTS={
   liuruyan:{x:10.2,y:6.8},  // 市集纱幔（第三幕）
   xuanji:{x:11.7,y:4.3}     // 观星台（第四幕）
 };
-const NPC_ACT={qingxuan:1,smq:1,moxiaogu:2,tiemian:2,liuruyan:3,xuanji:4};
+const NPC_ACT={yunheng:1,qingxuan:1,smq:1,moxiaogu:2,tiemian:2,liuruyan:3,xuanji:4};
 const ACT_X=[[0,6.2],[6.2,9.4],[9.4,11],[11,12.8],[12.8,16]];
 /* 玩家行进路径（随进度推进） */
 const WAY=[[1.8,7.6],[3.2,6.2],[4.4,5.8],[5.6,6.4],[6.6,5.4],[7.6,4.6],[8.8,5.4],[9.8,6.2],[10.6,5.4],[11.4,5.6],[12.2,5.8],[13.2,6.2],[14.2,6.4]];
@@ -515,14 +530,31 @@ const WDMap={
       delete _avCache[key+"_3"]; delete _avCache[key+"_4"]; delete _avCache[key+"_2"];
       return s;
     });
+    /* 配置中心自定义头像（dataURL）优先于 assets/ 与内置像素矩阵 */
+    const custom=id=>{ try{ return (CTX.customAvatar&&CTX.customAvatar(id))||null; }catch(e){ return null; } };
     /* 玩家：阶段换装 → 同时进 canvas 精灵与状态卡 */
     const stage=(CTX.stage?CTX.stage():1);
-    takeImage("assets/player/player-"+stage+".png?v="+v,"_player")
-      .catch(()=>null)
-      .then(s=>s||takeImage("assets/player/player.png?v="+v,"_player").catch(()=>null))
-      .then(s=>{ if(!s)return; const im=qs("#pportImg",host); if(im) im.src=s; });
-    /* NPC：列表头像 + canvas 精灵 + 广播（对话流换头像） */
+    const cu=custom("_player");
+    if(cu){
+      takeImage(cu,"_player").catch(()=>null).then(s=>{ if(!s)return; const im=qs("#pportImg",host); if(im) im.src=s; });
+    }else{
+      takeImage("assets/player/player-"+stage+".png?v="+v,"_player")
+        .catch(()=>null)
+        .then(s=>s||takeImage("assets/player/player.png?v="+v,"_player").catch(()=>null))
+        .then(s=>{ if(!s)return; const im=qs("#pportImg",host); if(im) im.src=s; });
+    }
+    /* NPC：列表头像 + canvas 精灵 + 广播（对话流换头像）；自定义头像优先，否则探测 assets */
     CTX.D.npcs.forEach(n=>{
+      const cn=custom(n.id);
+      if(cn){
+        takeImage(cn,n.id).catch(()=>null).then(s=>{
+          if(!s) return;
+          const li=host.querySelector('.mapnpc[data-npc="'+n.id+'"] img');
+          if(li) li.src=s;
+          document.body.dispatchEvent(new CustomEvent("wdavatar",{detail:n.id}));
+        });
+        return;
+      }
       probeImg("assets/npc/"+n.id+".png?v="+v).then(s=>{
         if(!s) return;
         const im=new Image(); im.src=s; _extImg[n.id]=im;
@@ -534,13 +566,19 @@ const WDMap={
     });
   },
 
-  /* NPC 是否已现身（所属幕解锁） */
+  /* 运行时热更新头像（配置中心上传即时生效，无需重挂地图）：
+     src=dataURL/URL 立即进 canvas 精灵与头像缓存；src=null 回退内置像素（assets 下次挂载再探测） */
+  setExternalAvatar(id,src){
+    if(!id) return;
+    if(src){ const im=new Image(); im.src=src; _extImg[id]=im; }
+    else delete _extImg[id];
+    ["_2","_3","_4"].forEach(s=>delete _avCache[id+s]);
+    try{ document.body.dispatchEvent(new CustomEvent("wdavatar",{detail:id})); }catch(e){}
+  },
+
+  /* NPC 是否已现身 —— 职能重构后：全员自序章由云蘅引见，全章可互动（任务门禁另在任务链） */
   npcVisible(id){
-    const st=CTX.getSt(), D=CTX.D;
-    const act=NPC_ACT[id]||1;
-    let start=46;
-    D.days.forEach(d=>{ if(d.act==="act"+act&&d.day<start) start=d.day; });
-    return st.unlocked>=start;
+    return !!SPOTS[id];
   },
 
   _curAct(){

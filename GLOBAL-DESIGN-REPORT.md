@@ -1,0 +1,209 @@
+# 问道之旅 · 全局规划与设计报告
+
+> 版本 v1.0 · 2026-09-13 · 随本轮六大需求迭代更新
+> 配套文档：`ROLE-DESIGN-HANDOFF.md`（角色素材）、`game/AGENT-HANDOFF.md`（Agent 交接）
+
+---
+
+## 1. 项目背景与目标
+
+### 1.1 背景
+「问道之旅」是一款**北京导游考证备考**仙侠化 PWA 游戏。玩家在 45 天内穿越五幕秘境（山河游学 → 律法塔 → 行会风云 → 遗迹探秘 → 金榜台前），以「修习任务 + 温故试炼 + 巡夜记忆卡 + 错题星盘」完成考证知识点的学习闭环。考试日期 2026-11-21，与真实备考周期对齐。
+
+### 1.2 价值定位
+| 维度 | 内容 |
+|---|---|
+| 用户价值 | 把枯燥的导游考点背诵变成每日可打卡的仙侠修行；间隔重复（1→3→7→15 日）与错题重练符合记忆规律；AI 对话提供拟人化督学陪伴 |
+| 商业价值 | 垂直赛道（导游证/导考培训）低成本获客样本；可复制到其他资格证考试（教师/法考/公考）；数据闭环可对接教培机构 |
+| 目标用户 | 备考导游资格证的考生（20-35 岁，移动端为主，碎片时间学习）；二次元/国风爱好者外溢人群 |
+| 市场定位 | 「游戏化督学」工具，竞品为刷题 APP（粉笔/对题库）+ 打卡社群；差异化在沉浸感与情感陪伴 |
+
+### 1.3 成功指标
+- 次日留存 ≥ 40%；45 日完课率 ≥ 25%
+- 交互响应 < 200ms（pointerdown）；地图逐帧绘制开销 < 30 次/帧
+- 离线可用率 100%（Service Worker 全量缓存核心资源）
+
+## 2. 现状架构总览
+
+### 2.1 关键约束（重要）
+本项目为**无后端纯前端 PWA**：全部状态存于 localStorage，DeepSeek API 由浏览器直连（key 存 localStorage，未配置时本地降级）。因此需求中的「结构化数据库 / RESTful API / 可视化监控 / 定期备份」按如下方式落地，不做虚假承诺：
+
+| 需求术语 | 本项目落地 | 未来后端映射 |
+|---|---|---|
+| 结构化数据库 | localStorage 分域 schema 化存储 + 加载时校验 | SQLite/PostgreSQL 同构表（见 §7.2 映射） |
+| RESTful API | 模块函数接口 + 事件总线约定（§7.1） | 同名资源路由（POST /memories 等） |
+| 定期备份 | 每日快照旋转 ×5 + JSON 导出 | 定时任务 + 对象存储 |
+| 数据可视化 | 藏经阁「数据洞玄」面板（开发监控） | Grafana/管理后台 |
+
+### 2.2 模块划分与依赖
+```mermaid
+graph TD
+  subgraph 宿主 index.html
+    UI[视图层 render* / switchView]
+    ST[状态层 st + save/reconcile]
+    D[数据层 GAME_DATA 274任务/1072考点卡]
+    QZ[试炼 genQuiz/startAiQuiz]
+    NT[巡夜 renderNight]
+    SP[星盘 renderStar]
+  end
+  subgraph 独立模块
+    CHAT[wd-chat.js 对话流]
+    MAP[wd-map.js v2 地图/相机/图层]
+    FX[wd-fx.js 特效]
+    CFG[wd-cfg.js 配置中心 · 新]
+    MEM[wd-mem.js NPC记忆 · 新]
+  end
+  EXT[DeepSeek API]
+  SW[sw.js 离线缓存]
+  UI --> D & ST
+  UI --> CHAT & MAP & FX & CFG & MEM
+  CHAT --> MEM
+  CHAT -.key?.-> EXT
+  QZ -.key?.-> EXT
+  CFG --> ST
+  MEM --> ST
+  SW --- UI & D & CHAT & MAP & FX & CFG & MEM
+```
+职责边界：`index.html` 只做视图/存档/流程编排；模块通过 `window.WDxx.init({...})` 注入依赖、`unmount()` 释放资源；模块间禁止直接读写对方内部状态，一律走公共 API 或事件。
+
+## 3. 系统架构设计
+
+### 3.1 分层
+```mermaid
+graph TB
+  subgraph 表现层
+    V1[对话流]:::fe
+    V2[地图 canvas×3层]:::fe
+    V3[面板/弹窗 panel]:::fe
+  end
+  subgraph 业务层
+    B1[任务链/解锁 prev DAG]:::biz
+    B2[间隔重复调度 SRS]:::biz
+    B3[错题闭环 记录→重练→移除]:::biz
+    B4[NPC认知/语言策略]:::biz
+  end
+  subgraph 数据层
+    S1[st 存档]:::ds
+    S2[wdzx.cfg.* 配置]:::ds
+    S3[wdzx.mem.v1 记忆]:::ds
+    S4[GAME_DATA 只读]:::ds
+  end
+  subgraph 外部
+    E1[DeepSeek chat]:::ex
+    E2[GitHub Pages]:::ex
+  end
+  V1-->B4-->S3
+  V2---B1
+  V3-->B2-->S1
+  B3-->S1
+  B4-.API key.->E1
+  E2---SW
+  classDef fe fill:#1a1230;biz fill:#241a3f;ds fill:#12251f;ex fill:#2b1a1a;
+```
+- **表现层**：11 视图 + 弹窗面板；地图为三 canvas（静态缓存/动态/雾）+ DPR 自适应。
+- **业务层**：任务 prev 链保证无环可达（gg_test 固化 DFS 校验）；SRS 间隔 1→3→7→15；错题按 pid 章节聚类。
+- **数据层**：所有 localStorage 域均带版本号与加载校验（拒收即回默认并计数上报）。
+
+## 4. 数据流程图
+
+### 4.1 学习主闭环
+```mermaid
+flowchart LR
+  A[日程 45 日] -->|解锁| B[任务 quests]
+  B -->|完成 done| C[XP/铜钱/升级]
+  B -->|study 型| D[考点卡 1072 枚]
+  D -->|SRS 到期| E[巡夜 记忆卡匣]
+  B -->|试炼| F[genQuiz AI/静态/复用兜底]
+  F -->|答错| G[(st.wrong 星盘)]
+  G -->|再答对| H[移出星盘]
+  G -->|分类统计| I[NPC记忆 错题画像]
+  E & B -->|分钟级时长| I
+  I -->|digest 注入 prompt| J[对话 AI 个性化]
+```
+### 4.2 配置生效链
+```mermaid
+flowchart LR
+  U[用户修改配置] --> V[校验 类型/大小/尺寸]
+  V -->|通过| W[(wdzx.cfg.v1)]
+  W --> X[事件 wd:cfg]
+  X --> R1[对话流 头像/称呼即时生效]
+  X --> R2[地图 avatarURL]
+  X --> R3[AI prompt 语气/风格/深度]
+  V -->|拒绝| Z[toast 拒因 + 历史记录 rejected]
+```
+
+## 5. 技术选型说明
+
+| 决策点 | 选型 | 备选 | 理由 |
+|---|---|---|---|
+| UI 框架 | 原生 JS + 模板串 | Vue/React | 单文件交付、零构建、PWA/打包 IPA 都最小化；游戏状态简单，框架收益低。代价：需纪律性维护（模块化已补） |
+| 存储 | localStorage（分域+版本+校验） | IndexedDB | 存档体量 < 1MB、同步读满足 <100ms；IndexedDB 异步反而复杂化。头像数据URL压缩后 ~30KB/张，仍可控；超限则自动降质 |
+| AI | DeepSeek chat 直连 | 自建代理/本地模型 | 已有 key 生态；代理是后端演进项。风险：key 前端暴露（文档明示仅供个人使用） |
+| 画布 | 3 层 canvas + 离屏缓存 | DOM/WebGL | 实测逐帧 fillRect 761→27，兼顾 iOS 兼容与功耗 |
+| 部署 | GitHub Pages + SW 版本号 | Vercel/自有后端 | 零成本；版本号 +1 强制刷新已固化规程 |
+
+## 6. 开发里程碑（本轮六需求）
+
+| 阶段 | 交付物 | 验收标准 | 负责人 |
+|---|---|---|---|
+| P0 | 本报告 | 覆盖 6 需求方案/接口/数据结构 | AI |
+| P1 | 巡夜/星盘修复 | 任意进度打开两视图均非空；错题带分类；gg_test 通过 | AI |
+| P2 | 引导者云蘅 + 四章互动矩阵 | 每个 NPC 在 act1-4 各 ≥1 互动话题；地图全章可见 | AI |
+| P3 | wd-cfg.js 配置中心 | 头像校验(类型/5MB/200px)/裁剪预览/称呼历史/属性分配/JSON 往返/历史记录/实时生效 | AI |
+| P4 | wd-mem.js 记忆系统 | 五类数据入库；同步读取 <100ms；校验拒收；备份旋转；可视化面板 | AI |
+| P5 | 状态栏 + 用户头像 | 1s 刷新；40×40 对称；fallback/加载态 | AI |
+| P6 | 回归 + sw v14 + push | gg_test 全绿 + 浏览器 0 错误 | AI |
+
+## 7. 实施方案细则
+
+### 7.1 接口规范（内部模块 API 约定）
+命名 `WDCfg.xxx / WDMem.xxx`；同步方法直接返回，异步返回 Promise；错误码 `E_CFG_* / E_MEM_*`（详见 jsdoc）；事件走 `window.dispatchEvent(CustomEvent)`：
+| 事件名 | payload | 触发 |
+|---|---|---|
+| `wd:cfg` | {keys:[...]} | 任一配置变更 |
+| `wd:mem` | {npcId,type} | 记忆写入（节流） |
+
+未来 REST 映射（供后端化）：`POST /memories/{npcId}/events`、`GET /memories/{npcId}/digest`、`PUT /config`、`GET /config/export`、`POST /config/import`。
+
+### 7.2 数据存储方案（localStorage 域）
+```
+wdzx_save          存档（st）：+hp +energy（reconcile 补默认，上限由 cfg.attr 派生钳制）
+wdzx.cfg.v1        配置中心：{npcAvatar:{id:dataURL}, userAvatar, address,
+                   addressHist[], selfName, bio, style{tone,humor,depth},
+                   attr{str,agi,int}, hist[], rejected, ver}
+wdzx.mem.v1        NPC记忆：{npc:{meet,lastMeet,learnMin,entered{},done{}{t,dur,onePass},
+                   wrongs{topic:{n,lv}},lastTalk}}
+wdzx.mem.bak.0-4   每日备份旋转
+wdzx.mapLayers.v1  地图图层偏好（已有）
+```
+索引策略：键值域内以 npcId/questId 为子键，O(1) 取用；错题按 `pid` 前缀聚类的索引在写入时预计算（`wrongs[topic]`）。生命周期：备份 5 份滚动覆盖；导出 JSON 为手动全量快照。
+
+### 7.3 代码审查清单与已知发现
+评分维度（各 0-5）：规范 / 安全 / 性能 / 可维护。
+- 已知发现（历史审计累计）：每帧全量重绘（已修，v2 重制）；resize 冻结（已修）；全局 `$`/`hash` 耦合（已修）；交付数硬编码（已修）；**巡夜仅完成卡、空态无引导（P1 修）**；**错题无分类、温故题库可空转（P1 修）**；**DeepSeek 失败且静态题库为空时试炼 0/0 空转（P1 修）**。
+- 安全项：API key 仅存 localStorage（明示）；所有用户输入入 DOM 前经 `esc()`；上传图片经 canvas 重编码（去 EXIF/GPS）。
+- 性能项基准：交互 <200ms；地图逐帧 <30 ops；对话滚动 60fps；记忆读取同步 O(1)。
+
+## 8. 测试方案
+- **单元/集成**：`gg_test.js`（node，**65 项全绿**）——任务链可达性、存档迁移、对话降级、地图相机/图层/生命周期，本轮新增：配置校验/导入导出往返/称呼历史/属性派生、记忆五类写入与 digest/异常清洗、四章互动矩阵完整性、renderCfg/renderMem 面板渲染。
+- **系统/场景**：浏览器实测脚本化（pointerdown 派发、截图、console 0 错误）。
+- **性能指标**：上表 §5/§7.3；用 fillRect hook 与 performance.now 采样。
+
+## 9. 创新玩法建议（可行性 × 成本）
+| 建议 | 说明 | 可行性 | 成本 |
+|---|---|---|---|
+| NPC 记忆回溯对话 | NPC 主动引用「你上周错的 S3-02 章」开场 | 高（digest 已注入 prompt） | 低 |
+| 错题妖图鉴 | 星盘错题妖性化，答对即「收服」，集齐图鉴成就 | 高 | 低 |
+| 云蘅每日卦辞 | 引导者按记忆画像生成当日建议（先练哪章） | 高 | 低 |
+| 双端同步 | 导出 JSON → 扫码导入（iOS 主屏/浏览器双分区互通） | 中（已具备导入导出） | 中 |
+| 后端化 + 排行 | 配置/记忆上云，真实排行榜 | 中（§7.1 映射已备） | 高 |
+
+## 10. 实施状态（2026-09-13，sw wdzx-v14）
+| 需求 | 状态 | 落点 |
+|---|---|---|
+| #1 NPC记忆 | ✅ 完成 | wd-mem.js + 配置中心→数据→「NPC 记忆档案与数据监控」面板 + wd-chat sysPrompt 注入 digest |
+| #2 配置中心 | ✅ 完成 | wd-cfg.js + renderCfg 四 tab 弹窗（头像/称呼语气/属性/数据） |
+| #3 报告 | ✅ 完成 | 本文件 |
+| #4 状态栏/头像 | ✅ 完成 | index.html 对话视图 sticky 状态栏 1s 刷新；双方头像 40×40 对称，自定义优先+像素兜底 |
+| #5 巡夜/星盘 | ✅ 完成 | renderNight 预习卡兜底（实测 14 张）；renderStar 随机小考+空态引导；fallbackQuiz 杜绝 0/0 |
+| #6 NPC职能 | ✅ 完成 | index.html NPC_MATRIX（7 NPC×4 章话题）+ 引导者云蘅（wd-map 布点/SPR/@提及/fallback） |

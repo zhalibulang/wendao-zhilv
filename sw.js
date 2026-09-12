@@ -1,6 +1,6 @@
 // 问道之旅 Service Worker — 离线缓存 + 即时更新
 // 版本号每次内容变更必须 +1，activate 时据此清除旧缓存
-const CACHE = "wdzx-v13";
+const CACHE = "wdzx-v14";
 const CORE = [
   "./",
   "./index.html",
@@ -8,6 +8,8 @@ const CORE = [
   "./wd-chat.js",
   "./wd-map.js",
   "./wd-fx.js",
+  "./wd-cfg.js",
+  "./wd-mem.js",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png"

@@ -47,7 +47,7 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .sys{font-size:12px;color:var(--dim);text-align:center;margin:12px 0;letter-spacing:.08em}
 .sys.daysep{border-bottom:1px dashed var(--border);padding-bottom:8px;margin-top:22px;letter-spacing:.15em}
 .msg{display:flex;gap:10px;margin:10px 0;align-items:flex-start}
-.msg .avatar{flex:none;width:38px;height:38px;border:2px solid var(--border-lit);background:var(--bg2);
+.msg .avatar{flex:none;width:40px;height:40px;border:2px solid var(--border-lit);background:var(--bg2);
   display:flex;align-items:center;justify-content:center;font-size:17px;color:var(--cyber);box-shadow:2px 2px 0 #000}
 .msg .body{max-width:78%}
 .msg .name{font-size:12px;color:var(--dim);margin-bottom:2px}
@@ -250,8 +250,43 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 .libwarn{color:var(--gold);font-size:11px;margin-left:4px}
 .dayinfo{text-align:center;color:var(--dim);font-size:13px;margin-bottom:8px}
 .missing{text-align:center;padding:30px;color:var(--dim)}
-.statbar{display:flex;gap:14px;margin:8px 0;font-size:13px}
+.statbar{position:sticky;top:0;z-index:6;display:flex;gap:10px;align-items:center;margin:0 0 10px;padding:6px 10px;font-size:13px;
+  background:var(--bg2);border:2px solid var(--border-lit);box-shadow:2px 2px 0 #000;flex-wrap:wrap}
 .statbar b{color:var(--gold)}
+.statbar .slv{color:var(--gold);font-weight:700;letter-spacing:.08em;flex:none;text-shadow:1px 1px 0 #000}
+.statbar .sgroup{display:inline-flex;align-items:center;gap:5px}
+.statbar .sgroup i{font-style:normal;color:var(--dim);font-size:11.5px}
+.statbar .sbar{width:clamp(46px,16vw,72px);height:9px;background:var(--bg3);border:1px solid var(--border);position:relative;overflow:hidden}
+.statbar .sbar b{position:absolute;inset:0;width:0;background:linear-gradient(90deg,var(--danger),var(--gold));transition:width .3s}
+.statbar .sbar.en b{background:linear-gradient(90deg,var(--neon),var(--cyber))}
+.statbar .sgroup em{font-style:normal;font-size:11px;color:var(--ink2);min-width:54px}
+/* ===== 配置中心 ===== */
+.cfgtabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.cfgtabs button{font:inherit;font-size:12.5px;padding:5px 12px;background:var(--bg3);border:2px solid var(--border);color:var(--fg2);cursor:pointer}
+.cfgtabs button.on{background:var(--bg2);border-color:var(--neon);color:var(--neon);box-shadow:2px 2px 0 #000}
+.cfgpane{display:none}.cfgpane.on{display:block}
+.cfgrow{display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap}
+.cfgrow label{font-size:12.5px;color:var(--dim);min-width:64px}
+.cfgrow input[type=text],.cfgrow input[type=password],.cfgrow input[type=number],.cfgrow textarea,.cfgrow select{
+  font:inherit;font-size:13.5px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:7px 9px;min-width:0;flex:1}
+.cfgrow textarea{width:100%;min-height:64px;resize:vertical}
+.cfgchips{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
+.cfgchips button{font:inherit;font-size:11.5px;padding:3px 9px;background:var(--bg3);border:1px solid var(--border);color:var(--fg2);cursor:pointer}
+.avgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin:8px 0}
+.avcell{border:2px solid var(--border);background:var(--bg2);padding:7px;text-align:center;font-size:11.5px}
+.avcell .avbox{width:56px;height:56px;margin:0 auto 5px;border:1px solid var(--border-lit);background:var(--bg3);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.avcell .avbox img{width:100%;height:100%;object-fit:cover;image-rendering:pixelated}
+.avcell .avnm{color:var(--cyber);margin-bottom:3px}
+.avcell button{font:inherit;font-size:10.5px;padding:3px 6px;margin:2px 1px 0;background:var(--bg3);border:1px solid var(--border);color:var(--fg2);cursor:pointer}
+.avpreview{width:120px;height:120px;border:2px solid var(--border-lit);overflow:hidden;background:var(--bg3);position:relative}
+.avpreview img{width:100%;height:100%;object-fit:cover}
+.attrctl{display:flex;align-items:center;gap:8px;font-size:13.5px}
+.attrctl button{font:inherit;width:30px;height:28px;background:var(--bg3);border:2px solid var(--border-lit);color:var(--neon);cursor:pointer;font-size:15px;line-height:1}
+.attrctl b{display:inline-block;min-width:26px;text-align:center;color:var(--gold);font-size:15px}
+.cfghist{font-size:11.5px;color:var(--dim);max-height:180px;overflow-y:auto;border:1px solid var(--border);background:var(--bg);padding:6px 9px;line-height:1.7}
+.memcard{border:2px solid var(--border);background:var(--bg2);padding:9px 11px;margin:8px 0;font-size:12.5px;line-height:1.7}
+.memcard b{color:var(--cyber)}
+.memcard .mdig{color:var(--gold);font-size:12px;margin-top:4px;border-top:1px dashed var(--border);padding-top:4px}
 .ad{font-size:12px;color:var(--dim)}
 
 /* 任务面板（行者手札·任务卷） */
@@ -412,6 +447,8 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 <div id="game"></div>
 <div class="toasts" id="toasts"></div>
 <script src="game-data.js"></script>
+<script src="wd-cfg.js"></script>
+<script src="wd-mem.js"></script>
 <script src="wd-chat.js"></script>
 <script src="wd-map.js"></script>
 <script src="wd-fx.js"></script>
@@ -461,6 +498,24 @@ const SFX={
 const NPC = Object.fromEntries(D.npcs.map(n=>[n.id,n]));
 const DAYS = D.days, byDay = Object.fromEntries(DAYS.map(d=>[d.day,d]));
 const QMAP = Object.fromEntries(D.quests.map(q=>[q.id,q]));
+/* ---------- NPC 职能重构：全程引导者「云蘅」+ 全角色×四章互动矩阵 ----------
+   所有 NPC 自序章起即由云蘅引见现身（不再按幕锁于雾中），
+   但各章互动话题仍随当前幕推进；任务解锁门禁不受影响。 */
+if(!NPC.yunheng){
+  const GUIDE={id:"yunheng",name:"云蘅",title:"引路人",intro:"执一盏引魂灯的女子，行走在五幕之间。不授业，只引路——把合适的人，在合适的时刻，带到你面前。"};
+  D.npcs.unshift(GUIDE); NPC.yunheng=GUIDE;
+}
+const NPC_MATRIX={
+  yunheng:{act1:"先随我识一遍同行诸人——灯，要分给能提灯的人。",act2:"律法塔就在前方，铁面先生候你多时；我为你执灯。",act3:"行会风云起，柳首座的纱幕之后藏着整团人心，随我来。",act4:"星轨已明，玄机夫人的观星台在遗迹最高处。"},
+  qingxuan:{act1:"山河游学，先学执灯——把考点当灯芯，一盏盏点亮。",act2:"灯照塔律：法条幽深，我用灯替你先照一寸。",act3:"灯下识人心：带团如点灯，先照亮游客要看的景。",act4:"灯映星图：北京风物是这盏灯最后一层灯罩。"},
+  smq:{act1:"山河志第一页——三千年的城，从蓟城讲到大都。",act2:"剑指塔律：文物法规如剑谱，一式不可错。",act3:"行会演武：带团节奏如剑招，快慢全在蓄与发。",act4:"遗迹访古：木构斗拱，是我剑下最后的对手。"},
+  tiemian:{act1:"新丁先立规矩：考规如塔基，逾矩者塔门不启。",act2:"一百零八层封妖塔，层层关着一条会咬人的法条。",act3:"行会合同与投诉，是塔外的妖——同样归我管。",act4:"遗迹保护条例的封印也在塔上，携卷而来。"},
+  liuruyan:{act1:"纱中幻景：讲解词先在纱后排演千遍，再对人启齿。",act2:"塔下经营：旅行社条例是行商的纱，薄而不透。",act3:"行会风云正是我主场——千团穿雾，未失一人。",act4:"纱覆遗迹：应急处理，先护人，再护纱，后护物。"},
+  moxiaogu:{act1:"机关匣已就位！四百余枚知识符印等你来点数！",act2:"新铸律法锁三十把——法规题在这里排队咬人！",act3:"行会账目题最绕，我的算签都不够用了！",act4:"遗迹星符对谜——古建题妖最狡猾！"},
+  xuanji:{act1:"星盘初启：错题妖尚幼，趁早记下它们的模样。",act2:"星照塔律：你错过的法条妖，会在我盘里发亮。",act3:"实务之错最隐晦，星盘替你一一显形。",act4:"收服错题妖，就在这最后一幕——别留妖过夜。"}
+};
+function curActN(){ let n=1; DAYS.forEach(d=>{ if(st&&st.day>=d.day&&d.act){ const v=+d.act.slice(3); if(v>n) n=v; } }); return Math.min(4,Math.max(1,n)); }
+function npcActTopic(id){ const m=NPC_MATRIX[id]; return m&&m["act"+curActN()]; }
 /* v2：任务以 day 字段关联，装载时挂回 day 对象（主线优先排序） */
 DAYS.forEach(d=>{ d.quests=[]; });
 D.quests.forEach(q=>{ const d=byDay[q.day]; if(d) d.quests.push(q); });
@@ -476,9 +531,9 @@ function defState(){
     dsKey:"", personas:{}, aiBrief:{},
     dialogue:[],
     npcGrowth:{},
-    quizOk:0, quizAttempts:{}, created:new Date().toISOString()};
+    hp:88, energy:24, quizOk:0, quizAttempts:{}, created:new Date().toISOString()};
 }
-let st=null, view="map";
+let st=null, view="map", questTimer=0;
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){} }
 function load(){ try{const r=localStorage.getItem(KEY); if(r){st=JSON.parse(r); return true;}}catch(e){} return false; }
 /* 对账：已完成任务集是进度的唯一真相；xp/coin 据其重算，避免存档漂移导致等级误判 */
@@ -532,6 +587,27 @@ function reconcile(){
   if(st.coin<coin) st.coin=coin;
   if(typeof st.xp!=="number"||st.xp<0) st.xp=xp;
   if(typeof st.coin!=="number"||st.coin<0) st.coin=coin;
+  /* v3：心气/灵力 —— 上限由配置中心属性派生，越界即钳制 */
+  if(typeof st.hp!=="number") st.hp=88;
+  if(typeof st.energy!=="number") st.energy=24;
+  st.hp=Math.max(0,Math.min(maxHP(),st.hp));
+  st.energy=Math.max(0,Math.min(maxEnergy(),st.energy));
+}
+/* ---------- 状态派生：上限由配置中心属性决定；状态栏每秒刷新 ---------- */
+function maxHP(){ const c=window.WDCfg&&WDCfg.ready(); return c?(80+c.attr.str*4):100; }
+function maxEnergy(){ const c=window.WDCfg&&WDCfg.ready(); return c?(20+c.attr.agi*2):20; }
+function refreshStat(persist){
+  const bar=document.getElementById("statbar");
+  if(!bar||!st) return;
+  const mh=maxHP(), me=maxEnergy();
+  const hf=bar.querySelector("[data-hpf]"), ht=bar.querySelector("[data-hpt]");
+  const ef=bar.querySelector("[data-enf]"), et=bar.querySelector("[data-ent]");
+  if(hf) hf.style.width=Math.max(0,Math.min(100,st.hp/mh*100))+"%";
+  if(ht) ht.textContent=Math.round(st.hp)+"/"+mh;
+  if(ef) ef.style.width=Math.max(0,Math.min(100,st.energy/me*100))+"%";
+  if(et) et.textContent=Math.round(st.energy)+"/"+me;
+  const lv=bar.querySelector("[data-lv]"); if(lv) lv.textContent="Lv."+level();
+  if(persist) save();
 }
 const level=()=>Math.floor(st.xp/50)+1;
 let lastLv=1;
@@ -639,7 +715,7 @@ function render(){
   <div class="hd"><div class="t">问道之旅<small>四十五日 · ${esc(st.player)}</small></div>
     <div class="stats"><span>第<b>${st.day}</b>/45日</span><span>Lv.<b>${lv}</b></span><span>修行<b>${st.xp}</b></span>
     <span>铜钱<b>${st.coin}</b></span><span>连<b>${streak()}</b>日</span>
-    <button data-act="save">存档</button></div></div>
+    <button data-act="cfg">配置</button><button data-act="save">存档</button></div></div>
   <div class="navline">
     <button data-v="map">地图</button>
     <button data-v="chat">对话</button>
@@ -747,19 +823,28 @@ function renderChat(keep){
   }
   // Append persisted dialogue (player questions + NPC AI responses)
   const allMsgs=stream.concat(st.dialogue.map(d=>({t:d.role,npc:d.npc,x:d.text,qid:d.qid,refs:d.refs})));
-  let html=allMsgs.map(r=>{
+  /* 状态栏（需求4）：Lv/心气/灵力，置于流顶，不遮对话；refreshStat 每秒刷新 */
+  const uavSrc=(window.WDCfg&&WDCfg.avatarURL("_player"))||((window.WDMap&&WDMap.avatarURL)?WDMap.avatarURL("_player"):"");
+  const STATBAR=`<div id="statbar" class="statbar" role="status" aria-label="玩家状态">
+    <span class="slv" data-lv>Lv.${level()}</span>
+    <span class="sgroup"><i>心气</i><span class="sbar"><b data-hpf style="width:${Math.max(0,Math.min(100,st.hp/maxHP()*100))}%"></b></span><em data-hpt>${Math.round(st.hp)}/${maxHP()}</em></span>
+    <span class="sgroup"><i>灵力</i><span class="sbar en"><b data-enf style="width:${Math.max(0,Math.min(100,st.energy/maxEnergy()*100))}%"></b></span><em data-ent>${Math.round(st.energy)}/${maxEnergy()}</em></span>
+  </div>`;
+  let html=STATBAR+allMsgs.map(r=>{
     if(r.t==="sysday") return `<div class="sys daysep">${esc(r.x)}</div>`;
     if(r.t==="sys") return `<div class="msg sysline"><div class="bubble" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>${esc(r.x)}</span>${r.qid?`<button class="btn sm ghost" data-open="${r.qid}" style="flex:none">回看</button>`:""}</div></div>`;
     if(r.t==="npc"){ const n=NPC[r.npc]||NPC.qingxuan;
       const rlist=r.refs&&r.refs.length?r.refs:(r.qid?[{qid:r.qid}]:[]);
       const chips=rlist.map(x=>{ const qq=QMAP[x.qid]; return qq?`<button class="qref" data-ref="${qq.id}">📜 ${esc(qq.name)}</button>`:""; }).join("");
-      const av=(window.WDMap&&WDMap.avatarURL)?`<img class="pixav" src="${WDMap.avatarURL(r.npc)}" alt="">`:esc(n.name[0]);
+      const navSrc=(window.WDCfg&&WDCfg.avatarURL(r.npc))||((window.WDMap&&WDMap.avatarURL)?WDMap.avatarURL(r.npc):"");
+      const av=navSrc?`<img class="pixav" src="${navSrc}" alt="" onerror="this.onerror=null;this.src='${(window.WDMap&&WDMap.avatarURL)?WDMap.avatarURL(r.npc):""}'">`:esc(n.name[0]);
       return `<div class="msg"><div class="avatar">${av}</div><div class="body">
       <div class="name"><b>${esc(n.name)}</b> · ${esc(n.title)}</div>
       <div class="bubble">${esc(r.x)}</div>
       ${chips?`<div class="qrefs">${chips}</div>`:""}</div></div>`; }
-    if(r.t==="player"){ return `<div class="msg me"><div class="body">
-      <div class="bubble">${esc(r.x)}</div></div></div>`; }
+    if(r.t==="player"){ const uav=uavSrc?`<img class="pixav" src="${uavSrc}" alt="我" onerror="this.onerror=null;this.src='${(window.WDMap&&WDMap.avatarURL)?WDMap.avatarURL("_player"):""}'">`:"　";
+      return `<div class="msg me"><div class="body">
+      <div class="bubble">${esc(r.x)}</div></div><div class="avatar uav">${uav}</div></div>`; }
     if(r.t==="quest"){ const q=QMAP[r.qid]; if(!q) return ""; const done=qDone(q.id); const un=questUnlocked(q);
       const now=!done&&un&&r.qid===firstActive;
       return `<div class="msg"><div class="avatar">　</div><div class="body" style="max-width:100%">
@@ -778,6 +863,7 @@ function renderChat(keep){
   }
   view.innerHTML=html;
   bindChat();
+  refreshStat();
   if(!keep) view.scrollTop=view.scrollHeight;
 }
 function bindChat(){
@@ -815,6 +901,10 @@ function openQuest(qid){
   const pages=D.lectures[qid]||[];
   let quiz=D.quizzes[qid]||[];
   const npc=NPC[q.npc]||NPC.qingxuan;
+  /* NPC 记忆：任务进入（在途态）+ 修习时长心跳（每 30 秒入账 0.5 分钟，归属当前任务 NPC）。回看模式不记在途 */
+  if(window.WDMem&&!readonly){ WDMem.enter(q.npc,q.id); if(questTimer)clearInterval(questTimer);
+    questTimer=setInterval(()=>WDMem.tick(0.5),30000); }
+  let quizPerfect=false;   // 本次试炼是否全对（供一次性通关标识）
   const ov=document.createElement("div"); ov.className="ov";
   let pageIdx=0;
   function renderPage(){
@@ -1131,13 +1221,16 @@ function openQuest(qid){
     quizHost.innerHTML=`<div class="note" style="border-left-color:var(--cyber)">✦ ${label}…</div>`;
     genQuiz(q, stage).then(arr=>{
       if(!ov.isConnected) return;
-      quiz=arr; qi=0; okCount=0; answered=false; drawQuiz();
-    }).catch(()=>{ if(!ov.isConnected) return; quiz=D.quizzes[q.id]||[]; qi=0; okCount=0; answered=false; drawQuiz(); });
+      quiz=(arr&&arr.length)?arr:fallbackQuiz(q); qi=0; okCount=0; answered=false; drawQuiz();
+    }).catch(()=>{ if(!ov.isConnected) return; quiz=fallbackQuiz(q); qi=0; okCount=0; answered=false; drawQuiz(); });
   }
   function drawQuiz(){
     answered=false;
+    if(!quiz.length){ quizHost.innerHTML=`<div class="note" style="border-left-color:var(--danger)">题池暂未生成——请稍后再温，或检查网络后重试。</div>`; return; }
     if(qi>=quiz.length){
-      st.quizAttempts[q.id]=(st.quizAttempts[q.id]||0)+1; save();
+      st.quizAttempts[q.id]=(st.quizAttempts[q.id]||0)+1;
+      quizPerfect=(okCount===quiz.length);
+      save();
       if(readonly){
         // 玩家温故行动自动入流（AI 战报润色）
         const wid=pushAction("我重刷了「"+q.name+"」封印（答对 "+okCount+"/"+quiz.length+"）。");
@@ -1192,6 +1285,8 @@ function openQuest(qid){
     } else {
       SFX.no();
       st.wrong.push({qid:q.id,pid:z.pid,text:z.q,okA:(z.kind==="judge"?(z.a?"真":"伪"):z.a),at:new Date().toISOString()});
+      if(window.WDMem){ const pt=D.pointsLib.find(p=>p.id===z.pid);
+        WDMem.wrong(q.npc,wTopic({pid:z.pid}),pt?+pt.star:null); }
       fb.className="fb no";
     }
     // 展示对错 + 正确答案 + 解析，由「知道了」按钮关闭并进入下一题
@@ -1217,11 +1312,13 @@ function openQuest(qid){
     }
   }
   drawPage();
-  const closeQuest=()=>ov.remove();
+  const closeQuest=()=>{ if(questTimer){clearInterval(questTimer);questTimer=0;} if(window.WDMem)WDMem.setActive(null); ov.remove(); };
   $("#qx",ov).onpointerdown=closeQuest;
   const qx2=$("#qx2",ov); if(qx2) qx2.onpointerdown=closeQuest;
   if(finBtn) finBtn.onpointerdown=()=>{
     st.xp+=q.xp; st.coin+=q.coin; st.done[q.id]=new Date().toISOString();
+    /* NPC 记忆：任务完成——通关时长由进入时间戳自动算出，首通且全对记一次性通关 */
+    if(window.WDMem){ WDMem.finish(q.npc,q.id,{onePass:quizPerfect}); if(questTimer){clearInterval(questTimer);questTimer=0;} }
     st.fav[q.npc]=(st.fav[q.npc]||0)+1;
     record("任务完成", q.name+"（+"+q.xp+" 修行 +"+q.coin+" 铜钱）");
     if(st.day===q.day&&q.kind==="main"&&st.unlocked===q.day&&st.unlocked<45) st.unlocked++;
@@ -1459,42 +1556,126 @@ function openEditor(card){
   drawHist();
 }
 function renderNight(){
-  // due cards from completed study quests
-  const due=[], later=[];
+  // 到期复习卡（已完成 study 任务）+ 预习卡（已解锁未完成 study 任务）——保证任意进度打开均有内容
+  const due=[], later=[], pre=[];
   const today=new Date().toISOString().slice(0,10);
-  D.quests.forEach(q=>{ if(q.type!=="study"||!qDone(q.id)) return;
-    (D.lectures[q.id]||[]).forEach(p=>{ (p.items||[]).forEach(it=>{
-      const rec=st.cards[it.id]||{due:"2026-01-01",iv:1};
-      if(rec.due<=today) due.push(it); else later.push(it);
-    });});
+  DAYS.forEach(d=>{ if(d.day>st.unlocked) return;
+    d.quests.forEach(q=>{ if(q.type!=="study") return;
+      (D.lectures[q.id]||[]).forEach(p=>{ (p.items||[]).forEach(it=>{
+        if(qDone(q.id)){ const rec=st.cards[it.id]||{due:"2026-01-01",iv:1};
+          if(rec.due<=today) due.push(it); else later.push(it);
+        } else pre.push(it);
+      });});
+    });
   });
-  const ov=panel(`<h2>巡夜 · 记忆卡匣</h2><div class="mt">到期 ${due.length} 张 · 待来日 ${later.length} 张（间隔 1→3→7→15 日，由你的自评决定）</div><div id="fcHost"></div>`);
+  const consolidated=Object.values(st.cards||{}).filter(r=>r&&r.iv>=2).length;
+  const ov=panel(`<h2>巡夜 · 记忆卡匣</h2><div class="mt">到期复习 ${due.length} 张 · 待来日 ${later.length} 张 · 预习 ${pre.length} 张 · 已巩固 ${consolidated} 张（间隔 1→3→7→15 日，由你的自评决定）</div><div id="fcHost"></div>`);
   const host=$("#fcHost",ov);
+  const deck=[...due.map(it=>({it,mode:"due"})), ...pre.map(it=>({it,mode:"pre"}))];
   let i=0, showRev=false;
   function draw(){
-    if(i>=due.length){ host.innerHTML=`<div class="missing" style="text-align:center;padding:30px">今夜巡完。安心睡。</div>`; return; }
-    const it=due[i]; const rev=showRev;
+    if(i>=deck.length){
+      host.innerHTML=deck.length
+        ? `<div class="missing" style="text-align:center;padding:30px">今夜巡完（复习 ${due.length} · 预习 ${pre.length}）。安心睡。</div>`
+        : `<div class="missing" style="text-align:center;padding:30px">卡匣尚空——完成修行类任务后，考点卡会在此安家。</div>
+           <div style="text-align:center;margin-top:10px"><button class="btn sm primary" id="fcGo" type="button">去今日修习</button></div>`;
+      const g=$("#fcGo",host); if(g) g.onpointerdown=()=>{ SFX.tap(); ov.remove(); toast("完成今日任务后，新的考点卡会自动入匣"); };
+      return;
+    }
+    const cur=deck[i], it=cur.it, rev=showRev;
+    if(cur.mode==="pre"){
+      host.innerHTML=`<div class="flashcard"><div class="fc-id">预习 · ${esc(it.id)} · ${"★".repeat(+it.star||1)}</div>
+        <div class="fc-main">${esc(rev?it.text:"预习这条考点……")}</div>
+        ${rev?`<div class="fc-rev">${esc(it.text)}</div>`:""}
+        <div style="margin-top:12px">${rev?`<button class="btn sm primary" id="fNext" type="button">记下了（完成后自动入复习队列）</button>`:`<button class="btn sm primary" id="fFlip" type="button">翻面</button>`}</div></div>
+        <div class="tstate">${i+1} / ${deck.length}</div>`;
+      const fl=$("#fFlip",host); if(fl) fl.onpointerdown=()=>{ SFX.tap(); showRev=true; draw(); };
+      const nx=$("#fNext",host); if(nx) nx.onpointerdown=()=>{ SFX.tap(); i++; showRev=false; draw(); };
+      return;
+    }
     host.innerHTML=`<div class="flashcard"><div class="fc-id">${esc(it.id)} · ${"★".repeat(+it.star)}</div>
       <div class="fc-main">${esc(rev?it.text:"回忆这条考点……")}</div>
       ${rev?`<div class="fc-rev">${esc(it.text)}</div>`:""}
       <div style="margin-top:12px">${rev?`
-        <button class="btn sm" id="fAgain">生疏（明日再来）</button>
-        <button class="btn sm primary" id="fGood">记住了（延后间隔）</button>`
-        :`<button class="btn sm primary" id="fFlip">翻面</button>`}</div></div>
-      <div class="tstate">${i+1} / ${due.length}</div>`;
-    const flip=$("#fFlip",host); if(flip) flip.onpointerdown=()=>{ showRev=true; draw(); };
-    const ag=$("#fAgain",host); if(ag) ag.onpointerdown=()=>{ st.cards[it.id]={due:new Date(Date.now()+864e5).toISOString().slice(0,10),iv:1}; i++; showRev=false; save(); draw(); };
-    const gd=$("#fGood",host); if(gd) gd.onpointerdown=()=>{ const r=st.cards[it.id]||{iv:1}; const nv=Math.min(15,r.iv*2); st.cards[it.id]={due:new Date(Date.now()+nv*864e5).toISOString().slice(0,10),iv:nv}; i++; showRev=false; save(); draw(); };
+        <button class="btn sm" id="fAgain" type="button">生疏（明日再来）</button>
+        <button class="btn sm primary" id="fGood" type="button">记住了（延后间隔）</button>`
+        :`<button class="btn sm primary" id="fFlip" type="button">翻面</button>`}</div></div>
+      <div class="tstate">${i+1} / ${deck.length}</div>`;
+    const flip=$("#fFlip",host); if(flip) flip.onpointerdown=()=>{ SFX.tap(); showRev=true; draw(); };
+    const ag=$("#fAgain",host); if(ag) ag.onpointerdown=()=>{ SFX.tap(); st.cards[it.id]={due:new Date(Date.now()+864e5).toISOString().slice(0,10),iv:1}; i++; showRev=false; save(); draw(); };
+    const gd=$("#fGood",host); if(gd) gd.onpointerdown=()=>{ SFX.tap(); const r=st.cards[it.id]||{iv:1}; const nv=Math.min(15,r.iv*2); st.cards[it.id]={due:new Date(Date.now()+nv*864e5).toISOString().slice(0,10),iv:nv}; i++; showRev=false; save(); draw(); };
   }
   draw();
 }
+function wTopic(x){ return (x.pid&&x.pid.includes("-")?x.pid.split("-").slice(0,2).join("-"):(x.pid||x.qid))||"杂"; }
+/* 兜底题库：AI 失败且本任务静态题为空时，同幕复用题池，保证温故试炼永不 0/0 空转 */
+function fallbackQuiz(q){
+  const own=D.quizzes[q.id]||[];
+  if(own.length) return own;
+  const pool=[];
+  DAYS.forEach(d=>d.quests.forEach(x=>{ if(x.act===q.act){ const zz=D.quizzes[x.id]; if(zz&&zz.length) pool.push(...zz); } }));
+  const src=pool.length?pool:Object.values(D.quizzes).flat().filter(v=>v&&v.length);
+  const out=[], used=new Set();
+  while(out.length<4&&used.size<src.length){ const k=Math.floor(Math.random()*src.length); if(used.has(k))continue; used.add(k); out.push(src[k]); }
+  return out;
+}
 function renderStar(){
-  const ov=panel(`<h2>星盘 · 错题</h2><div class="mt">玄机夫人记下的每一道错题，答对后方可移出星盘</div><div id="wHost"></div>`);
+  const byTopic={};
+  st.wrong.forEach(x=>{ const t=wTopic(x); byTopic[t]=(byTopic[t]||0)+1; });
+  const top=Object.entries(byTopic).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([t,n])=>t+"×"+n).join(" · ");
+  const ov=panel(`<h2>星盘 · 错题</h2><div class="mt">玄机夫人记下的每一道错题，答对后方可移出星盘${st.wrong.length?`<br>共 ${st.wrong.length} 题${top?` · 高发：${esc(top)}`:""}`:""}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><button class="btn sm primary" id="starQuizBtn" type="button">✦ 随机小考</button><span style="color:var(--ink2);font-size:12.5px">无错题也可主动演练，答错自动入盘</span></div><div id="wHost"></div>`);
   const host=$("#wHost",ov);
+  $("#starQuizBtn",ov).onpointerdown=()=>{ SFX.tap(); miniQuiz(); };
+  // 小考题池：已解锁日全部静态可试题（跨任务复用）
+  function quizPool(){
+    const pool=[];
+    DAYS.forEach(d=>{ if(d.day>st.unlocked) return;
+      d.quests.forEach(q=>{ const zz=D.quizzes[q.id]; if(zz&&zz.length) pool.push(...zz); }); });
+    return pool;
+  }
+  function miniQuiz(){
+    const pool=quizPool();
+    if(!pool.length){ host.innerHTML=`<div class="missing" style="text-align:center;padding:30px">题池待充盈——先解锁更多日程。</div>`; return; }
+    const picked=[], used=new Set();
+    while(picked.length<3&&used.size<pool.length){ const k=Math.floor(Math.random()*pool.length); if(used.has(k))continue; used.add(k); picked.push(pool[k]); }
+    let qi=0, okN=0;
+    function drawOne(){
+      if(qi>=picked.length){
+        host.innerHTML=`<div class="note" style="border-left-color:var(--gold)">小考终了：答对 ${okN}/${picked.length}。${okN===picked.length?"星盘为你增辉。":"错者已记入星盘，玄机夫人会安排它们再见你。"}</div>
+          <div style="margin-top:8px"><button class="btn sm" id="mqBack" type="button">← 返回星盘</button></div>`;
+        $("#mqBack",host).onpointerdown=()=>{ SFX.tap(); listView(); };
+        save(); return;
+      }
+      const z=picked[qi], isJudge=z.kind==="judge";
+      host.innerHTML=`<div class="qz"><span class="kk">小考 ${qi+1}/${picked.length}${z.pid?` · ${esc(z.pid)}`:""}</span>${esc(z.q)}</div>
+        ${isJudge?`<div class="jbtns"><button class="btn" id="qt" type="button">真</button><button class="btn" id="qf" type="button">伪</button></div>`
+          :`<input id="qin" style="width:100%;border:1px solid var(--hair);font:inherit;padding:8px" placeholder="作答" autocomplete="off"><div style="margin-top:8px"><button class="btn primary" id="qok" type="button">作答</button></div>`}
+        <div class="fb" id="qfb" style="display:block;margin-top:10px;line-height:1.7"></div>`;
+      const fb=$("#qfb",host); let done=false;
+      const judge=v=>{ if(done)return; done=true; (v?SFX.ok():SFX.no());
+        if(v){ okN++; fb.className="fb ok"; }
+        else{ st.wrong.push({qid:"star",pid:z.pid||"",text:z.q,okA:(isJudge?(z.a?"真":"伪"):z.a),at:new Date().toISOString(),src:"小考"}); fb.className="fb no";
+          if(window.WDMem){ const pt=D.pointsLib.find(p=>p.id===z.pid);
+            WDMem.wrong("xuanji",wTopic({pid:z.pid||""}),pt?+pt.star:null); } }
+        fb.style.color=v?"var(--ok)":"var(--danger)";
+        fb.innerHTML=(v?"✓ 对了。":"✗ 不对。")+`正确答案：<b style="color:var(--gold)">${esc(String(isJudge?(z.a?"真":"伪"):z.a))}</b>。${esc(z.why||"")}`;
+        const nx=document.createElement("button"); nx.className="btn sm primary"; nx.type="button"; nx.textContent="知道了"; nx.style.marginTop="6px";
+        nx.onpointerdown=()=>{ SFX.tap(); qi++; drawOne(); };
+        fb.appendChild(document.createTextNode(" ")); fb.appendChild(nx); save();
+      };
+      if(isJudge){ $("#qt",host).onpointerdown=()=>judge(true); $("#qf",host).onpointerdown=()=>judge(false); }
+      else{ const inp=$("#qin",host); inp.focus();
+        const sub=()=>judge(z.accept.some(a=>normalize(a)===normalize(inp.value))||normalize(inp.value).includes(normalize(z.a)));
+        $("#qok",host).onpointerdown=sub; inp.onkeydown=e=>{ if(e.key==="Enter") sub(); }; }
+    }
+    drawOne();
+  }
   // 列表视图
   function listView(){
     const w=st.wrong.slice(-40).reverse();
-    host.innerHTML=w.length? w.map((x,i)=>`<div class="wrongrow"><div><b>${esc(x.pid||"")}</b> ${esc(x.text.slice(0,70))}<br><span style="color:var(--ink2);font-size:12px">正确：${esc(String(x.okA).slice(0,40))} · ${esc(x.at.slice(0,10))}</span></div><button class="btn sm retry" data-i="${st.wrong.length-1-i}">再答</button></div>`).join(""):`<div class="missing" style="text-align:center;padding:30px">星盘干净——继续保持</div>`;
+    host.innerHTML=w.length? w.map((x,i)=>`<div class="wrongrow"><div><b>${esc(x.pid||"")}</b> ${esc(x.text.slice(0,70))}<br><span style="color:var(--ink2);font-size:12px">正确：${esc(String(x.okA).slice(0,40))} · ${esc(wTopic(x))} · ${esc(x.at.slice(0,10))}</span></div><button class="btn sm retry" data-i="${st.wrong.length-1-i}">再答</button></div>`).join("")
+      :`<div class="missing" style="text-align:center;padding:30px">星盘干净——继续保持。<br>也可点上方「随机小考」，让玄机夫人先考你几题。</div>`;
     host.querySelectorAll(".retry").forEach(b=>{ b.onpointerdown=()=>{ SFX.tap(); retryView(+b.dataset.i); }; });
   }
   // 再答视图（同一弹窗内切换，避免叠加）
@@ -1524,7 +1705,7 @@ function renderStar(){
       got.style.marginTop="6px";
       got.onpointerdown=()=>{
         SFX.tap();
-        if(ok){ st.wrong.splice(idx,1); }      // 答对：移除该错题
+        if(ok){ st.wrong.splice(idx,1); if(window.WDMem)WDMem.right("xuanji",wTopic(x)); }      // 答对：移除该错题，记忆同步销账
         else { x.at=new Date().toISOString(); } // 答错：更新时间置顶，不重复新增
         save(); listView();
       };
@@ -1543,6 +1724,242 @@ function renderStar(){
   }
   listView();
 }
+/* ==================== 配置中心（WDCfg 粘合层） ==================== */
+function cfgErrText(e){
+  return {E_CFG_TYPE:"仅支持 JPG / PNG 格式",E_CFG_SIZE:"文件超过 5MB 上限",
+    E_CFG_SMALL:"分辨率不足 200×200",E_CFG_DECODE:"图片解码失败",E_CFG_NOFILE:"未选择文件",
+    E_CFG_JSON:"不是合法的 JSON 文件",E_CFG_SHAPE:"配置结构不符，已拒绝导入",
+    E_MEM_JSON:"不是合法的 JSON 文件",E_MEM_SHAPE:"记忆档案结构不符，已拒绝导入"}[e.message]||e.message;
+}
+function downloadFile(name,text,mime){
+  try{
+    const b=new Blob([text],{type:mime||"application/json"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(b); a.download=name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  }catch(e){ toast("导出失败："+e.message); }
+}
+function pickFile(accept,cb){
+  const inp=document.createElement("input"); inp.type="file"; inp.accept=accept;
+  inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(f) cb(f); };
+  document.body.appendChild(inp); inp.click(); inp.remove();
+}
+function readTextFile(f,cb){ const fr=new FileReader(); fr.onload=()=>cb(String(fr.result||"")); fr.readAsText(f); }
+const STYLE_OPTS={tone:[["formal","正式恭敬"],["casual","随意亲近"]],humor:[["humor","幽默诙谐"],["serious","严肃凝练"]],depth:[["deep","进阶深入"],["basic","基础口诀"]]};
+function renderCfg(){
+  SFX.tap();
+  const c=WDCfg.all();
+  const avOf=id=>WDCfg.avatarURL(id)||((window.WDMap&&WDMap.avatarURL)?WDMap.avatarURL(id):"");
+  const ov=panel(`<h2>配置中心</h2><div class="mt">头像 · 称呼 · 属性 · 记忆数据 —— 所有变更实时生效，无需重启</div>
+  <div class="cfgtabs">
+    <button data-tab="av" class="on" type="button">头像</button>
+    <button data-tab="call" type="button">称呼与语气</button>
+    <button data-tab="attr" type="button">初始属性</button>
+    <button data-tab="data" type="button">数据</button>
+  </div>
+
+  <div class="cfgpane on" data-pane="av">
+    <div class="note">JPG / PNG，≤5MB，分辨率不低于 200×200；上传后居中方形裁剪并压缩为 240px 存于本机，离线可用。拍摄照片会抹除 EXIF 定位信息。</div>
+    <div class="avgrid" id="avGrid"></div>
+    <div id="avCrop" style="display:none;margin-top:10px">
+      <h3 style="font-size:13.5px;color:var(--cyber);margin:0 0 6px">预览与裁剪</h3>
+      <div class="cfgrow" style="align-items:flex-start">
+        <div class="avpreview"><img id="cropImg" alt="预览"></div>
+        <div style="flex:1;min-width:170px">
+          <div class="cfgrow" style="margin:0 0 8px"><label style="min-width:auto">缩放</label><input type="range" id="cropZoom" min="1" max="2" step="0.05" value="1" style="flex:1"></div>
+          <div class="savegrid"><button class="btn sm primary" id="cropOk" type="button">确认上传</button><button class="btn sm ghost" id="cropNo" type="button">取消</button></div>
+          <div class="small" id="cropMsg" style="margin-top:6px;color:var(--danger)"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cfgpane" data-pane="call">
+    <div class="cfgrow"><label>NPC 称呼</label><input type="text" id="cfgAddr" maxlength="12" placeholder="如：道友 / 少侠 / 上仙" value="${esc(c.address)}"></div>
+    <div class="cfgchips" id="addrPresets">${WDCfg.addressPresets.map(v=>`<button type="button" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>
+    <div class="cfgrow" style="margin-top:2px"><label style="min-width:auto;color:var(--dim)">历史称呼</label></div>
+    <div class="cfgchips" id="addrHist">${c.addressHist.map(v=>`<button type="button" data-v="${esc(v)}">${esc(v)}</button>`).join("")||'<span class="ad">暂无</span>'}</div>
+    <div class="cfgrow"><label>我的自称</label><input type="text" id="cfgSelf" maxlength="8" placeholder="如：我 / 在下" value="${esc(c.selfName)}"></div>
+    <div class="cfgchips" id="selfPresets">${WDCfg.selfPresets.map(v=>`<button type="button" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>
+    <div class="cfgrow" style="align-items:flex-start"><label>自我描述</label><textarea id="cfgBio" maxlength="200" placeholder="一句话描述你的说话风格与备考状态，例如：认真冲刺的小白，喜欢幽默一点、讲原理">${esc(c.bio)}</textarea></div>
+    <div class="savegrid" style="margin:6px 0">
+      <button class="btn sm primary" id="cfgAnalyze" type="button">智能分析并应用语气</button>
+      <button class="btn sm" id="cfgCallSave" type="button">保存称呼</button>
+    </div>
+    ${[["tone","语气"],["humor","风格"],["depth","深度"]].map(([k,lbl])=>`
+      <div class="cfgrow"><label>${lbl}</label><select id="cfg-${k}">
+        <option value=""${c.style[k]?"":" selected"}>自动（依自我描述）</option>
+        ${STYLE_OPTS[k].map(([v,t])=>`<option value="${v}"${c.style[k]===v?" selected":""}>${t}</option>`).join("")}
+      </select></div>`).join("")}
+    <div class="small" id="cfgCallMsg" style="color:var(--ok)"></div>
+  </div>
+
+  <div class="cfgpane" data-pane="attr">
+    <div class="note">总点数 ${WDCfg.attrBudget()}（每项不低于 ${WDCfg.attrMin}）。力量→心气上限，敏捷→灵力上限，智力→修行加成预览。变更即时影响状态栏。</div>
+    ${[["str","力量"],["agi","敏捷"],["int","智力"]].map(([k,lbl])=>`
+      <div class="cfgrow"><label>${lbl}</label><span class="attrctl">
+        <button type="button" data-attr="-" data-k="${k}">−</button><b data-v="${k}">${c.attr[k]}</b><button type="button" data-attr="+" data-k="${k}">＋</button>
+      </span></div>`).join("")}
+    <div class="statbar" style="position:static;box-shadow:none;border:0;padding:0">
+      <span>剩余可分配 <b id="attrLeft">0</b></span>
+      <span>心气上限 <b id="capHP">0</b></span>
+      <span>灵力上限 <b id="capEN">0</b></span>
+      <span>修行加成 <b id="capXP">0</b></span>
+    </div>
+    <div class="savegrid"><button class="btn sm ghost" id="attrReset" type="button">重置为 2 / 2 / 2</button></div>
+  </div>
+
+  <div class="cfgpane" data-pane="data">
+    <div class="savegrid">
+      <button class="btn" id="cfgExp" type="button">导出配置 JSON</button>
+      <button class="btn" id="cfgImp" type="button">导入配置</button>
+      <button class="btn primary" id="memOpen" type="button">NPC 记忆档案与数据监控</button>
+    </div>
+    <div class="note">配置仅存储于本浏览器；导入后即刻生效。配置历史保留最近 60 条。</div>
+    <h3 style="font-size:13.5px;color:var(--cyber);margin:10px 0 4px">修改历史（近 20 条）</h3>
+    <div class="cfghist">${c.hist.slice(0,20).map(h=>`${h.t.slice(0,16).replace("T"," ")} · ${esc(h.k)}：${esc(h.from||"∅")} → ${esc(h.to||"∅")}`).join("<br>")||"暂无修改记录"}</div>
+  </div>`);
+
+  /* ---- Tab 切换 ---- */
+  ov.querySelectorAll(".cfgtabs button").forEach(b=>{
+    b.onpointerdown=()=>{ SFX.tap();
+      ov.querySelectorAll(".cfgtabs button").forEach(x=>x.classList.toggle("on",x===b));
+      ov.querySelectorAll(".cfgpane").forEach(p=>p.classList.toggle("on",p.dataset.tab===b.dataset.tab));
+    };
+  });
+
+  /* ---- 头像 ---- */
+  function paintGrid(){
+    const list=[{id:"_player",name:"我的头像"}].concat(D.npcs.map(n=>({id:n.id,name:n.name})));
+    const g=$("#avGrid",ov);
+    g.innerHTML=list.map(x=>`<div class="avcell"><div class="avbox"><img src="${avOf(x.id)}" alt="" onerror="this.style.display='none'"></div>
+      <div class="avnm">${esc(x.name)}</div>
+      <button type="button" data-up="${x.id}">上传</button>${WDCfg.avatarURL(x.id)?`<button type="button" data-clr="${x.id}">移除</button>`:""}</div>`).join("");
+    g.querySelectorAll("[data-up]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); startCrop(b.dataset.up); });
+    g.querySelectorAll("[data-clr]").forEach(b=>b.onpointerdown=()=>{
+      WDCfg.clearAvatar(b.dataset.clr); SFX.tap(); ov.remove(); renderCfg();
+    });
+  }
+  let cropFile=null,cropURL="";
+  function startCrop(id){
+    pickFile("image/png,image/jpeg",f=>{
+      cropFile=f;
+      const box=$("#avCrop",ov); box.style.display="block";
+      if(cropURL) URL.revokeObjectURL(cropURL);
+      cropURL=URL.createObjectURL(f);
+      const im=$("#cropImg",ov); im.src=cropURL; im.style.transform="scale(1)";
+      const zr=$("#cropZoom",ov); zr.value="1";
+      $("#cropMsg",ov).textContent=(f.type.includes("png")?"PNG":"JPEG")+" · "+Math.round(f.size/1024)+"KB";
+      $("#cropMsg",ov).style.color="var(--dim)";
+      zr.oninput=()=>{ im.style.transform="scale("+zr.value+")"; };
+      $("#cropOk",ov).onpointerdown=()=>{
+        const btn=$("#cropOk",ov); btn.disabled=true; btn.textContent="处理中…";
+        WDCfg.setAvatar(id,cropFile,+zr.value).then(r=>{
+          toast("头像已更新（原图 "+r.w+"×"+r.h+"，存储约 "+r.kb+"KB）");
+          if(cropURL){ URL.revokeObjectURL(cropURL); cropURL=""; }
+          ov.remove(); renderCfg();
+        }).catch(e=>{ btn.disabled=false; btn.textContent="确认上传";
+          const msg=$("#cropMsg",ov); msg.textContent=cfgErrText(e); msg.style.color="var(--danger)"; });
+      };
+      $("#cropNo",ov).onpointerdown=()=>{ box.style.display="none"; if(cropURL){URL.revokeObjectURL(cropURL);cropURL="";} cropFile=null; };
+    });
+  }
+  paintGrid();
+
+  /* ---- 称呼 / 自称 / 语气 ---- */
+  ov.querySelectorAll("#addrPresets button,#addrHist button").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); $("#cfgAddr",ov).value=b.dataset.v; });
+  ov.querySelectorAll("#selfPresets button").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); $("#cfgSelf",ov).value=b.dataset.v; });
+  function saveCall(){
+    WDCfg.set("address",$("#cfgAddr",ov).value.trim().slice(0,12),"手动设置称呼");
+    WDCfg.set("selfName",$("#cfgSelf",ov).value.trim().slice(0,8),"手动设置自称");
+    WDCfg.set("bio",$("#cfgBio",ov).value.trim().slice(0,200),"自我描述");
+    ["tone","humor","depth"].forEach(k=>WDCfg.set("style."+k,$("#cfg-"+k,ov).value,"语气策略"));
+    const m=$("#cfgCallMsg",ov); m.textContent="已保存 · 下次 NPC 对话即刻采用";
+    setTimeout(()=>{ if(m.isConnected) m.textContent=""; },2600);
+  }
+  $("#cfgCallSave",ov).onpointerdown=()=>{ SFX.tap(); saveCall(); };
+  $("#cfgAnalyze",ov).onpointerdown=()=>{ SFX.tap();
+    const bio=$("#cfgBio",ov).value.trim();
+    if(!bio){ toast("先写一句自我描述，我才能听音辨调"); return; }
+    const a=WDCfg.analyzeBio(bio);
+    ["tone","humor","depth"].forEach(k=>{ const sel=$("#cfg-"+k,ov); if(a[k]) sel.value=a[k]; });
+    saveCall();
+    toast("已据描述调整："+[a.tone&&("语气·"+(STYLE_OPTS.tone.find(x=>x[0]===a.tone)||[])[1]),a.humor&&("风格·"+(STYLE_OPTS.humor.find(x=>x[0]===a.humor)||[])[1]),a.depth&&("深度·"+(STYLE_OPTS.depth.find(x=>x[0]===a.depth)||[])[1])].filter(Boolean).join("，"));
+  };
+
+  /* ---- 属性 ---- */
+  function paintAttr(){
+    const a=WDCfg.all().attr;
+    ov.querySelectorAll("[data-v]").forEach(el=>{ el.textContent=a[el.dataset.v]; });
+    const left=WDCfg.attrBudget()-WDCfg.attrSum(), cap=WDCfg.attrCaps();
+    $("#attrLeft",ov).textContent=left; $("#capHP",ov).textContent=cap.hp;
+    $("#capEN",ov).textContent=cap.energy; $("#capXP",ov).textContent="+"+cap.xpBonus+"/任务";
+  }
+  ov.querySelectorAll("[data-attr]").forEach(b=>b.onpointerdown=()=>{
+    const k=b.dataset.k, a=WDCfg.all().attr, d=b.dataset.attr==="+"?1:-1;
+    const nv=a[k]+d;
+    if(nv<WDCfg.attrMin()){ toast("每项至少 "+WDCfg.attrMin()+" 点"); return; }
+    if(d>0&&WDCfg.attrSum()>=WDCfg.attrBudget()){ toast("总点数 "+WDCfg.attrBudget()+" 已分配完毕"); return; }
+    WDCfg.set("attr."+k,nv,"属性分配"); SFX.tap(); paintAttr();
+  });
+  $("#attrReset",ov).onpointerdown=()=>{ ["str","agi","int"].forEach(k=>WDCfg.set("attr."+k,2,"属性重置")); SFX.tap(); paintAttr(); toast("属性已重置为 2 / 2 / 2"); };
+  paintAttr();
+
+  /* ---- 数据 ---- */
+  $("#cfgExp",ov).onpointerdown=()=>{ SFX.tap(); downloadFile("wdzx-config-"+new Date().toISOString().slice(0,10)+".json",WDCfg.export()); toast("配置已导出"); };
+  $("#cfgImp",ov).onpointerdown=()=>{ SFX.tap();
+    pickFile(".json,application/json",f=>readTextFile(f,t=>{
+      try{ WDCfg.import(t); ov.remove(); renderCfg(); toast("配置导入成功"); }
+      catch(e){ toast(cfgErrText(e)); }
+    }));
+  };
+  $("#memOpen",ov).onpointerdown=renderMem;
+}
+
+/* ==================== NPC 记忆档案 / 数据质量监控（WDMem 面板） ==================== */
+function memFmt(s){
+  if(s<60) return s+"秒";
+  if(s<3600) return Math.floor(s/60)+"分"+(s%60?Math.round(s%60)+"秒":"");
+  return Math.round(s/360)/10+"小时";
+}
+function renderMem(){
+  if(!window.WDMem){ toast("记忆模块未装载"); return; }
+  SFX.tap();
+  const q=WDMem.quality(), db=WDMem.stats();
+  const rows=Object.keys(db.byNpc).sort().map(id=>{
+    const r=db.byNpc[id], n=NPC[id]||NPC.yunheng;
+    const done=Object.keys(r.done), one=done.filter(x=>r.done[x].onePass).length;
+    let best=1e9; done.forEach(x=>{ const d=r.done[x].durS; if(d>0&&d<best)best=d; });
+    const wrongs=Object.keys(r.wrongs).map(k=>[k,r.wrongs[k].n]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+    const dig=WDMem.digest(id);
+    return `<div class="memcard"><b>${esc(n?n.name:id)}</b>${n&&n.title?" · "+esc(n.title):""}
+      <br>遇见 ${r.meet} · 对话 ${r.talks} · 同行修习 ${Math.round(r.learnMin)} 分钟
+      <br>已封印 ${done.length} 个任务（一次通关 ${one}${best<1e9?" · 最快 "+memFmt(best):""}） · 在途 ${Object.keys(r.entered).length}
+      ${wrongs.length?"<br>错题集中："+wrongs.map(x=>esc(x[0])+"×"+x[1]).join("、"):""}
+      ${dig?`<div class="mdig">AI 认知画像：${esc(dig)}</div>`:""}
+    </div>`;
+  }).join("")||'<div class="missing">暂无互动档案——去对话流与 NPC 说句话吧。</div>';
+  const ov=panel(`<h2>NPC 记忆档案</h2><div class="mt">每个 NPC 独立记忆 · 实时反馈 AI 决策 · 每日自动备份 ×5 份</div>
+    <div class="statbar" style="position:static;box-shadow:none;border:0;padding:0;flex-wrap:wrap">
+      <span>档案数 <b>${q.npcCount}</b></span><span>占用 <b>${q.bytesKB}KB</b></span>
+      <span>校验拒收 <b>${q.rejected}</b></span><span>上次备份 <b>${q.lastBak||"—"}</b></span>
+    </div>
+    <div class="savegrid" style="margin:8px 0">
+      <button class="btn sm" id="memBak" type="button">立即备份</button>
+      <button class="btn sm" id="memExp" type="button">导出记忆 JSON</button>
+      <button class="btn sm" id="memImp" type="button">导入记忆</button>
+    </div>${rows}`);
+  $("#memBak",ov).onpointerdown=()=>{ WDMem.backupNow(); SFX.tap(); ov.remove(); renderMem(); toast("已写入今日备份"); };
+  $("#memExp",ov).onpointerdown=()=>{ SFX.tap(); downloadFile("wdzx-memory-"+new Date().toISOString().slice(0,10)+".json",WDMem.export()); toast("记忆档案已导出"); };
+  $("#memImp",ov).onpointerdown=()=>{ SFX.tap();
+    pickFile(".json,application/json",f=>readTextFile(f,t=>{
+      try{ WDMem.import(t); ov.remove(); renderMem(); toast("记忆档案导入成功"); }
+      catch(e){ toast(cfgErrText(e)); }
+    }));
+  };
+}
+
 function normalize(s){ return String(s).replace(/[\s，。、；：""''！？（）()·—…《》<>]/g,"").toLowerCase(); }
 function renderAch(){
   const ov2=panel('<h2>徽章墙</h2><div class="mt">'+Object.keys(st.ach).length+'/'+D.achievements.length+' 枚已取得</div><div class="badgewall">'
@@ -1891,6 +2308,7 @@ function openPersonaPanel(){
 /* ==================== @角色名 AI 互动 ==================== */
 /* 角色别名 → npcId（含全名与常用称呼，均取自 D.npcs 真实名，避免错字） */
 const MENTION_ALIASES={
+  yunheng:["云蘅","引路人","yunheng"],
   qingxuan:["青玄先生","青玄","qingxuan"],
   smq:["司马青衫","司马","smq"],
   tiemian:["铁面先生","铁面","tiemian"],
@@ -1909,7 +2327,18 @@ function parseMention(text){
 }
 /* 网络检索 / 资料库匹配 / 对话生成已整体移入独立模块 wd-chat.js（window.WDChat），
    此处仅保留薄委托：本文件专注 UI 粘合，模块可在任意宿主复用。 */
-async function aiRespond(npcId,userText,brief){ return WDChat.respond(npcId,userText,brief); }
+async function aiRespond(npcId,userText,brief){
+  /* NPC 记忆：对话即相识（meet/talk 归档），灵力作为「御 AI」资源消耗 */
+  if(window.WDMem) WDMem.talk(npcId);
+  if(dsReady()){
+    if((st.energy|0)<1){ toast("灵力将尽——以本地话术接引，稍息自复"); return {text:WDChat.fallback(npcId,userText),degraded:true}; }
+    st.energy=Math.max(0,st.energy-1); refreshStat(true);
+  }
+  const r=await WDChat.respond(npcId,userText,brief);
+  if(window.WDMem) WDMem.meet(npcId);
+  refreshStat();
+  return r;
+}
 
 function toast(msg, cls){
   const t=document.createElement("div");
@@ -1925,7 +2354,9 @@ function tapNpc(id){
   switchView("chat");
   const inp=$("#chatInput");
   if(inp&&(NPC[id]||{}).name){ inp.value="@"+NPC[id].name+" "; inp.focus(); }
-  toast("与"+((NPC[id]||{}).name||"NPC")+"对话——直接提问即可");
+  const t=npcActTopic(id);
+  const nm=(NPC[id]||{}).name||"NPC";
+  toast(t?(nm+"此章 · "+t):("与"+nm+"对话——直接提问即可"));
 }
 function fogNpc(id,act){
   SFX.mask();
@@ -1954,6 +2385,7 @@ function switchView(v){
 function bindNav(){
   document.querySelectorAll(".navline button").forEach(b=>{ b.onpointerdown=()=>{ SFX.tap(); switchView(b.dataset.v); }; });
   document.querySelector('[data-act="save"]').onpointerdown=renderSave;
+  document.querySelector('[data-act="cfg"]').onpointerdown=renderCfg;
 }
 function intro(){
   st=defState();
@@ -1975,11 +2407,30 @@ function intro(){
 function record(ev, x){ st.log=st.log||[]; st.log.push({at:new Date().toISOString(), ev, x}); }
 function boot(){
   // 独立模块依赖注入：对话生成（WDChat）与像素地图（WDMap）低耦合接入
-  WDChat.init({D,NPC,getSt:()=>st,save,dsChat,dsReady,level});
-  WDMap.init({D,NPC,getSt:()=>st,stage});
+  // 配置中心/记忆模块须先初始化——reconcile() 的心气上限依赖 WDCfg.ready()
+  if(window.WDCfg) WDCfg.init();
+  if(window.WDMem) WDMem.init();
+  WDChat.init({D,NPC,getSt:()=>st,save,dsChat,dsReady,level,actTopic:npcActTopic});
+  WDMap.init({D,NPC,getSt:()=>st,stage,
+    customAvatar:id=>window.WDCfg?WDCfg.avatarURL(id):null});  // 配置中心自定义头像优先于 assets/ 与内置像素
   const has=load();
   if(!has){ st=defState(); save(); intro(); }
   else{ if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,45); if(st.day>st.unlocked) st.unlocked=st.day; save(); render(); checkAch(); }
+  /* 状态栏刷新 ≥1 次/秒（需求4）；refreshStat 在非对话视图/无存档时静默返回 */
+  setInterval(()=>{ if(view==="chat") refreshStat(); },1000);
+  /* 配置中心变更：心气/灵力新上限即时钳制，对话流与地图头像实时跟随，无需重启 */
+  window.addEventListener("wd:cfg",()=>{
+    if(!st) return;
+    st.hp=Math.max(0,Math.min(maxHP(),st.hp));
+    st.energy=Math.max(0,Math.min(maxEnergy(),st.energy));
+    save(); refreshStat();
+    if(view==="chat") renderChat(true);
+    if(window.WDMap&&WDMap.setExternalAvatar){
+      ["_player"].concat(D.npcs.map(n=>n.id)).forEach(id=>WDMap.setExternalAvatar(id,WDCfg.avatarURL(id)));
+    }
+  });
+  /* assets/ 素材或配置头像异步就位后，刷新对话流（保持滚动位置） */
+  document.body.addEventListener("wdavatar",()=>{ if(view==="chat") renderChat(true); });
 }
 /* ---------- 任务面板（行者手札 · 任务卷）：对话流之外的独立任务总览 ---------- */
 function dayMemoryPoints(day){

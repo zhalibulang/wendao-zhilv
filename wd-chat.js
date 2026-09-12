@@ -131,11 +131,29 @@ const WDChat={
     }catch(e){ return null; }
   },
 
-  /* ---------- system prompt（人设 + 成长状态注入） ---------- */
+  /* ---------- system prompt（人设 + 成长状态 + 本章话题 + 配置风格 + 记忆画像） ---------- */
   sysPrompt(npcId,brief){
     const {NPC}=CTX, npc=NPC[npcId]||NPC.qingxuan;
     const g=this.growthOf(npcId);
     let sys="你是游戏『问道之旅·四十五日』里的游戏NPC「"+npc.name+"」（"+npc.title+"）。这不是课堂：玩家是并肩刷任务的游戏者，你们是同一游戏世界里的角色，绝非师生。像网络游戏NPC那样说话——简短、有性格、有江湖气，句子长短错落。严禁AI腔：不用'首先/其次/总之/综上/值得注意的是'，不排比堆砌，不空洞夸奖（非常棒/说得好），不自我总结，不问'还有什么可以帮你的'，不解释自己是什么身份。严禁教书先生口吻（掌握了/要记住/同学们/认真复习/布置作业/劳逸结合）。谈知识用仙侠比喻（考点=封印符文，错题=妖物，背诵=咒文，复习=回炉重刷副本）。"+(brief?"这是多人召唤场景，回复务必精炼≤80字，只说你最有资格说的一段。":"单次回复≤160字。")+"禁现代网络梗，不提AI/模型/接口。";
+    /* 本章互动话题（NPC 职能重构：全角色×四章矩阵） */
+    const topic=CTX.actTopic&&CTX.actTopic(npcId);
+    if(topic) sys+="\n本章（当前幕）你正与玩家同行的话题：「"+topic+"」——你的话可自然贴着它。";
+    /* 配置中心：玩家称呼/自称 + NPC语气·风格·深度策略（WDCfg 未挂载则跳过） */
+    const cfg=window.WDCfg&&window.WDCfg.ready?window.WDCfg.ready():null;
+    if(cfg){
+      const how=cfg.address?("\n你须称呼玩家为「"+cfg.address+"」"):"";
+      const self=cfg.selfName?("\n玩家自称「"+cfg.selfName+"」"):"";
+      const st2=cfg.style||{};
+      sys+="\n【对话策略】"+how+self
+        +(st2.tone?("；语气："+(st2.tone==="formal"?"正式恭敬":"随意亲近")):"")
+        +(st2.humor?("；风格："+(st2.humor==="humor"?"幽默诙谐":"严肃凝练")):"")
+        +(st2.depth?("；深度："+(st2.depth==="deep"?"进阶（可谈原理与延伸）":"基础（只讲结论与口诀）")):"")
+        +"。";
+    }
+    /* NPC 记忆画像（WDMem 未挂载则跳过）——NPC 据此动态调整对玩家的认知 */
+    const mem=window.WDMem&&window.WDMem.digest?window.WDMem.digest(npcId):null;
+    if(mem) sys+="\n【你与这位玩家的记忆】"+mem+"（适时自然引用，不要罗列数据）";
     if(g&&(g.traits&&g.traits.length||g.speech||g.shift)){
       sys+="\n角色当前成长状态（保持原人设基调下自然体现，不刻意宣告变化）："
         +(g.traits&&g.traits.length?"性格特质："+g.traits.join("、")+"；":"")
@@ -171,6 +189,7 @@ const WDChat={
   fallback(npcId,userText){
     const {NPC}=CTX;
     const pool={
+      yunheng:["灯焰小了些——你的话我得记在引路册上，待灯亮时再答：{k}","引路册翻到一页旧录：{k}。路还长，慢慢走。"],
       qingxuan:["雾重，云端的话传不下来。先记这条：{k}。灯再亮时，细说与你听。","我的灯暂时照不进云雾。库里翻到一条：{k}","灯花跳了跳——云路未通。且收下这条旧讯：{k}"],
       smq:["剑意被雾滞在半途。山道上拾得一条旧讯：{k}","雾锁山河，剑没出鞘。先记下：{k}"],
       tiemian:["塔中回声断了。卷宗里查到一条：{k}。塔门再开时，当面细核。","铁面无声，雾断回音。卷宗旧录：{k}"],
@@ -178,7 +197,7 @@ const WDChat={
       moxiaogu:["机关匣卡壳了，吱呀——掉出一页：{k}","发条锈住了！翻出半页旧档：{k}"],
       xuanji:["星轨被云遮住，卦象里只剩一行：{k}","云厚星隐。卦面仅显一语：{k}"]
     };
-    const none={qingxuan:"此问须待灯亮再答。",smq:"此问须待雾散，再与你拆招。",tiemian:"此问须回塔查阅卷宗。",liuruyan:"此问且记下，帘内再叙。",moxiaogu:"此问须待机关匣修好。",xuanji:"此问须待云开观星。"};
+    const none={yunheng:"此问且记入引路册，灯亮时我亲自带来。",qingxuan:"此问须待灯亮再答。",smq:"此问须待雾散，再与你拆招。",tiemian:"此问须回塔查阅卷宗。",liuruyan:"此问且记下，帘内再叙。",moxiaogu:"此问须待机关匣修好。",xuanji:"此问须待云开观星。"};
     const arr=pool[npcId]||pool.qingxuan;
     const tpl=arr[hash(String(userText)+Math.floor(Date.now()/6e4))%arr.length];
     // 知识点摘录：资料库无命中时回退到该 NPC 的专属占位句
