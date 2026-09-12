@@ -1,6 +1,6 @@
 // 问道之旅 Service Worker — 离线缓存 + 即时更新
 // 版本号每次内容变更必须 +1，activate 时据此清除旧缓存
-const CACHE = "wdzx-v7";
+const CACHE = "wdzx-v9";
 const CORE = [
   "./",
   "./index.html",
@@ -9,6 +9,9 @@ const CORE = [
   "./icon-192.png",
   "./icon-512.png"
 ];
+
+// 大陆访问 github.io 不稳定：同源失败时回落 jsdelivr 镜像（GitHub 内容直读），再回落缓存
+const MIRROR = "https://cdn.jsdelivr.net/gh/zhalibulang/wendao-zhilv@main/";
 
 self.addEventListener("install", e => {
   // 逐个缓存，单个资源失败不拖垮整体安装
@@ -23,12 +26,20 @@ self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys().then(keys => Promise.all(
       keys.filter(k => k !== CACHE).map(k => caches.delete(k))
-    )).then(() => self.clients.claim())
+    )).then(() => self.clients.claim()).then(() =>
+      // 向所有存活页面广播新缓存版本：页面对比本地记录，发现版本更替即重载一次
+      self.clients.matchAll({ includeUncontrolled: true }).then(cs =>
+        cs.forEach(c => c.postMessage({ type: "swv", v: CACHE }))
+      )
+    )
   );
 });
 
-// 策略：核心资源 network-first（保证内容更新即时生效），失败回落缓存（离线可用）；
-//       其余资源 network-first 回落缓存
+self.addEventListener("message", e => {
+  if (e.data === "SKIP_WAITING") self.skipWaiting();
+});
+
+// 策略：核心资源 network-first → jsdelivr 镜像 → 缓存；其余资源 network-first → 缓存
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return; // 不拦截跨域
@@ -37,13 +48,22 @@ self.addEventListener("fetch", e => {
   const isCore = CORE.some(p => url.pathname.endsWith(p) || url.pathname === p.replace("./", "/"));
 
   if (isCore) {
-    // network-first：优先取网络最新内容；离线/失败才用缓存，确保游戏内容更正即时生效
     e.respondWith(
       fetch(e.request).then(resp => {
         const copy = resp.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));
         return resp;
-      }).catch(() => caches.match(e.request))
+      }).catch(() =>
+        // 镜像兜底：把 /wendao-zhilv/<path> 映射到 jsdelivr @main
+        fetch(MIRROR + url.pathname.replace(/^.*\/wendao-zhilv\//, ""), { cache: "no-cache" })
+          .then(mresp => {
+            if (!mresp.ok) throw new Error("mirror " + mresp.status);
+            const copy = mresp.clone();
+            caches.open(CACHE).then(c => c.put(e.request, copy));
+            return mresp;
+          })
+          .catch(() => caches.match(e.request))
+      )
     );
   } else {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));

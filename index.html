@@ -62,6 +62,11 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 
 /* quest card in stream */
 .qcard{border:2px solid var(--border-lit);background:var(--bg);margin-top:8px;padding:10px 12px;max-width:100%;box-shadow:3px 3px 0 #000;position:relative}
+.qrefs{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px}
+.qref{border:1px solid var(--cyber);background:rgba(0,229,255,.08);color:var(--cyber);font-size:11.5px;padding:3px 10px;border-radius:12px;cursor:pointer}
+.qref:active{transform:scale(.96)}
+@keyframes qflashK{0%,100%{box-shadow:3px 3px 0 #000}30%{box-shadow:0 0 0 4px var(--gold);border-color:var(--gold)}}
+.qflash{animation:qflashK 1.6s ease}
 .qcard::before{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent 0,transparent 2px,rgba(0,0,0,.1) 2px,rgba(0,0,0,.1) 3px);z-index:0}
 .qcard>*{position:relative;z-index:1}
 .qcard.locked{border-color:var(--border);opacity:.6}
@@ -424,6 +429,32 @@ function reconcile(){
   st.edits=st.edits||{}; st._treeExp=st._treeExp||{};
   st.personas=st.personas||{}; st.aiBrief=st.aiBrief||{};
   if(!Array.isArray(st.dialogue)) st.dialogue=[];
+  /* 对话流迁移清洗：老版本存档中残留的教师腔/旧话术，按映射表就地换为仙侠版（重复执行幂等） */
+  const DIALECT_FIX=[["你吃透了","这页残卷已被你收进袖中"],["读透它","翻开它"],["读透","读穿"],
+    ["新的一页——慢慢地，别急。","新秘境在雾中显形，进去走一遭。"],["新的一页交到你手上——翻开它，再接受试炼","新卷已在你手上展开——读它，再赴试炼"],
+    ["这页交给你，读完了回来找我。","这页残卷会自己说话——翻开它。"],["旧页重读，温故一遍。","封印松了，旧妖又探头——回去再钉一钉。"],
+    ["旧页重读。温故不是重抄——是合上书还能说出来。","封印重临。温故不是重抄——是合上卷子，还能出声念响封印。"],
+    ["昨天的卷子，再过一眼。","昨日走过的秘境在召唤，回望一眼。"],["试炼来了。答对才算数。","前方妖兽拦路——以题作剑，斩之。"],
+    ["来，接这一关。","谜题妖现身。接这一战。"],["手别抖，题不难。","守关的谜题妖不强，但别手抖。"],
+    ["开口。声音是你的第二支笔。","咒文已备，出声吟诵——声音是你的法器。"],["开口。声音是行吟者的第二支笔。","开口。声音是行吟者的第二件法器。"],
+    ["这一段，读出声来。","把这段咒文念出声来，城门才应你。"],["吟游时刻——出声，才算数。","吟游时刻：咒不成声，护罩不生。"],
+    ["大试炼开启。全场肃静。","守关妖王现身。全场肃静，一次过。"],["攻城时刻。一次过。","攻城时刻——大试炼开启。"],
+    ["这里有一条线索，拓下来。","雾中有一枚符文，拓下来。"],["把这条线绣进你的地图。","线索符文现形，绣进你的山河图。"],
+    ["先整备行囊。磨刀不误砍柴工。","先整备法器——利其器，方能斩妖。"],["夜巡时刻，过几张卡再睡。","夜巡时刻，提灯过卡，驱散今夜之雾。"],
+    ["睡前过卡，梦替你巩固。","睡前巡一圈，雾不敢近身。"],["睡前过卡，睡眠替你巩固。","睡前巡一圈，雾不敢近身。"],
+    ["今日圆满。去领赏吧。","今日圆满。天梯赐赏，去领吧。"],["读完这页，你眼里多了点什么。","秘境已探，你眼里多了雾外的光。"],
+    ["不错，这页你吃透了。","这页残卷，已被你收进袖中。"],["温故有效。它现在是你的了。","封印重新钉牢——它现在属于你了。"],
+    ["试炼通过。手感和脑子都在。","妖兽授首，剑感与道心俱在。"],["声音很稳。回听一次，你会听见自己的进步。","咒音很稳。回身听一遍，你会听见自己的道行在长。"],
+    ["声音很稳。录音会替你记住这次的样子。","咒音很稳。录音会替你留住这次的样子。"],["城破！这一战打得漂亮。","妖王授首！这一战打得漂亮。"],
+    ["线索入册。你的地图又密了一分。","符文入册。你的山河图又密了一分。"],["行囊齐整。上路吧。","法器齐整。上路吧。"],
+    ["夜巡完毕。安心睡。","夜巡完毕。雾退三里，安睡吧。"],["该赏的赏了。明日继续。","赏已入袋。今夜无雾。"],
+    ["该赏的赏了。","赏已入袋。"],["收下。下一页更难，但你也不一样了。","收卷。前路妖物更凶，但你的剑也已不同。"],
+    ["这里有一页新卷，读透它。","新秘境在雾中显形，进去走一遭。"]];
+  st.dialogue.forEach(m=>{
+    if(m&&typeof m.text==="string"){ let t=m.text;
+      for(const [a,b] of DIALECT_FIX){ if(t.includes(a)) t=t.split(a).join(b); }
+      m.text=t; }
+  });
   if(typeof st.dsKey!=="string") st.dsKey="";
   if(!Array.isArray(st.wrong)) st.wrong=[];
   if(!Array.isArray(st.shop)||!st.shop.length) st.shop=[...D.shop];
@@ -571,7 +602,7 @@ function inputHint(){
     const active=d.quests.find(q=>questUnlocked(q)&&!qDone(q.id));
     if(active&&active.type==="study"&&(D.quizzes[active.id]||[]).some(z=>z.kind==="blank")) return "输入填空答案，或@角色名提问…";
   }
-  return "写下手记，或@角色名提问（如 @青玄 这关怎么过）…";
+  return "写下手记，或@角色名提问（@青玄 这关怎么过 · @所有人 全员接话）…";
 }
 function sendChat(){
   const inp=$("#chatInput"); const v=inp.value.trim(); if(!v) return;
@@ -583,35 +614,59 @@ function sendChat(){
     st.dialogue.push({role:"player",text:v,at:new Date().toISOString(),day:st.day});
     if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
     save(); renderChat(true);
-    toast("正在请教"+NPC[mentioned].name+"……");
-    aiRespond(mentioned,v).then(resp=>{
-      st.dialogue.push({role:"npc",npc:mentioned,text:resp,at:new Date().toISOString(),day:st.day});
-      if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-      save();
-      renderChat();
-    }).catch(()=>{
-      st.dialogue.push({role:"npc",npc:mentioned,text:"（此刻雾重，我没能接上话——配置 DeepSeek 密钥或联网后再问一次。）",at:new Date().toISOString(),day:st.day});
-      save();
-      toast("NPC暂未回应（离线或未配置AI）");
-      renderChat();
-    });
+    // 群聊应答：@全员 → 各 NPC 依次接话（各一条）；@单人 → 单独回应
+    const targets=mentioned==="__ALL__"?Object.keys(MENTION_ALIASES):[mentioned];
+    toast(mentioned==="__ALL__"?"各位已收到喊话……":"正在与"+NPC[mentioned].name+"对话……");
+    if(mentioned==="__ALL__"){
+      let done=0;
+      targets.forEach(id=>{
+        aiRespond(id,v,true).then(resp=>{
+          st.dialogue.push({role:"npc",npc:id,text:resp,at:new Date().toISOString(),day:st.day});
+          if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+          save(); if(++done===targets.length) renderChat(); else renderChat(true);
+        }).catch(()=>{ if(++done===targets.length) renderChat(); });
+      });
+      if(!dsReady()) toast("NPC暂未回应（未配置AI）");
+    } else {
+      aiRespond(mentioned,v).then(resp=>{
+        st.dialogue.push({role:"npc",npc:mentioned,text:resp,at:new Date().toISOString(),day:st.day});
+        if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+        save();
+        renderChat();
+      }).catch(()=>{
+        st.dialogue.push({role:"npc",npc:mentioned,text:"（此刻雾重，我没能接上话——配置 DeepSeek 密钥或联网后再问一次。）",at:new Date().toISOString(),day:st.day});
+        save();
+        toast("NPC暂未回应（离线或未配置AI）");
+        renderChat();
+      });
+    }
   } else {
     toast("已记入修行录");
     renderChat(true);
   }
 }
+/* 跳转链接：NPC 消息指涉任务时，滚动定位到流内任务卡；不可见则直接打开任务弹层 */
+function gotoQuest(qid){
+  const el=document.querySelector('[data-q="'+qid+'"]');
+  if(el){ el.scrollIntoView({behavior:"smooth",block:"center"});
+    el.classList.remove("qflash"); void el.offsetWidth; el.classList.add("qflash"); }
+  else openQuest(qid);
+}
 function renderChat(keep){
   const view=$("#stream");
   const stream=buildStream();
   // Append persisted dialogue (player questions + NPC AI responses)
-  const allMsgs=stream.concat(st.dialogue.map(d=>({t:d.role,npc:d.npc,x:d.text,qid:d.qid})));
+  const allMsgs=stream.concat(st.dialogue.map(d=>({t:d.role,npc:d.npc,x:d.text,qid:d.qid,refs:d.refs})));
   let html=allMsgs.map(r=>{
     if(r.t==="sysday") return `<div class="sys daysep">${esc(r.x)}</div>`;
     if(r.t==="sys") return `<div class="msg sysline"><div class="bubble">${esc(r.x)}</div></div>`;
     if(r.t==="npc"){ const n=NPC[r.npc]||NPC.qingxuan;
+      const rlist=r.refs&&r.refs.length?r.refs:(r.qid?[{qid:r.qid}]:[]);
+      const chips=rlist.map(x=>{ const qq=QMAP[x.qid]; return qq?`<button class="qref" data-ref="${qq.id}">📜 ${esc(qq.name)}</button>`:""; }).join("");
       return `<div class="msg"><div class="avatar">${esc(n.name[0])}</div><div class="body">
       <div class="name"><b>${esc(n.name)}</b> · ${esc(n.title)}</div>
-      <div class="bubble">${esc(r.x)}</div></div></div>`; }
+      <div class="bubble">${esc(r.x)}</div>
+      ${chips?`<div class="qrefs">${chips}</div>`:""}</div></div>`; }
     if(r.t==="player"){ return `<div class="msg me"><div class="body">
       <div class="bubble">${esc(r.x)}</div></div></div>`; }
     if(r.t==="quest"){ const q=QMAP[r.qid]; if(!q) return ""; const done=qDone(q.id); const un=questUnlocked(q);
@@ -634,6 +689,10 @@ function bindChat(){
   });
   document.querySelectorAll(".qcard:not(.done)").forEach(c=>{
     if(c.dataset.q&&questUnlocked(QMAP[c.dataset.q])) c.onpointerdown=()=>openQuest(c.dataset.q);
+  });
+  // NPC 消息内的任务引用 chips → 滚动定位/打开
+  document.querySelectorAll(".qref").forEach(b=>{
+    b.onpointerdown=e=>{ e.stopPropagation(); SFX.tap(); gotoQuest(b.dataset.ref); };
   });
 }
 function heartNew(){
@@ -1066,15 +1125,16 @@ function openQuest(qid){
     record("任务完成", q.name+"（+"+q.xp+" 修行 +"+q.coin+" 铜钱）");
     if(st.day===q.day&&q.kind==="main"&&st.unlocked===q.day&&st.unlocked<45) st.unlocked++;
     maybeUnlockDay();
-    // 三节点之②：玩家提交 → NPC 认可（永久记入对话流）
-    const ackNpc=NPC[q.npc]||NPC.qingxuan;
-    st.dialogue.push({role:"npc",npc:q.npc,text:(doneLine(q,byDay[q.day])||"很好。")+"「"+q.name+"」已交付（+"+q.xp+"修行 +"+q.coin+"铜钱）",at:new Date().toISOString(),day:st.day});
-    // 三节点之③：前置刚满足、由此任务解锁的新任务，由对应 NPC 发布
+    // 三节点之②③合并为一条群聊消息（NPC 不连发多条）：认可 + 后续任务预告，refs 携带任务跳转
     const fresh=D.quests.filter(qq=>!qDone(qq.id)&&questUnlocked(qq)&&qq.prev&&qq.prev.includes(q.id));
-    fresh.slice(0,1).forEach(nq=>{
-      const nd=byDay[nq.day];
-      st.dialogue.push({role:"npc",npc:nq.npc,text:(pubLine(nq,nd)||"新的一程开启了。")+"——新任务「"+nq.name+"」已现形。",at:new Date().toISOString(),day:st.day,qid:nq.id});
-    });
+    let ackText=(doneLine(q,byDay[q.day])||"很好。")+"「"+q.name+"」已交付（+"+q.xp+"修行 +"+q.coin+"铜钱）。";
+    const refs=[{qid:q.id}];
+    if(fresh.length){
+      const nq=fresh[0]; const nd=byDay[nq.day];
+      ackText+=" "+(pubLine(nq,nd)||"新的一程开启了。")+"「"+nq.name+"」已现形，随到随打。";
+      refs.push({qid:nq.id});
+    }
+    st.dialogue.push({role:"npc",npc:q.npc,text:ackText,refs,at:new Date().toISOString(),day:st.day});
     if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
     SFX.win(); ov.remove(); checkAch(); checkLevelUp(); save(); render();
     toast(doneLine(q,byDay[q.day])||"完成");
@@ -1438,12 +1498,13 @@ async function dsChat(messages, wantJson){
 function buildWorldBrief(){
   return {
     游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
+    游戏目的:"玩家在游戏中备考北京导游资格证。做任务就是网络游戏行为：研习新考点=开荒新副本，复习=回炉重刷副本并重新封印苏醒的旧妖，题组试炼=砍怪打谜题妖，英文背诵=施法吟咒，大试炼=攻城团战，巡夜=日常巡逻任务。玩家与NPC是游戏世界里并肩作战的关系（队友/接头人/引路人），绝非老师与学生——没有人在上课，大家在同一个江湖里打怪升级。",
     世界观:"现代京城被『遗忘之雾』笼罩，唯有『问道录』可照见旧京文脉。玩家是执灯求道的行路人（准导游），在六位仙侠引灯人（NPC：掌灯真人/山河剑客/镇塔尊者/幻纱行首座/机关童子/观星者）引导下，用四十五日历经五个幕次——山河游学、律法塔、行会风云、遗迹探秘、金榜台前，最终赴考。",
     隐喻系统:"每个复习任务都是一个游戏化关卡：新学任务=秘境探幽/残卷修复；复习任务=封印重临（知识封印松动，妖物探头，回去再钉一钉）；题组练习=谜题斩妖（妖兽拦路，以题作剑）；英文背诵=咒文吟诵（咒不成声，护罩不生）；大试炼=攻城之战（守关妖王）；线索卡=符文拓印；行囊准备=法器整备；巡夜记忆卡=夜巡驱雾。难度层级按稀有度：common=雾卒、fine=妖将、epic=妖王。",
     游戏机制:["读卷：翻页研习考点，关键词高亮、记忆锚助记","试炼：是非+填空，答错录入星盘错题","吟游：英文导游词朗读、录音、打字复述自评","巡夜：按1/3/7/15日间隔重刷记忆卡","五幕四十五日任务链，主线环环前置解锁","修行=经验值升级，铜钱可在集市兑换"],
     NPC基础信息:D.npcs.map(n=>({id:n.id,姓名:n.name,称号:n.title,背景:n.intro})),
-    叙事约束:"NPC 是仙侠角色不是教师：对话必须服务当日任务目标，不剧透未解锁环节，不跑题，不出现考试答案；禁止教书先生式表达（掌握了/要记住/同学们/认真听讲/布置作业等）。",
-    语言要求:"单句≤60字、古风而通俗、可带鼓励；禁用现代网络梗；不得提及 AI/模型/接口；玩家只通过点选操作，不进行自由文本对话。"
+    叙事约束:"NPC 是游戏NPC不是教师：像网游NPC那样简短、有性格、有江湖气地说话；对话服务当日任务目标，不剧透未解锁环节，不跑题，不出现考试答案；禁止教书先生式表达（掌握了/要记住/同学们/认真听讲/布置作业/劳逸结合等）。",
+    语言要求:"像真人玩家交流：口语化、句子长短错落、可用游戏黑话（开荒/副本/掉落/翻车/通关/团战）；严禁AI腔——不用'首先/其次/总之/综上/值得注意的是'，不排比堆砌，不空洞夸奖（非常棒/说得好），不自我总结，不问'还有什么可以帮你的'；单句≤60字；禁现代网络梗；不提AI/模型/接口；玩家只通过点选操作，不进行自由文本对话。"
   };
 }
 /* 生成 NPC 人设卡片（可带修改意见重生成） */
@@ -1467,7 +1528,7 @@ async function genPersona(npcId, feedback){
 async function genQuestBrief(q){
   const npc=NPC[q.npc]||NPC.qingxuan;
   const persona=st.personas[q.npc]&&st.personas[q.npc].card;
-  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容。要求：\n1. 用游戏隐喻解释任务：任务是一个具体的游戏化关卡——秘境探幽、妖兽战斗、谜题破解、咒文吟诵、攻城之战等，必须使用任务卡上标注的关卡名与难度层级\n2. 描述任务背景故事，融入『遗忘迷雾/问道录/引灯人』仙侠世界观\n3. 根据任务知识点提供适度拓展信息，帮助理解记忆\n4. 不剧透未解锁环节，不跑题，不给考试答案\n5. NPC台词自然生动、有温度，符合角色性格；禁用教书先生口吻（不许出现『掌握了/要记住/同学们/好好复习』式表达），说话像仙侠角色而非老师\n6. 只输出JSON";
+  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容。玩家在做任务=网络游戏行为（开荒副本/砍怪/刷本/团战），NPC与玩家是游戏世界里的并肩关系，绝非师生。要求：\n1. 用游戏隐喻解释任务：任务是一个具体的游戏化关卡——秘境探幽、妖兽战斗、谜题破解、咒文吟诵、攻城之战等，必须使用任务卡上标注的关卡名与难度层级\n2. 描述关卡背景故事，融入『遗忘迷雾/问道录/引灯人』仙侠世界观\n3. 根据任务知识点提供适度拓展信息，帮助理解记忆\n4. 不剧透未解锁环节，不跑题，不给考试答案\n5. NPC台词像网游NPC：简短、有性格、有江湖气，可用游戏黑话（开荒/掉落/翻车/通关）；禁用教书先生口吻（掌握了/要记住/同学们/好好复习）\n6. 严禁AI腔：不用'首先/其次/总之/综上'，不排比堆砌，不空洞夸奖，句子长短错落\n7. 只输出JSON";
   // 汇总本任务试炼涉及的考点，供 AI 拓展
   const quiz=D.quizzes[q.id]||[];
   const pids=[...new Set(quiz.map(z=>z.pid).filter(Boolean))];
@@ -1563,7 +1624,8 @@ function renderSave(){
   <div class="boardgroup"><h3>存档管理</h3>
   <div class="savegrid"><button class="btn" id="exp">导出存档</button><button class="btn" id="ledger">导出修行录</button><button class="btn" id="imp">导入存档</button>
   <button class="btn ghost" id="rst">重置旅程</button></div><input type="file" id="impF" accept=".json" class="hidden">
-  <div class="note">重置为单向门——先导出，再重置。</div></div>
+  <div class="savegrid" style="margin-top:6px"><button class="btn sm" id="updChk" type="button">🔄 检查游戏更新</button></div>
+  <div class="note">重置为单向门——先导出，再重置。内容未更新时，点「检查游戏更新」可拉取最新版。</div></div>
 
   <div class="boardgroup"><h3>DeepSeek 智能引擎</h3>
     <div class="note">配置后可让 NPC 人设、对话与任务说明由 AI 生成。密钥仅存本浏览器，不经过任何第三方；未配置或离线时自动使用内置内容，不影响修行。</div>
@@ -1602,6 +1664,21 @@ function renderSave(){
       <div class="book"><div class="cen" style="white-space:pre-wrap;font-size:13px;line-height:1.7">${esc(JSON.stringify(buildWorldBrief(),null,2))}</div></div>`);
   };
   $("#dsPersona",ov).onpointerdown=()=>{ SFX.tap(); openPersonaPanel(); };
+
+  /* 检查游戏更新：主动触发 SW 更新，新版本激活后由 swv 广播触发重载 */
+  $("#updChk",ov).onpointerdown=async ()=>{ SFX.tap();
+    const b=$("#updChk",ov); b.disabled=true; b.textContent="检查中…";
+    try{
+      const reg=window.__wdzxReg||(navigator.serviceWorker?await navigator.serviceWorker.getRegistration():null);
+      if(!reg){ toast("当前环境不支持 Service Worker"); b.disabled=false; b.textContent="🔄 检查游戏更新"; return; }
+      await reg.update();
+      setTimeout(async ()=>{
+        b.disabled=false; b.textContent="🔄 检查游戏更新";
+        const refreshing=reg.waiting||reg.installing;
+        toast(refreshing?"发现新版 · 正在应用，将自动刷新":"已是最新版本");
+      }, 1500);
+    }catch(err){ toast("检查失败："+err.message); b.disabled=false; b.textContent="🔄 检查游戏更新"; }
+  };
 
   /* 同步校验 */
   function runCheck(){
@@ -1708,21 +1785,35 @@ function parseMention(text){
   const m=/@([A-Za-z0-9_\u4e00-\u9fa5]{2,8})/.exec(text);
   if(!m) return null;
   const tok=m[1];
+  // @所有人/各位/全员/大家 → 全员应答
+  if(/^(所有人|各位|全员|大家|全部|所有人呢|都有)$/.test(tok)) return "__ALL__";
   for(const id in MENTION_ALIASES){ if(MENTION_ALIASES[id].some(a=>tok===a||tok.startsWith(a)||a.startsWith(tok)&&tok.length>=2)) return id; }
   return null;
 }
-async function aiRespond(npcId,userText){
+/* 网络检索（中文维基 API，CORS 开放；大陆网络不通时静默降级为仅资料库） */
+async function webSearch(query){
+  try{
+    const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),6000);
+    const r=await fetch("https://zh.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srlimit=3&srsearch="+encodeURIComponent(query),{signal:ctl.signal});
+    clearTimeout(t);
+    const j=await r.json();
+    return (j.query&&j.query.search||[]).map(x=>("【"+x.title+"】"+x.snippet.replace(/<[^>]+>/g,"").slice(0,110))).join("\n")||null;
+  }catch(e){ return null; }
+}
+async function aiRespond(npcId,userText,brief){
   if(!dsReady()) throw new Error("未配置AI");
   const npc=NPC[npcId]||NPC.qingxuan;
   const persona=st.personas[npcId]&&st.personas[npcId].card;
-  const sys="你是游戏『问道之旅·四十五日』中的NPC角色「"+npc.name+"」（"+npc.title+"）。你必须始终以该角色身份回答，符合其仙侠人设和性格——你是引灯人/剑客/尊者/首座/机关童子/观星者，不是教师。基于游戏世界观和北京导游考试知识库回答。回答要自然、生动，像真实对话，避免机械死板。严禁教书先生式表达（掌握了/要记住/同学们/认真复习/布置作业等），谈知识时也用仙侠比喻（考点=封印符文、错题=妖物、背诵=咒文）。禁用现代网络梗，不得提及AI/模型/接口。单次回复≤200字。";
+  const sys="你是游戏『问道之旅·四十五日』里的游戏NPC「"+npc.name+"」（"+npc.title+"）。这不是课堂：玩家是并肩刷任务的游戏者，你们是同一游戏世界里的角色，绝非师生。像网络游戏NPC那样说话——简短、有性格、有江湖气，句子长短错落。严禁AI腔：不用'首先/其次/总之/综上/值得注意的是'，不排比堆砌，不空洞夸奖（非常棒/说得好），不自我总结，不问'还有什么可以帮你的'，不解释自己是什么身份。严禁教书先生口吻（掌握了/要记住/同学们/认真复习/布置作业/劳逸结合）。谈知识用仙侠比喻（考点=封印符文，错题=妖物，背诵=咒文，复习=回炉重刷副本）。"+(brief?"这是多人召唤场景，回复务必精炼≤80字，只说你最有资格说的一段。":"单次回复≤160字。")+"禁现代网络梗，不提AI/模型/接口。";
+  const web=await webSearch(userText.replace(/@[^\s，。,,]+/g,"").trim());
   const context="游戏背景：\n"+JSON.stringify(buildWorldBrief())
     +"\n\n角色信息："+JSON.stringify({姓名:npc.name,称号:npc.title,背景:npc.intro})
     +(persona?("\n已确认人设："+JSON.stringify(persona)):"")
     +"\n\n当前游戏状态：第"+st.day+"日，已解锁至第"+st.unlocked+"日，修行"+st.xp+"，等级Lv."+level()
-    +"\n\n相关知识点库（供参考，回答时可拓展）："
-    +getRelevantKnowledge(userText);
-  const user="玩家说："+userText+"\n\n请以"+npc.name+"的身份自然地回应。结合你掌握的北京导游知识，给出符合角色性格的回答。如果是关于任务的问题，把它讲成一个游戏化关卡（秘境/妖兽/谜题/咒文/攻城），用游戏隐喻的方式解释。";
+    +"\n\n游戏资料库（本地优先，与检索冲突时以此为准）："
+    +getRelevantKnowledge(userText)
+    +(web?("\n\n网络检索补充（供参考，不确定可不采用）：\n"+web):"");
+  const user="玩家说："+userText+"\n\n以"+npc.name+"的身份像游戏NPC一样回应——把它当成一次队内喊话，不是答疑课。";
   const raw=await dsChat([{role:"system",content:sys},{role:"user",content:context+"\n\n"+user}],false);
   return raw;
 }
@@ -2038,10 +2129,25 @@ function renderCal(){
   });
 }
 boot();
-// 注册 Service Worker 实现 PWA 离线
+// 注册 Service Worker 实现 PWA 离线 + 自动更新
+// 关键：新 SW 激活时上报缓存版本，页面对比版本差异后精准重载一次——
+// 否则大陆网络访问 github.io 不稳定时，旧 SW 会永远回落陈旧缓存（iPad 不刷新的根因）
 if("serviceWorker" in navigator){
+  navigator.serviceWorker.addEventListener("message", e => {
+    const d = e.data || {};
+    if(d.type === "swv" && d.v){
+      const prev = localStorage.getItem("wdzx_swv");
+      if(prev && prev !== d.v){ location.reload(); return; }
+      localStorage.setItem("wdzx_swv", d.v);
+    }
+  });
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    navigator.serviceWorker.register("sw.js").then(reg => {
+      // 启动即检查 sw.js 更新；之后每 10 分钟再查一次（iOS 独立 PWA 无导航期更新保障）
+      reg.update().catch(() => {});
+      setInterval(() => reg.update().catch(() => {}), 10 * 60 * 1000);
+      window.__wdzxReg = reg;
+    }).catch(() => {});
   });
 }
 
