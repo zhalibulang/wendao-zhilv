@@ -488,26 +488,41 @@ function buildStream(){
   if(t.c===t.a&&t.a>0) out.push({t:"sys",x:`全程圆满（${t.a}/${t.a}）· 问道录已满`});
   return out;
 }
+/* 隐喻引擎：任务类型→游戏化元素（秘境/封印/妖兽/咒文/攻城…），稀有度→难度层级，直观反映关卡强度 */
+function questMetaphor(q){
+  const tier={common:"雾卒",fine:"妖将",epic:"妖王"}[q.rarity]||"雾卒";
+  const map={
+    study:["秘境探幽","残卷修复","雾径开荒"],
+    review:["封印重临","旧秘回望","苏醒之妖"],
+    drill:["谜题斩妖","题阵破关","试炼妖巢"],
+    oral:["咒文吟诵","行阵咒音","镇城大咒"],
+    boss:["攻城之战","天梯妖王","守关大阵"],
+    clue:["符文拓印","山河拓片"],
+    gear:["法器整备"],
+    flash:["夜巡驱雾"]};
+  const doms=map[q.type]||map.study;
+  return doms[hash(q.id)%doms.length]+" · "+tier;
+}
 function pubLine(q,d){
-  const pool={study:["这里有一页新卷，读透它。","新的一页——慢慢地，别急。","这页交给你，读完了回来找我。"],
-    review:["旧页重读，温故一遍。","昨天的卷子，再过一眼。"],
-    drill:["试炼来了。答对才算数。","来，接这一关。","手别抖，题不难。"],
-    oral:["开口。声音是你的第二支笔。","这一段，读出声来。","吟游时刻——出声，才算数。"],
-    boss:["大试炼开启。全场肃静。","攻城时刻。一次过。"],
-    clue:["这里有一条线索，拓下来。","把这条线绣进你的地图。"],
-    gear:["先整备行囊。磨刀不误砍柴工。"],
-    flash:["夜巡时刻，过几张卡再睡。","睡前过卡，梦替你巩固。"],
-    reward:["今日圆满。去领赏吧。"]};
+  const pool={study:["新秘境在雾中显形，进去走一遭。","这页残卷会自己说话——翻开它。","秘境之门开了。慢慢走，别急。"],
+    review:["封印松了，旧妖又探头——回去再钉一钉。","昨日走过的秘境在召唤，回望一眼。","旧卷重启：封印重临。"],
+    drill:["前方妖兽拦路——以题作剑，斩之。","谜题妖现身。接这一战。","守关的谜题妖不强，但别手抖。"],
+    oral:["咒文已备，出声吟诵——声音是你的法器。","吟游时刻：咒不成声，护罩不生。","把这段咒文念出声来，城门才应你。"],
+    boss:["守关妖王现身。全场肃静，一次过。","攻城时刻——大试炼开启。","此战即天梯。稳住，一次登阶。"],
+    clue:["雾中有一枚符文，拓下来。","线索符文现形，绣进你的山河图。"],
+    gear:["先整备法器——利其器，方能斩妖。"],
+    flash:["夜巡时刻，提灯过卡，驱散今夜之雾。","睡前巡一圈，雾不敢近身。"],
+    reward:["今日圆满。天梯赐赏，去领吧。"]};
   const arr=pool[q.type]||pool.study;
   const idx=(hash(q.id)+d.day)%arr.length;
   return arr[idx];
 }
 function doneLine(q,d){
-  const pool={study:["不错，这页你吃透了。","读完这页，你眼里多了点什么。"],
-    review:["温故有效。它现在是你的了。"],drill:["试炼通过。手感和脑子都在。"],
-    oral:["声音很稳。回听一次，你会听见自己的进步。"],boss:["城破！这一战打得漂亮。"],
-    clue:["线索入册。你的地图又密了一分。"],gear:["行囊齐整。上路吧。"],
-    flash:["夜巡完毕。安心睡。"],reward:["该赏的赏了。"]};
+  const pool={study:["这页残卷，已被你收进袖中。","秘境已探，你眼里多了雾外的光。"],
+    review:["封印重新钉牢——它现在属于你了。","旧妖退散，这道封印是你的手笔。"],drill:["妖兽授首，剑感与道心俱在。","谜题破解，这一战赢得干净。"],
+    oral:["咒音很稳。回身听一遍，你会听见自己的道行在长。"],boss:["妖王授首！这一战打得漂亮。"],
+    clue:["符文入册。你的山河图又密了一分。"],gear:["法器齐整。上路吧。"],
+    flash:["夜巡完毕。雾退三里，安睡吧。"],reward:["赏已入袋。今夜无雾。"]};
   const arr=pool[q.type]||["很好。"];
   return arr[hash(q.id+d.day)%arr.length];
 }
@@ -761,13 +776,15 @@ function openQuest(qid){
         body=`<div style="font-size:13.5px;color:var(--ink2);margin-top:6px"><b style="color:var(--neon)">目标 · </b>${esc(q.goal)}</div>`;
       }
       host.innerHTML=`<div class="descbox" style="border-left-color:var(--cyber);margin-bottom:10px">
-        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(npc.name)}：<span style="color:var(--fg)">${esc(opening)}</span></div>
+        <div style="font-size:11px;color:var(--gold);margin-bottom:4px;letter-spacing:.08em">关卡 · ${esc(questMetaphor(q))}</div>
+        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(npc.name)}（${esc(npc.title)}）：<span style="color:var(--fg)">${esc(opening)}</span></div>
         ${body}
       </div>`;
     }
     function render(o){
       host.innerHTML=`<div class="descbox" style="border-left-color:var(--cyber);margin-bottom:10px">
-        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(npc.name)}：<span style="color:var(--fg)">${esc(o.line)}</span></div>
+        <div style="font-size:11px;color:var(--gold);margin-bottom:4px;letter-spacing:.08em">关卡 · ${esc(questMetaphor(q))}</div>
+        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(npc.name)}（${esc(npc.title)}）：<span style="color:var(--fg)">${esc(o.line)}</span></div>
         ${o.metaphor?`<div style="font-size:12px;color:var(--gold);margin-bottom:6px;font-style:italic">「${esc(o.metaphor)}」</div>`:""}
         <div style="font-size:13px;color:var(--fg2);line-height:1.7">${esc(o.brief)}</div>
         <div style="font-size:10.5px;color:var(--dim);margin-top:4px">AI 生成 · 以界面点选为准，不偏离任务主线</div>
@@ -1421,10 +1438,11 @@ async function dsChat(messages, wantJson){
 function buildWorldBrief(){
   return {
     游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
-    世界观:"现代京城被『遗忘之雾』笼罩，唯有『问道录』可照见旧京文脉。玩家是求道的引路人（准导游），在六位守灯者（NPC）引导下，用四十五日历经五个幕次——山河游学、律法塔、行会风云、遗迹探秘、金榜台前，最终赴考。",
+    世界观:"现代京城被『遗忘之雾』笼罩，唯有『问道录』可照见旧京文脉。玩家是执灯求道的行路人（准导游），在六位仙侠引灯人（NPC：掌灯真人/山河剑客/镇塔尊者/幻纱行首座/机关童子/观星者）引导下，用四十五日历经五个幕次——山河游学、律法塔、行会风云、遗迹探秘、金榜台前，最终赴考。",
+    隐喻系统:"每个复习任务都是一个游戏化关卡：新学任务=秘境探幽/残卷修复；复习任务=封印重临（知识封印松动，妖物探头，回去再钉一钉）；题组练习=谜题斩妖（妖兽拦路，以题作剑）；英文背诵=咒文吟诵（咒不成声，护罩不生）；大试炼=攻城之战（守关妖王）；线索卡=符文拓印；行囊准备=法器整备；巡夜记忆卡=夜巡驱雾。难度层级按稀有度：common=雾卒、fine=妖将、epic=妖王。",
     游戏机制:["读卷：翻页研习考点，关键词高亮、记忆锚助记","试炼：是非+填空，答错录入星盘错题","吟游：英文导游词朗读、录音、打字复述自评","巡夜：按1/3/7/15日间隔重刷记忆卡","五幕四十五日任务链，主线环环前置解锁","修行=经验值升级，铜钱可在集市兑换"],
     NPC基础信息:D.npcs.map(n=>({id:n.id,姓名:n.name,称号:n.title,背景:n.intro})),
-    叙事约束:"NPC 对话必须服务当日任务目标，不剧透未解锁环节，不跑题，不出现考试答案。",
+    叙事约束:"NPC 是仙侠角色不是教师：对话必须服务当日任务目标，不剧透未解锁环节，不跑题，不出现考试答案；禁止教书先生式表达（掌握了/要记住/同学们/认真听讲/布置作业等）。",
     语言要求:"单句≤60字、古风而通俗、可带鼓励；禁用现代网络梗；不得提及 AI/模型/接口；玩家只通过点选操作，不进行自由文本对话。"
   };
 }
@@ -1449,7 +1467,7 @@ async function genPersona(npcId, feedback){
 async function genQuestBrief(q){
   const npc=NPC[q.npc]||NPC.qingxuan;
   const persona=st.personas[q.npc]&&st.personas[q.npc].card;
-  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容。要求：\n1. 用游戏隐喻解释任务（如『这卷书记载着京城山河的脉络』而非『请复习景点知识』）\n2. 描述任务背景故事，融入『遗忘迷雾/问道录/守灯者』世界观\n3. 根据任务知识点提供适度拓展信息，帮助理解记忆\n4. 不剧透未解锁环节，不跑题，不给考试答案\n5. NPC台词自然生动、有温度，符合角色性格，避免机械死板\n6. 只输出JSON";
+  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容。要求：\n1. 用游戏隐喻解释任务：任务是一个具体的游戏化关卡——秘境探幽、妖兽战斗、谜题破解、咒文吟诵、攻城之战等，必须使用任务卡上标注的关卡名与难度层级\n2. 描述任务背景故事，融入『遗忘迷雾/问道录/引灯人』仙侠世界观\n3. 根据任务知识点提供适度拓展信息，帮助理解记忆\n4. 不剧透未解锁环节，不跑题，不给考试答案\n5. NPC台词自然生动、有温度，符合角色性格；禁用教书先生口吻（不许出现『掌握了/要记住/同学们/好好复习』式表达），说话像仙侠角色而非老师\n6. 只输出JSON";
   // 汇总本任务试炼涉及的考点，供 AI 拓展
   const quiz=D.quizzes[q.id]||[];
   const pids=[...new Set(quiz.map(z=>z.pid).filter(Boolean))];
@@ -1465,11 +1483,12 @@ async function genQuestBrief(q){
     return o?(o.name+" "+o.words+"词"):"";
   }).filter(Boolean).join("、");
   const user="游戏背景信息：\n"+JSON.stringify(buildWorldBrief())
-    +"\n\n当前任务："+JSON.stringify({日次:q.day,环节:q.name,类型:q.tlabel,目标:q.goal,NPC:npc.name+"·"+npc.title})
+    +"\n\n当前任务："+JSON.stringify({日次:q.day,环节:q.name,类型:q.tlabel,目标:q.goal,NPC:npc.name+"·"+npc.title,关卡定位:questMetaphor(q)})
     +(persona?("\n\n该NPC已确认人设，台词必须符合："+JSON.stringify(persona)):"")
     +(knowledge?("\n\n任务涉及知识点（可在说明中自然拓展）：\n"+knowledge):"")
     +(oralInfo?("\n\n涉及英文导游词："+oralInfo):"")
-    +"\n\n请输出JSON：{line:string(该NPC以人设口吻发布任务的指引，用游戏隐喻，≤80字，自然生动有温度),brief:string(任务说明，用游戏化叙事讲清背景故事、核心目标与知识点拓展，≤200字),metaphor:string(一句游戏化比喻，概括此任务在修行路上的意义，≤30字)}。";
+    +"\n\n注意：「关卡定位」由隐喻引擎生成（任务类型→秘境探幽/妖兽战斗/谜题破解/咒文吟诵/攻城之战等元素，稀有度→雾卒/妖将/妖王难度层级），叙事必须围绕它展开，不得偏离。"
+    +"\n\n请输出JSON：{line:string(该NPC以人设口吻发布任务的指引，把任务讲成这个关卡的开启，≤80字，自然生动有温度),brief:string(任务说明，用游戏化叙事讲清关卡背景、妖物/谜题设定、核心目标与知识点拓展，≤200字),metaphor:string(一句游戏化比喻，概括此关卡在修行路上的意义，≤30字)}。";
   const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], true);
   let o;
   try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
@@ -1696,14 +1715,14 @@ async function aiRespond(npcId,userText){
   if(!dsReady()) throw new Error("未配置AI");
   const npc=NPC[npcId]||NPC.qingxuan;
   const persona=st.personas[npcId]&&st.personas[npcId].card;
-  const sys="你是游戏『问道之旅·四十五日』中的NPC角色「"+npc.name+"」。你必须始终以该角色身份回答，符合其人设和性格。基于游戏世界观和北京导游考试知识库回答。回答要自然、生动，像真实对话，避免机械死板。禁用现代网络梗，不得提及AI/模型/接口。单次回复≤200字。";
+  const sys="你是游戏『问道之旅·四十五日』中的NPC角色「"+npc.name+"」（"+npc.title+"）。你必须始终以该角色身份回答，符合其仙侠人设和性格——你是引灯人/剑客/尊者/首座/机关童子/观星者，不是教师。基于游戏世界观和北京导游考试知识库回答。回答要自然、生动，像真实对话，避免机械死板。严禁教书先生式表达（掌握了/要记住/同学们/认真复习/布置作业等），谈知识时也用仙侠比喻（考点=封印符文、错题=妖物、背诵=咒文）。禁用现代网络梗，不得提及AI/模型/接口。单次回复≤200字。";
   const context="游戏背景：\n"+JSON.stringify(buildWorldBrief())
     +"\n\n角色信息："+JSON.stringify({姓名:npc.name,称号:npc.title,背景:npc.intro})
     +(persona?("\n已确认人设："+JSON.stringify(persona)):"")
     +"\n\n当前游戏状态：第"+st.day+"日，已解锁至第"+st.unlocked+"日，修行"+st.xp+"，等级Lv."+level()
     +"\n\n相关知识点库（供参考，回答时可拓展）："
     +getRelevantKnowledge(userText);
-  const user="玩家说："+userText+"\n\n请以"+npc.name+"的身份自然地回应。结合你掌握的北京导游知识，给出符合角色性格的回答。如果是关于任务的问题，用游戏隐喻的方式解释。";
+  const user="玩家说："+userText+"\n\n请以"+npc.name+"的身份自然地回应。结合你掌握的北京导游知识，给出符合角色性格的回答。如果是关于任务的问题，把它讲成一个游戏化关卡（秘境/妖兽/谜题/咒文/攻城），用游戏隐喻的方式解释。";
   const raw=await dsChat([{role:"system",content:sys},{role:"user",content:context+"\n\n"+user}],false);
   return raw;
 }
@@ -1756,7 +1775,7 @@ function intro(){
     <div class="sec" style="text-align:left;font-size:14.5px">
       <p>燕京古城被「遗忘迷雾」笼罩。山河的记忆、律法的回响、行会的技艺，正在消散。</p>
       <p>四十五日之内，修满一方问道录、踏上金榜台的人，能唤回这座城的光。</p>
-      <p>你是新一代行吟者——<b>${esc(st.player)}</b>。青玄先生在书院门口等你。</p>
+      <p>你是新一代行吟者——<b>${esc(st.player)}</b>。雾锁的城门下，青玄先生掌灯而立，等你多时。</p>
       <p class="note" style="border-left-color:var(--hair)">一切修行都在此处完成：读卷、试炼、录音、巡夜、星盘。无需他物。</p>
     </div>
     <div class="foot" style="justify-content:center"><button class="btn primary" id="begin">接过问道录，启程</button></div>
