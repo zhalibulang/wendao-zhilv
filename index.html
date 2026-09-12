@@ -472,7 +472,8 @@ function reconcile(){
 }
 const level=()=>Math.floor(st.xp/50)+1;
 let lastLv=1;
-function checkLevelUp(){ const lv=level(); if(lv>lastLv){ record("等级提升","Lv."+lastLv+" → Lv."+lv+" · "+title()); toast("等级提升 · Lv."+lv+"「"+title()+"」","gold"); } lastLv=Math.max(lastLv,lv); }
+function checkLevelUp(){ const lv=level(); if(lv>lastLv){ record("等级提升","Lv."+lastLv+" → Lv."+lv+" · "+title()); toast("等级提升 · Lv."+lv+"「"+title()+"」","gold");
+    pushAction("境界突破——Lv."+lv+"「"+title()+"」。"); renderChat(); } lastLv=Math.max(lastLv,lv); }
 function title(){ return st.unlocked>=45?"金榜引路人":st.unlocked>=42?"问道行者·终章":st.unlocked>=31?"遗迹探索者":st.unlocked>=21?"行会行者":st.unlocked>=9?"律法塔学徒":"山河游学者"; }
 const qDone=id=>!!st.done[id];
 function dayProg(d){ let n=0; d.quests.forEach(q=>{if(qDone(q.id))n++;}); return {n,all:d.quests.length}; }
@@ -652,8 +653,28 @@ function gotoQuest(qid){
     el.classList.remove("qflash"); void el.offsetWidth; el.classList.add("qflash"); }
   else openQuest(qid);
 }
+/* 玩家行动自动入流：先落模板句，AI 可用时异步润色为第一人称战报（就地替换，不连发） */
+function pushAction(text){
+  const m={id:"act_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),role:"player",text,at:new Date().toISOString(),day:st.day};
+  st.dialogue.push(m);
+  if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+  return m.id;
+}
+function refineAction(id,q,extra){
+  if(!dsReady()) return;
+  dsChat([
+    {role:"system",content:"你是游戏『问道之旅·四十五日』的战斗记录官。用一句第一人称、网游战斗日志口吻总结玩家的行动。要求：仙侠游戏风，简短有力≤36字，像玩家在群里报喜不装腔；禁AI腔（不排比、不总结、不感叹过度、不用'首先/总之'）；禁教师口吻。只输出这句话本身，不要引号。"},
+    {role:"user",content:"玩家行动：完成关卡「"+q.name+"」（类型："+q.tlabel+"，难度定位："+questMetaphor(q)+"，奖励：+"+q.xp+"修行 +"+q.coin+"铜钱）"+(extra||"")+"\n参考模板（可重写或另起更妙的）：我刚交割了「"+q.name+"」。"}
+  ],false).then(t=>{
+    t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,60);
+    if(!t) return;
+    const m=st.dialogue.find(x=>x.id===id); if(!m) return;
+    m.text=t; save(); renderChat();
+  }).catch(()=>{});
+}
 function renderChat(keep){
   const view=$("#stream");
+  if(!view) return; // 非对话视图（任务/星盘/弹层中触发行动报等）时静默跳过，下次进入对话视图重渲染
   const stream=buildStream();
   // Append persisted dialogue (player questions + NPC AI responses)
   const allMsgs=stream.concat(st.dialogue.map(d=>({t:d.role,npc:d.npc,x:d.text,qid:d.qid,refs:d.refs})));
@@ -1042,6 +1063,10 @@ function openQuest(qid){
     if(qi>=quiz.length){
       st.quizAttempts[q.id]=(st.quizAttempts[q.id]||0)+1; save();
       if(readonly){
+        // 玩家温故行动自动入流（AI 战报润色）
+        const wid=pushAction("我重刷了「"+q.name+"」封印（答对 "+okCount+"/"+quiz.length+"）。");
+        refineAction(wid,q,"（这是温故重刷，不是首通，语气可以更轻松）");
+        renderChat();
         quizHost.innerHTML=`<div class="note" style="border-left-color:var(--gold)">温故有效（答对 ${okCount}/${quiz.length}）——错题已录入星盘。再温一遍可换一组变化题。</div>
         <div style="margin-top:8px"><button class="btn sm primary" id="reRetryBtn" type="button">再温一遍</button></div>`;
         SFX.win();
@@ -1125,6 +1150,9 @@ function openQuest(qid){
     record("任务完成", q.name+"（+"+q.xp+" 修行 +"+q.coin+" 铜钱）");
     if(st.day===q.day&&q.kind==="main"&&st.unlocked===q.day&&st.unlocked<45) st.unlocked++;
     maybeUnlockDay();
+    // 玩家行动自动入流：先落模板战报，AI 在线时异步润色（群聊里玩家先报，NPC 再接）
+    const aid=pushAction("我交割了「"+q.name+"」（+"+q.xp+"修行 +"+q.coin+"铜钱）。");
+    refineAction(aid,q);
     // 三节点之②③合并为一条群聊消息（NPC 不连发多条）：认可 + 后续任务预告，refs 携带任务跳转
     const fresh=D.quests.filter(qq=>!qDone(qq.id)&&questUnlocked(qq)&&qq.prev&&qq.prev.includes(q.id));
     let ackText=(doneLine(q,byDay[q.day])||"很好。")+"「"+q.name+"」已交付（+"+q.xp+"修行 +"+q.coin+"铜钱）。";
