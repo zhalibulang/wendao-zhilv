@@ -41,9 +41,9 @@ global.confirm=()=>true;global.prompt=()=>null;global.alert=()=>{};
 const dataSrc=fs.readFileSync(process.argv[2],'utf8');
 const html=fs.readFileSync(process.argv[3],'utf8');
 const js=html.match(/<script>\n([\s\S]*?)<\/script>/)[1];
-/* 独立模块（wd-chat/wd-map/wd-cfg/wd-mem）随主脚本一并装载，保持与线上运行时一致 */
+/* 独立模块（wd-chat/wd-avatar/wd-cfg/wd-mem）随主脚本一并装载，保持与线上运行时一致 */
 const chatSrc=fs.readFileSync(require('path').join(__dirname,'wd-chat.js'),'utf8');
-const mapSrc=fs.readFileSync(require('path').join(__dirname,'wd-map.js'),'utf8');
+const avSrc=fs.readFileSync(require('path').join(__dirname,'wd-avatar.js'),'utf8');
 const fxSrc=fs.readFileSync(require('path').join(__dirname,'wd-fx.js'),'utf8');
 const cfgSrc=fs.readFileSync(require('path').join(__dirname,'wd-cfg.js'),'utf8');
 const memSrc=fs.readFileSync(require('path').join(__dirname,'wd-mem.js'),'utf8');
@@ -149,85 +149,72 @@ const driver=`
     if(typeof st.done['D01M']!=='string')throw new Error('布尔done未归一化');
     if(!Array.isArray(st.wrong))throw new Error('wrong未修复');
   });
-  /* ===== 对话模块 + 像素地图（wd-chat / wd-map）===== */
+  /* ===== 对话模块 + 像素头像（wd-chat / wd-avatar）===== */
   run('WDChat 成长数据+故事线',()=>{
     reset(); const g=WDChat.growthOf('smq'); g.talks=7;
     WDChat.storyAppend('smq','并肩见证「试炼」交付'); WDChat.storyAppend('smq','桥上论剑');
     if(!st.npcGrowth||st.npcGrowth.smq.story.length!==2)throw new Error('故事线未落存档');
     if(WDChat.historyOf('smq',5).length!==0)throw new Error('历史互动应为空');
   });
-  run('WDChat 降级话术人设化',()=>{
+  run('WDChat 降级三段式（情境+剧情+任务）',()=>{
     reset(); const t=WDChat.fallback('xuanji','颐和园长廊有多长');
-    if(!t||!t.includes('星'))throw new Error('降级话术不符合玄机夫人人设');
+    if(!t)throw new Error('降级话术为空');
+    if(!(/(去|先|这就|通关|巡夜|星盘)/.test(t)))throw new Error('降级话术缺少任务/下一步指引');
+    if(!t.includes('星'))throw new Error('降级话术不符合玄机夫人人设');
     const t2=WDChat.fallback('moxiaogu','完全不相干词组zzz');
-    if(!t2)throw new Error('降级话术为空');
+    if(!t2||t2===t)throw new Error('不同NPC降级话术应区分');
   });
-  run('WDMap 头像URL缓存',()=>{
-    const a=WDMap.avatarURL('qingxuan'), b=WDMap.avatarURL('qingxuan');
-    if(!a.startsWith('data:image/png')||a!==b)throw new Error('dataURL异常');
-    if(!WDMap.avatarURL('moxiaogu'))throw new Error('其他NPC头像生成失败');
-  });
-  run('WDMap NPC全员序章引见（职能重构#6）',()=>{
-    reset(); st.unlocked=1;
-    ['yunheng','qingxuan','smq','moxiaogu','tiemian','liuruyan','xuanji'].forEach(id=>{
-      if(!WDMap.npcVisible(id))throw new Error(id+' 序章即应可互动');
-    });
-    st.unlocked=11;
-    if(!WDMap.npcVisible('tiemian'))throw new Error('act2 段 NPC 解锁后仍应现身');
-  });
-  /* ===== 地图 v2：相机数学 / 图层 / 挂载渲染生命周期 ===== */
-  run('WDMap 相机钳制（无黑边/小图居中）',()=>{
-    const U=WDMap.U;
-    const p=U.clampPan(640,480,400,300,-999,-999);
-    if(p.x!==-240||p.y!==-180)throw new Error('大地图越界钳制失败 '+JSON.stringify(p));
-    const c=U.clampPan(300,200,400,300,9,9);
-    if(c.x!==50||c.y!==50)throw new Error('小地图应居中');
-  });
-  run('WDMap 锚点缩放钳制+坐标往返',()=>{
-    const U=WDMap.U,u=25,vpW=400,vpH=300,pan={x:0,y:0};
-    let n=U.zoomAt(1,u,vpW,vpH,pan,200,150,100);
-    if(n.z!==3)throw new Error('上限应钳制3x，实际'+n.z);
-    n=U.zoomAt(n.z,u,vpW,vpH,n,200,150,0.01);
-    if(n.z!==1)throw new Error('下限应钳制1x');
-    n=U.zoomAt(1,u,vpW,vpH,pan,100,100,2);
-    const w=U.toWorld(100,100,u,n.z,n);
-    const s=U.toScreen(w.x,w.y,u,n.z,n);
-    if(Math.abs(s.x-100)>0.01||Math.abs(s.y-100)>0.01)throw new Error('视口↔世界坐标往返不一致');
-  });
-  run('WDMap NPC命中判定（缩放无关）',()=>{
-    const U=WDMap.U;
-    if(U.hitNpc(3.2,6.9)!=='qingxuan')throw new Error('青玄点位未命中');
-    if(U.hitNpc(0.2,0.2))throw new Error('空白区域不应命中NPC');
-  });
-  run('WDMap 图层开关持久化（与NPC可见性相互独立）',()=>{
-    reset(); st.unlocked=1;
-    WDMap.setLayer('fog',false);
-    if(WDMap.getLayers().fog!==false)throw new Error('雾图层未切换');
-    const saved=JSON.parse(localStorage.getItem('wdzx.mapLayers.v1')||'null');
-    if(!saved||saved.fog!==false)throw new Error('图层偏好未持久化');
-    if(!WDMap.npcVisible('xuanji'))throw new Error('雾层开关不得影响NPC可见性（序章已引见）');
-    WDMap.setLayer('fog',true);
-  });
-  run('WDMap 挂载/帧渲染/卸载生命周期',()=>{
+  run('WDChat sysPrompt 行为边界+自主权+三段+防重复',()=>{
     reset();
-    const host=makeEl('div'); host.clientWidth=360;
-    let tapped=0,fogged=0;
-    WDMap.mount(host,{onNpcTap:()=>tapped++,onFogTap:()=>fogged++});
-    WDMap._frame();
-    if(host._html.indexOf('wdmapCv')<0)throw new Error('canvas未挂载');
-    if(host._html.indexOf('data-ly')<0)throw new Error('图层控件未渲染');
-    WDMap.unmount();
-    WDMap._frame();   // 卸载后调用必须静默 no-op，不抛错
-    if(tapped!==0||fogged!==0)throw new Error('渲染不应触发交互回调');
+    const s=WDChat.sysPrompt('qingxuan',false);
+    ['行为边界','自主权限','四项职能','回复结构','情境','剧情','任务'].forEach(k=>{
+      if(!s.includes(k))throw new Error('sysPrompt 缺失约束段：'+k);
+    });
+    if(!/≤220字/.test(s))throw new Error('单次回复字数上限约束缺失');
   });
-  run('WDMap 缩放API钳制+复位',()=>{
-    const host=makeEl('div'); host.clientWidth=360;
-    WDMap.mount(host,{});
-    for(let i=0;i<10;i++)WDMap.zoomIn();
-    if(WDMap.getView().z>3+1e-9)throw new Error('缩放突破3x上限');
-    WDMap.resetView();
-    if(WDMap.getView().z!==1)throw new Error('复位后缩放应为1x');
-    WDMap.unmount();
+  run('WDChat 防重复：近期原话注入硬约束',()=>{
+    reset();
+    st.dialogue.push({role:'npc',npc:'qingxuan',text:'云头上传来一声轻笑，你今日这关破得漂亮'});
+    const s=WDChat.sysPrompt('qingxuan',false);
+    if(!s.includes('防重复'))throw new Error('防重复段缺失');
+    if(!s.includes('云头上传来一声轻笑'))throw new Error('近期原话未注入');
+    if(WDChat.recentReplies('qingxuan',5).length!==1)throw new Error('recentReplies 取值异常');
+  });
+  run('WDChat deRepeat 撞开头自动改口',()=>{
+    reset();
+    st.dialogue.push({role:'npc',npc:'smq',text:'剑鸣半响'});
+    const out=WDChat.deRepeat('smq','剑鸣半响，又见面了');
+    if(out==='剑鸣半响，又见面了')throw new Error('撞开头未改写');
+    const ok=WDChat.deRepeat('smq','全然不同的开头');
+    if(ok!=='全然不同的开头')throw new Error('未撞开头不应改写');
+  });
+  run('WDAvatar 像素头像 dataURL 缓存',()=>{
+    const a=WDAvatar.avatarURL('qingxuan'), b=WDAvatar.avatarURL('qingxuan');
+    if(!a.startsWith('data:image/png')||a!==b)throw new Error('dataURL/缓存异常');
+    if(!WDAvatar.avatarURL('moxiaogu'))throw new Error('其他NPC头像生成失败');
+    if(!WDAvatar.avatarURL('_player'))throw new Error('玩家头像生成失败');
+  });
+  run('WDChat 上下文携带当前关卡事实',()=>{
+    reset(); st.unlocked=1;
+    const ctx=WDChat.buildContext('yunheng','这关怎么过',null);
+    if(!ctx.includes('当前关卡'))throw new Error('上下文缺当前关卡段');
+  });
+  /* ===== 自由发言路由 + NPC 名链接（需求四/五）===== */
+  run('自由发言智能路由：职能关键词命中',()=>{
+    reset(); st.unlocked=1;
+    if(routeNpc('法条处罚是怎么规定的')!=='tiemian')throw new Error('法条类应路由铁面');
+    if(routeNpc('颐和园长廊建筑')!=='moxiaogu')throw new Error('建筑遗迹类应路由小骨');
+    if(routeNpc('英文单词背不下来')!=='xuanji')throw new Error('背诵错题类应路由玄机');
+  });
+  run('自由发言智能路由：无关卡内容→云蘅兜底',()=>{
+    reset();
+    for(let day=1;day<=45;day++)for(const q of byDay[day].quests)st.done[q.id]=new Date().toISOString();
+    if(routeNpc('今天天气不错随便聊聊')!=='yunheng')throw new Error('无关闲聊应由云蘅兜底');
+  });
+  run('NPC 名开场白生成',()=>{
+    reset(); st.unlocked=1;
+    const op=playerOpener('qingxuan');
+    if(!op||!op.includes('青玄'))throw new Error('开场白应含目标NPC名');
   });
   /* ===== 配置中心 WDCfg ===== */
   run('WDCfg 默认快照与属性派生',()=>{
@@ -307,5 +294,5 @@ const driver=`
 })();
 `;
 
-try { eval(dataSrc + '\n' + cfgSrc + '\n' + memSrc + '\n' + chatSrc + '\n' + mapSrc + '\n' + fxSrc + '\n' + js + '\n' + driver); }
+try { eval(dataSrc + '\n' + cfgSrc + '\n' + memSrc + '\n' + chatSrc + '\n' + avSrc + '\n' + fxSrc + '\n' + js + '\n' + driver); }
 catch(e){ console.log('FATAL LOAD ERROR:\n'+e.stack); process.exit(1); }
