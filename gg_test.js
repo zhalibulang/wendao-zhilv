@@ -12,7 +12,7 @@ function makeEl(tag){
     appendChild(c){this.children.push(c);return c;},remove(){},removeChild(){},focus(){},click(){},
     querySelector(){return makeEl();},querySelectorAll(){return [];},closest(){return null;},
     setSelectionRange(){},scrollIntoView(){},addEventListener(){},removeEventListener(){},
-    getContext(){return{clearRect(){},fillRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},fill(){},arc(){},closePath(){},createLinearGradient(){return{addColorStop(){}}},fillText(){},save(){},restore(){},translate(){},scale(){},setTransform(){}};},
+    getContext(){return{clearRect(){},fillRect(){},strokeRect(){},drawImage(){},setTransform(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},fill(){},arc(){},closePath(){},createLinearGradient(){return{addColorStop(){}}},fillText(){},measureText(){return{width:8};},save(){},restore(){},translate(){},scale(){},setTransform(){}};},
     set onpointerdown(f){},get onpointerdown(){return null;},
     set onclick(f){},set oninput(f){},set onchange(f){},set onkeydown(f){},set onload(f){},set onerror(f){},set onended(f){},
     toDataURL(){return "data:image/png;base64,x";},
@@ -29,6 +29,9 @@ global.isSecureContext=false;
 global.fetch=()=>Promise.reject(new Error('no network'));
 global.AbortController=class{constructor(){this.signal={};}abort(){}};
 global.setTimeout=()=>0;global.clearTimeout=()=>{};
+global.requestAnimationFrame=()=>0;global.cancelAnimationFrame=()=>{};
+global.addEventListener=()=>{};global.removeEventListener=()=>{};
+global.devicePixelRatio=1;
 global.AudioContext=undefined;global.webkitAudioContext=undefined;
 global.Blob=class{constructor(){}};
 global.URL={createObjectURL:()=>'blob:x',revokeObjectURL(){}};
@@ -167,6 +170,60 @@ const driver=`
     if(WDMap.npcVisible('tiemian'))throw new Error('act2 NPC不应提前现身');
     st.unlocked=11;
     if(!WDMap.npcVisible('tiemian'))throw new Error('解锁后应现身');
+  });
+  /* ===== 地图 v2：相机数学 / 图层 / 挂载渲染生命周期 ===== */
+  run('WDMap 相机钳制（无黑边/小图居中）',()=>{
+    const U=WDMap.U;
+    const p=U.clampPan(640,480,400,300,-999,-999);
+    if(p.x!==-240||p.y!==-180)throw new Error('大地图越界钳制失败 '+JSON.stringify(p));
+    const c=U.clampPan(300,200,400,300,9,9);
+    if(c.x!==50||c.y!==50)throw new Error('小地图应居中');
+  });
+  run('WDMap 锚点缩放钳制+坐标往返',()=>{
+    const U=WDMap.U,u=25,vpW=400,vpH=300,pan={x:0,y:0};
+    let n=U.zoomAt(1,u,vpW,vpH,pan,200,150,100);
+    if(n.z!==3)throw new Error('上限应钳制3x，实际'+n.z);
+    n=U.zoomAt(n.z,u,vpW,vpH,n,200,150,0.01);
+    if(n.z!==1)throw new Error('下限应钳制1x');
+    n=U.zoomAt(1,u,vpW,vpH,pan,100,100,2);
+    const w=U.toWorld(100,100,u,n.z,n);
+    const s=U.toScreen(w.x,w.y,u,n.z,n);
+    if(Math.abs(s.x-100)>0.01||Math.abs(s.y-100)>0.01)throw new Error('视口↔世界坐标往返不一致');
+  });
+  run('WDMap NPC命中判定（缩放无关）',()=>{
+    const U=WDMap.U;
+    if(U.hitNpc(3.2,6.9)!=='qingxuan')throw new Error('青玄点位未命中');
+    if(U.hitNpc(0.2,0.2))throw new Error('空白区域不应命中NPC');
+  });
+  run('WDMap 图层开关持久化（解锁门禁独立）',()=>{
+    reset(); st.unlocked=1;
+    WDMap.setLayer('fog',false);
+    if(WDMap.getLayers().fog!==false)throw new Error('雾图层未切换');
+    const saved=JSON.parse(localStorage.getItem('wdzx.mapLayers.v1')||'null');
+    if(!saved||saved.fog!==false)throw new Error('图层偏好未持久化');
+    if(WDMap.npcVisible('xuanji'))throw new Error('关雾层不能破坏解锁门禁');
+    WDMap.setLayer('fog',true);
+  });
+  run('WDMap 挂载/帧渲染/卸载生命周期',()=>{
+    reset();
+    const host=makeEl('div'); host.clientWidth=360;
+    let tapped=0,fogged=0;
+    WDMap.mount(host,{onNpcTap:()=>tapped++,onFogTap:()=>fogged++});
+    WDMap._frame();
+    if(host._html.indexOf('wdmapCv')<0)throw new Error('canvas未挂载');
+    if(host._html.indexOf('data-ly')<0)throw new Error('图层控件未渲染');
+    WDMap.unmount();
+    WDMap._frame();   // 卸载后调用必须静默 no-op，不抛错
+    if(tapped!==0||fogged!==0)throw new Error('渲染不应触发交互回调');
+  });
+  run('WDMap 缩放API钳制+复位',()=>{
+    const host=makeEl('div'); host.clientWidth=360;
+    WDMap.mount(host,{});
+    for(let i=0;i<10;i++)WDMap.zoomIn();
+    if(WDMap.getView().z>3+1e-9)throw new Error('缩放突破3x上限');
+    WDMap.resetView();
+    if(WDMap.getView().z!==1)throw new Error('复位后缩放应为1x');
+    WDMap.unmount();
   });
   /* 异步收尾：respond 未配置 AI 时应同步降级为本地话术（永不 reject） */
   (async()=>{
