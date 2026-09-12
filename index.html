@@ -409,7 +409,7 @@ function defState(){
     edits:{}, _treeExp:{},
     dsKey:"", personas:{}, aiBrief:{},
     dialogue:[],
-    quizOk:0, created:new Date().toISOString()};
+    quizOk:0, quizAttempts:{}, created:new Date().toISOString()};
 }
 let st=null, view="chat";
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){} }
@@ -428,6 +428,7 @@ function reconcile(){
   if(!Array.isArray(st.wrong)) st.wrong=[];
   if(!Array.isArray(st.shop)||!st.shop.length) st.shop=[...D.shop];
   if(typeof st.quizOk!=="number") st.quizOk=0;
+  if(!st.quizAttempts||typeof st.quizAttempts!=="object") st.quizAttempts={};
   // 极早版本存档 done 值为布尔 true，统一补成时间戳，streak() 依赖字符串切片
   for(const id in st.done){ if(st.done[id]===true) st.done[id]=new Date().toISOString(); }
   let xp=0, coin=0;
@@ -641,7 +642,7 @@ function openQuest(qid){
     }
   }
   const pages=D.lectures[qid]||[];
-  const quiz=D.quizzes[qid]||[];
+  let quiz=D.quizzes[qid]||[];
   const npc=NPC[q.npc]||NPC.qingxuan;
   const ov=document.createElement("div"); ov.className="ov";
   let pageIdx=0;
@@ -951,11 +952,30 @@ function openQuest(qid){
   let qi=0, okCount=0, answered=false;
   const quizHost=$("#quizHost",ov), finBtn=$("#finBtn",ov);
   function normalize(s){ return String(s).replace(/[\s，。、；：""''！？（）()（）·—…《》<>]/g,"").toLowerCase(); }
+  function startAiQuiz(){
+    const stage=quizStage(q.id);
+    const label=stage==="first"?"正在拟题":stage==="second"?"温故出新题":"变化试炼中";
+    quizHost.innerHTML=`<div class="note" style="border-left-color:var(--cyber)">✦ ${label}…</div>`;
+    genQuiz(q, stage).then(arr=>{
+      if(!ov.isConnected) return;
+      quiz=arr; qi=0; okCount=0; answered=false; drawQuiz();
+    }).catch(()=>{ if(!ov.isConnected) return; quiz=D.quizzes[q.id]||[]; qi=0; okCount=0; answered=false; drawQuiz(); });
+  }
   function drawQuiz(){
     answered=false;
     if(qi>=quiz.length){
-      quizHost.innerHTML=`<div class="note" style="border-left-color:var(--ok)">试炼通过（答对 ${okCount}/${quiz.length}）——错题已录入星盘，玄机夫人会安排它们再见你。</div>`;
-      finBtn.disabled=false; finBtn.textContent="修习完成"; SFX.win(); return;
+      st.quizAttempts[q.id]=(st.quizAttempts[q.id]||0)+1; save();
+      if(readonly){
+        quizHost.innerHTML=`<div class="note" style="border-left-color:var(--gold)">温故有效（答对 ${okCount}/${quiz.length}）——错题已录入星盘。再温一遍可换一组变化题。</div>
+        <div style="margin-top:8px"><button class="btn sm primary" id="reRetryBtn" type="button">再温一遍</button></div>`;
+        SFX.win();
+        const rr=$("#reRetryBtn",quizHost); if(rr) rr.onpointerdown=()=>{ SFX.tap(); startAiQuiz(); };
+      } else {
+        quizHost.innerHTML=`<div class="note" style="border-left-color:var(--ok)">试炼通过（答对 ${okCount}/${quiz.length}）——错题已录入星盘，玄机夫人会安排它们再见你。</div>`;
+        if(finBtn){ finBtn.disabled=false; finBtn.textContent="修习完成"; }
+        SFX.win();
+      }
+      return;
     }
     const z=quiz[qi];
     if(z.kind==="judge"){
@@ -1008,9 +1028,16 @@ function openQuest(qid){
     save();
   }
   if(!readonly){
-    if(quiz.length) drawQuiz(); else { finBtn.disabled=false; }
+    if(quiz.length){
+      if(dsReady()){ startAiQuiz(); } else { drawQuiz(); }
+    } else { if(finBtn) finBtn.disabled=false; }
   } else if(quizHost){
-    quizHost.innerHTML=`<div class="note" style="border-left-color:var(--ok)">✓ 此任务已完成 · 回看模式下不必再答试炼，可向上翻看书页、录音复读。</div>`;
+    if(quiz.length && dsReady()){
+      quizHost.innerHTML=`<div class="note" style="border-left-color:var(--gold)">✓ 此任务已完成 · 回看模式下可重答试炼温故知新。<div style="margin-top:8px"><button class="btn sm primary" id="reTakeBtn" type="button">温故试炼</button></div></div>`;
+      const rt=$("#reTakeBtn",quizHost); if(rt) rt.onpointerdown=()=>{ SFX.tap(); startAiQuiz(); };
+    } else {
+      quizHost.innerHTML=`<div class="note" style="border-left-color:var(--ok)">✓ 此任务已完成 · 回看模式下不必再答试炼，可向上翻看书页、录音复读。</div>`;
+    }
   }
   drawPage();
   const closeQuest=()=>ov.remove();
@@ -1370,6 +1397,7 @@ function renderShop(){
    密钥仅存本浏览器 localStorage（本地个人 PWA），不上传任何第三方。 */
 const DS_MODEL="deepseek-chat";
 function dsReady(){ return !!(st.dsKey && st.dsKey.trim()); }
+function quizStage(qid){ const n=st.quizAttempts[qid]||0; return n===0?"first":n===1?"second":"multi"; }
 async function dsChat(messages, wantJson){
   if(!dsReady()) throw new Error("未配置密钥");
   const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(), 22000);
@@ -1450,6 +1478,63 @@ async function genQuestBrief(q){
   if(o.metaphor) o.metaphor=String(o.metaphor).slice(0,50);
   o.at=new Date().toISOString();
   return o;
+}
+/* AI 出题：模仿真实考题，按复习阶段产生细微变化；失败时由调用方降级为静态题 */
+async function genQuiz(q, stage){
+  const baseQuiz=D.quizzes[q.id]||[];
+  if(!baseQuiz.length) throw new Error("本题组无静态题参照");
+  const pids=[...new Set(baseQuiz.map(z=>z.pid).filter(Boolean))];
+  // 知识点全文（截 120 字，比 genQuestBrief 略长以保证出题精度）
+  const knowledge=pids.map(pid=>{
+    const p=D.pointsLib.find(x=>x.id===pid);
+    return p?(pid+"："+p.text.slice(0,120)):"";
+  }).filter(Boolean).join("\n");
+  // 学习材料要点补充
+  const lec=(D.lectures[q.id]||[]).flatMap(p=>(p.items||[]).map(it=>({id:it.id,text:it.text.slice(0,80)})));
+  const lecSeen=new Set(), lecItems=[];
+  for(const it of lec){ if(!pids.includes(it.id)&&!lecSeen.has(it.id)){ lecSeen.add(it.id); lecItems.push(it.id+"："+it.text); } if(lecItems.length>=12) break; }
+  const lecText=lecItems.join("\n");
+  // 静态题目作为样题（精简，只取关键字段）
+  const sample=baseQuiz.map(z=>({kind:z.kind,q:String(z.q).slice(0,80),a:z.a,pid:z.pid}));
+  // 阶段变化指令
+  const stageInfo={
+    first:{label:"初次学习",instr:"标准真题风格，与样题考点一致但重新措辞，不改变答案知识点"},
+    second:{label:"二次复习",instr:"更换切入角度或提问方式（如是非题改为反向表述、填空换位），不改变考点和答案"},
+    multi:{label:"多次复习",instr:"增加迷惑性干扰项；是非题可近义替换关键数字/名称；填空可设近义陷阱，但 accept 必须收录所有合理写法，不改变核心考点"}
+  };
+  const si=stageInfo[stage]||stageInfo.first;
+  const sys="你是北京导游资格考试的出题专家。根据给定的知识点和样题，按照真实考试风格出题。\n1. 题目严格基于给定知识点，不超纲\n2. 题型为是非题（judge）和填空题（blank），模仿真实考试\n3. "+si.instr+"\n4. 每题提供解析（why字段，≤60字），注明出处考点\n5. 只输出JSON";
+  const user="任务："+JSON.stringify({名称:q.name,目标:q.goal,日次:q.day})
+    +"\n\n知识点：\n"+knowledge
+    +(lecText?"\n\n学习材料要点：\n"+lecText:"")
+    +"\n\n样题（仅供参考考点和风格，请出不同的题目）：\n"+JSON.stringify(sample)
+    +"\n\n出题阶段："+si.label+"（"+si.instr+"）"
+    +"\n\n请输出JSON：{\"questions\":["+baseQuiz.length+"道题]}。每题字段：kind(\"judge\"或\"blank\")、q(题干，填空用▁占位)、a(judge为true/false布尔值、blank为字符串答案)、accept(仅blank，字符串数组，须含a本身及别名/简写)、why(解析≤60字)、pid(必须是给定知识点id之一:"+pids.join("/")+")。";
+  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], true);
+  let o;
+  try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
+  catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else throw e; }
+  const arr=Array.isArray(o)?o:(o.questions||[]);
+  if(!Array.isArray(arr)||!arr.length) throw new Error("AI出题格式异常");
+  const pidSet=new Set(pids);
+  return arr.filter(z=>z&&z.kind&&z.q).slice(0, baseQuiz.length).map(z=>{
+    const kind=z.kind==="blank"?"blank":"judge";
+    let a=z.a, accept=z.accept, pid=z.pid, why=z.why;
+    if(kind==="judge"){
+      a=(a===true||a==="true")?true:(a===false||a==="false")?false:Boolean(a);
+      if(typeof a!=="boolean") a=Boolean(a);
+    } else {
+      a=String(a);
+      accept=Array.isArray(accept)&&accept.length?accept.map(String):[a];
+      if(!accept.includes(a)) accept.unshift(a);
+    }
+    if(!pid||!pidSet.has(pid)) pid=pids[0]||pid;
+    if(!why||typeof why!=="string") why="出处：考点 "+pid;
+    else why=String(why).slice(0,120);
+    const out={kind,q:String(z.q),a,why,pid};
+    if(kind==="blank") out.accept=accept;
+    return out;
+  });
 }
 function renderSave(){
   const t=totals();
