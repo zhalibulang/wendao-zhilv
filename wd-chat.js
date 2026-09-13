@@ -32,10 +32,13 @@ const WDChat={
     return {
       游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
       游戏目的:"玩家在游戏中备考北京导游资格证。做任务就是网络游戏行为：研习新考点=开荒新副本，复习=回炉重刷副本并重新封印苏醒的旧妖，题组试炼=砍怪打谜题妖，英文背诵=施法吟咒，大试炼=攻城团战，巡夜=日常巡逻任务。玩家与NPC是游戏世界里并肩作战的关系（队友/接头人/引路人），绝非老师与学生——没有人在上课，大家在同一个江湖里打怪升级。",
-      世界观:"现代京城被『遗忘之雾』笼罩，唯有『问道录』可照见旧京文脉。玩家是执灯求道的行路人（准导游），在六位仙侠引灯人（NPC：掌灯真人/山河剑客/镇塔尊者/幻纱行首座/机关童子/观星者）引导下，用四十五日历经五个幕次——山河游学、律法塔、行会风云、遗迹探秘、金榜台前，最终赴考。",
-      隐喻系统:"每个复习任务都是一个游戏化关卡：新学任务=秘境探幽/残卷修复；复习任务=封印重临（知识封印松动，妖物探头，回去再钉一钉）；题组练习=谜题斩妖（妖兽拦路，以题作剑）；英文背诵=咒文吟诵（咒不成声，护罩不生）；大试炼=攻城之战（守关妖王）；线索卡=符文拓印；行囊准备=法器整备；巡夜记忆卡=夜巡驱雾。难度层级按稀有度：common=雾卒、fine=妖将、epic=妖王。",
+      世界观:"玩家所在的自在世界意外跌入到『导游异次元』，该次元正受到遗忘之雾的入侵，如果不能解除『遗忘之雾』笼罩，整个世界都将毁于一旦。而玩家自身也只有帮助本世界恢复常态之后才能重返家园。现在，玩家作为导游次元的外来者，恰好是最后一个可以通关『导游试炼』以驱逐『遗忘之雾』的人选。因此，在本世界的几位传奇导游的帮助下引导下，用四十五日历经五个幕次——山河游学、律法塔、行会风云、遗迹探秘、金榜台前，最终赴考。",
+      隐喻系统:"每个复习任务都是一个游戏化关卡：新学任务=秘境探幽/残卷修复/重激活神圣导游知识封印；复习任务=封印重临（遗忘之雾侵袭神圣导游知识封印，生成遗忘怪，需要玩家反复击杀）；题组练习=谜题斩妖（仙人联手布置的模拟大阵，生成精英级遗忘怪，帮助提升技艺）；英文背诵=咒文吟诵（激活神圣导游知识封印的核心仪轨之一）；大试炼=攻城之战（遗忘之雾催生怪物攻城事件，需玩家战斗守城）；线索卡=符文拓印；行囊准备=法器整备；巡夜记忆卡=夜巡驱雾。难度层级按稀有度：common=雾卒、fine=妖将、epic=妖王。",
       游戏机制:["读卷：翻页研习考点，关键词高亮、记忆锚助记","试炼：是非+填空，答错录入星盘错题","吟游：英文导游词朗读、录音、打字复述自评","巡夜：按1/3/7/15日间隔重刷记忆卡","五幕四十五日任务链，主线环环前置解锁","修行=经验值升级，铜钱可在集市兑换"],
-      NPC基础信息:D.npcs.map(n=>({id:n.id,姓名:n.name,称号:n.title,背景:n.intro})),
+      NPC基础信息:D.npcs.map(n=>({id:n.id,
+        姓名:(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(n.id,n.name):n.name,
+        称号:(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(n.id,n.title):(n.title||""),
+        背景:n.intro})),
       叙事约束:"NPC 是游戏NPC不是教师：像网游NPC那样简短、有性格、有江湖气地说话；对话服务当日任务目标，不剧透未解锁环节，不跑题，不出现考试答案；禁止教书先生式表达（掌握了/要记住/同学们/认真听讲/布置作业/劳逸结合等）。",
       自由对话机制:"对话流是类游戏群聊的自由发言场：玩家可输入任意文本（提问、报战况、闲聊均可），系统保证每次发言至少有一位与其角色设定和职能匹配的 NPC 出面接话；@角色名可指定 NPC，@所有人则全员各回一句。NPC 对题外话也要先以角色身份接住，再轻巧引回主线，不许冷场。",
       NPC回复结构:"每条 NPC 回复含三要素：①情境互动——针对玩家当前状态或刚完成的行为回应并给具体正向反馈；②剧情意义——说明该任务在五幕主线中的分量与角色面临的挑战；③任务发布——明确目标、要求、预期成果及下一步（找哪位 NPC、先破哪一关）。",
@@ -110,9 +113,11 @@ const WDChat={
     const recent=this.historyOf(npcId,12);
     if(!recent.length) return null;
     if(!manual&&g.talks<5) return null;
-    const sys="你是游戏『问道之旅·四十五日』的角色导演。基于NPC人设与其和玩家的最近互动，推演这个角色的自然成长：性格的细微变化、语言表达方式的演进、行为模式的适应性调整，并续写个人故事线。变化必须渐进自然不突兀，保留原人设基调，符合仙侠游戏世界观。严禁AI腔。只输出JSON。";
+    const sys="你是游戏『问道之旅·四十五日』的角色导演。基于NPC人设与其和玩家的最近互动，推演这个角色的自然成长：性格的细微变化、语言表达方式的演进、行为模式的适应性调整，并续写个人故事线。变化必须渐进自然不突兀，保留原人设基调，符合游戏世界观。严禁AI腔。只输出JSON。";
+    const dN=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
+    const dT=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(npcId,npc.title):(npc.title||"");
     const user="游戏背景：\n"+JSON.stringify(this.worldBrief())
-      +"\n\n角色：\n"+JSON.stringify({姓名:npc.name,称号:npc.title,背景:npc.intro})
+      +"\n\n角色：\n"+JSON.stringify({id:npcId,姓名:dN,称号:dT,背景:npc.intro})
       +(persona?("\n已确认人设："+JSON.stringify(persona)):"")
       +"\n\n成长现状：累计对话"+(g.talks||0)+"次"
       +(g.traits&&g.traits.length?("，性格特质："+g.traits.join("、")):"")
@@ -164,8 +169,9 @@ const WDChat={
     /* 自定义名字/人设（WDCfg 未挂载则用原名） */
     const cfg=window.WDCfg&&window.WDCfg.ready?window.WDCfg.ready():null;
     const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
+    const dispTitle=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(npcId,npc.title):(npc.title||"");
     const persona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
-    let sys="你是游戏『问道之旅·四十五日』里的游戏NPC「"+dispName+"」（"+npc.title+"）。玩家是与你并肩刷任务的同道，你们同处一个游戏世界，绝非师生。说话像网游里的NPC：简短、有性格、有江湖气，句子长短错落。\n"
+    let sys="你是游戏『问道之旅·四十五日』里的游戏NPC「"+dispName+"」"+(dispTitle?"（"+dispTitle+"）":"")+"。玩家是与你并肩刷任务的同道，你们同处一个游戏世界，绝非师生。说话像网游里的NPC：简短、有性格、有江湖气，句子长短错落。\n"
       +"【行为边界·绝不可越界】"
       +"1）你始终是「"+dispName+"」本人，绝不出戏，绝不承认自己是AI/程序/模型，不提接口、密钥、存档等系统外物；"
       +"2）不替玩家做决定、不代替玩家操作，只给情报、建议与引导；"
@@ -189,7 +195,9 @@ const WDChat={
       +(brief?"多人同时在场，只说你最有资格的一段：三要素压成两三句，≤100字。":"单次回复≤220字。");
     /* 当下情境：当前关卡/当日进度，供三段结构就地取材 */
     if(aq){
-      const host=NPC[aq.npc]?NPC[aq.npc].name:aq.npc;
+      const host=NPC[aq.npc]
+        ?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(aq.npc,NPC[aq.npc].name):NPC[aq.npc].name)
+        :aq.npc;
       sys+="\n【当下情境】玩家在第"+st.day+"日，在途关卡「"+aq.name+"」（"+aq.tlabel+"，约"+aq.dur+"分钟，接洽人："+host+"），要求："+(aq.goal||"通关")+"。";
     }else{
       sys+="\n【当下情境】玩家在第"+st.day+"日，今日关卡已清——可引导其巡夜温故、上星盘清错题，或预告下一幕。";
@@ -239,13 +247,14 @@ const WDChat={
     const persona=st.personas[npcId]&&st.personas[npcId].card;
     const customPersona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
     const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
+    const dispTitle=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(npcId,npc.title):(npc.title||"");
     const hist=this.historyOf(npcId,6);
     let ctx="游戏背景：\n"+JSON.stringify(this.worldBrief())
-      +"\n\n角色信息："+JSON.stringify({姓名:dispName,称号:npc.title,背景:npc.intro})
+      +"\n\n角色信息："+JSON.stringify({姓名:dispName,称号:dispTitle,背景:npc.intro})
       +(customPersona?("\n用户设定角色基准："+customPersona):"")
       +(persona?("\n已确认人设："+JSON.stringify(persona)):"")
       +"\n\n当前游戏状态：第"+st.day+"日，已解锁至第"+st.unlocked+"日，修行"+st.xp+"，等级Lv."+CTX.level()
-      +(aq?("\n当前关卡："+JSON.stringify({名称:aq.name,类型:aq.tlabel,时长:aq.dur+"分钟",接洽NPC:(NPC[aq.npc]||{}).name||aq.npc,目标:aq.goal,建议动作:this.howTo(aq)}))
+      +(aq?("\n当前关卡："+JSON.stringify({名称:aq.name,类型:aq.tlabel,时长:aq.dur+"分钟",接洽NPC:(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(aq.npc,(NPC[aq.npc]||{}).name):((NPC[aq.npc]||{}).name||aq.npc),目标:aq.goal,建议动作:this.howTo(aq)}))
         :"\n当前关卡：今日已清（可引导巡夜温故/星盘错题/预告下一幕）")
       +"\n\n与玩家的历史互动（近期）："
       +(hist.length?hist.map(m=>(m.role==="player"?"玩家说":"你说")+"："+m.text).join("\n"):"（暂无）")
@@ -292,7 +301,8 @@ const WDChat={
     let task;
     if(aq){
       const host=NPC[aq.npc];
-      task=(host&&host.id!==npcId?("先去寻"+host.name+"接下「"):("这就去会会「"))+aq.name+"」——"+this.howTo(aq)+"，通关可得 "+aq.xp+" 修行、"+aq.coin+" 铜钱。";
+      const hn=host?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(host.id,host.name):host.name):aq.npc;
+      task=(host&&host.id!==npcId?("先去寻"+hn+"接下「"):("这就去会会「"))+aq.name+"」——"+this.howTo(aq)+"，通关可得 "+aq.xp+" 修行、"+aq.coin+" 铜钱。";
     }else{
       task="今日关卡已清，去巡夜重刷几张记忆卡，或上星盘会会错题妖，稳住道行。";
     }

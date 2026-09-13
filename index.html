@@ -746,6 +746,14 @@ const NPC_ROLE_KW={
 };
 function routeNpc(text){
   const raw=String(text||"");
+  /* 直接呼叫任一 NPC 的原名/自定义名/称号（不带 @ 也算点名） */
+  if(window.WDCfg){
+    for(const id of Object.keys(NPC)){
+      const n=NPC[id];
+      const names=[n.name,n.title, WDCfg.npcName(id,""), WDCfg.npcTitle(id,"")].filter(x=>x&&x.length>=2);
+      if(names.some(nm=>raw.includes(nm))) return id;
+    }
+  }
   for(const id in NPC_ROLE_KW){
     if(NPC_ROLE_KW[id].some(k=>raw.includes(k))) return id;
   }
@@ -753,19 +761,22 @@ function routeNpc(text){
   if(aq&&NPC[aq.npc]) return aq.npc;
   return "yunheng";
 }
+/* NPC 显示名/称号：玩家自定义优先，原始数据仅以 ID 索引 */
+function dName(id){ const n=NPC[id]; return (window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(id,n?n.name:id):(n?n.name:id); }
+function dTitle(id){ const n=NPC[id]; return (window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(id,n?(n.title||""):""):(n?(n.title||""):""); }
 /* 玩家口吻开场白：点击 NPC 名字时自动生成一句符合当下情境的玩家发言 */
 function playerOpener(npcId){
-  const n=NPC[npcId]||NPC.qingxuan;
+  const nm=dName(npcId);
   const aq=firstActiveQuest();
   const pool=aq?[
-    n.name+"，「"+aq.name+"」这一关我想先听你说说该怎么下手",
-    n.name+"，现下这桩「"+aq.name+"」，我该备些什么",
-    "正卡在「"+aq.name+"」——"+n.name+"，给我指条路",
-    n.name+"，这关的底细你给我透一透呗"
+    nm+"，「"+aq.name+"」这一关我想先听你说说该怎么下手",
+    nm+"，现下这桩「"+aq.name+"」，我该备些什么",
+    "正卡在「"+aq.name+"」——"+nm+"，给我指条路",
+    nm+"，这关的底细你给我透一透呗"
   ]:[
-    n.name+"，接下来我该往哪走",
-    n.name+"，今日的事都交割了，再给我派一桩？",
-    n.name+"，闲着也是闲着，说说前头的局势吧"
+    nm+"，接下来我该往哪走",
+    nm+"，今日的事都交割了，再给我派一桩？",
+    nm+"，闲着也是闲着，说说前头的局势吧"
   ];
   const seed=Date.now()+hashStr(pool.join());
   return pool[seed%pool.length];
@@ -775,14 +786,14 @@ function hashStr(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i
 function npcAnswer(targets,text){
   const all=targets.length>1;
   typing(true,all);
-  toast(all?"各位已收到喊话……":"正在与"+NPC[targets[0]].name+"对话……");
+  toast(all?"各位已收到喊话……":"正在与"+dName(targets[0])+"对话……");
   let done=0;
   targets.forEach(id=>{
     aiRespond(id,text,all).then(r=>{
       st.dialogue.push({role:"npc",npc:id,text:r.text,at:new Date().toISOString(),day:st.day});
       if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
       save();
-      if(r.degraded) toast(NPC[id].name+"以本地话术接了话（AI暂不可用）");
+      if(r.degraded) toast(dName(id)+"以本地话术接了话（AI暂不可用）");
       if(++done===targets.length){ typing(false); renderChat(); } else renderChat(true);
     }).catch(()=>{ if(++done===targets.length){ typing(false); renderChat(); } });
   });
@@ -806,11 +817,11 @@ function yunhengProxy(text){
   const target=routeNpc(text);
   /* 如果路由结果就是云蘅自己，只回一句即可 */
   if(target==="yunheng"){ npcAnswer(["yunheng"],text); return; }
-  const n=NPC[target]||NPC.qingxuan;
+  const nm=dName(target);
   /* 云蘅先以引路人身份接住话，并替玩家引荐职能 NPC */
-  const proxyText="@"+n.name+" 这位道友问了「"+String(text).replace(/^@[^\s，。,,\s]+\s*/,"").slice(0,20)+"」——你来说说";
+  const proxyText="@"+nm+" 这位道友问了「"+String(text).replace(/^@[^\s，。,,\s]+\s*/,"").slice(0,20)+"」——你来说说";
   typing(true,true);
-  toast("云蘅正在为你引荐"+n.name+"……");
+  toast("云蘅正在为你引荐"+nm+"……");
   aiRespond("yunheng",proxyText,true).then(r=>{
     st.dialogue.push({role:"npc",npc:"yunheng",text:r.text,at:new Date().toISOString(),day:st.day});
     if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
@@ -884,12 +895,13 @@ function renderChat(keep){
     if(r.t==="sys") return `<div class="msg sysline"><div class="bubble" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>${esc(r.x)}</span>${r.qid?`<button class="btn sm ghost" data-open="${r.qid}" style="flex:none">回看</button>`:""}</div></div>`;
     if(r.t==="npc"){ const n=NPC[r.npc]||NPC.qingxuan;
       const dn=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(r.npc,n.name):n.name;
+      const dt=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(r.npc,n.title||""):(n.title||"");
       const rlist=r.refs&&r.refs.length?r.refs:(r.qid?[{qid:r.qid}]:[]);
       const chips=rlist.map(x=>{ const qq=QMAP[x.qid]; return qq?`<button class="qref" data-ref="${qq.id}">📜 ${esc(qq.name)}</button>`:""; }).join("");
       const navSrc=(window.WDCfg&&WDCfg.avatarURL(r.npc))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):"");
       const av=navSrc?`<img class="pixav" src="${navSrc}" alt="" onerror="this.onerror=null;this.src='${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):""}'">`:esc(dn[0]);
       return `<div class="msg"><div class="avatar">${av}</div><div class="body">
-      <div class="name"><span class="nl" data-npc="${r.npc}" title="点击与${esc(dn)}对话">${esc(dn)}</span> · ${esc(n.title)}</div>
+      <div class="name"><span class="nl" data-npc="${r.npc}" title="点击与${esc(dn)}对话">${esc(dn)}</span>${dt?" · "+esc(dt):""}</div>
       <div class="bubble">${esc(r.x)}</div>
       ${chips?`<div class="qrefs">${chips}</div>`:""}</div></div>`; }
     if(r.t==="player"){ const uav=uavSrc?`<img class="pixav" src="${uavSrc}" alt="我" onerror="this.onerror=null;this.src='${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL("_player"):""}'">`:"　";
@@ -1077,14 +1089,14 @@ function openQuest(qid){
       }
       host.innerHTML=`<div class="descbox" style="border-left-color:var(--cyber);margin-bottom:10px">
         <div style="font-size:11px;color:var(--gold);margin-bottom:4px;letter-spacing:.08em">关卡 · ${esc(questMetaphor(q))}</div>
-        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(npc.name)}（${esc(npc.title)}）：<span style="color:var(--fg)">${esc(opening)}</span></div>
+        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(dName(npc.id))}${dTitle(npc.id)?"（"+esc(dTitle(npc.id))+"）":""}：<span style="color:var(--fg)">${esc(opening)}</span></div>
         ${body}
       </div>`;
     }
     function render(o){
       host.innerHTML=`<div class="descbox" style="border-left-color:var(--cyber);margin-bottom:10px">
         <div style="font-size:11px;color:var(--gold);margin-bottom:4px;letter-spacing:.08em">关卡 · ${esc(questMetaphor(q))}</div>
-        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(npc.name)}（${esc(npc.title)}）：<span style="color:var(--fg)">${esc(o.line)}</span></div>
+        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(dName(npc.id))}${dTitle(npc.id)?"（"+esc(dTitle(npc.id))+"）":""}：<span style="color:var(--fg)">${esc(o.line)}</span></div>
         ${o.metaphor?`<div style="font-size:12px;color:var(--gold);margin-bottom:6px;font-style:italic">「${esc(o.metaphor)}」</div>`:""}
         <div style="font-size:13px;color:var(--fg2);line-height:1.7">${esc(o.brief)}</div>
         <div style="font-size:10.5px;color:var(--dim);margin-top:4px">AI 生成 · 以界面点选为准，不偏离任务主线</div>
@@ -1093,7 +1105,7 @@ function openQuest(qid){
     if(!dsReady()){ fallback(); return; }
     const cached=st.aiBrief[q.id];
     if(cached){ render(cached); return; }
-    host.innerHTML=`<div class="note" style="font-size:12px;color:var(--dim)">✦ ${esc(npc.name)} 正在斟酌开场…</div>`;
+    host.innerHTML=`<div class="note" style="font-size:12px;color:var(--dim)">✦ ${esc(dName(npc.id))} 正在斟酌开场…</div>`;
     genQuestBrief(q).then(o=>{ st.aiBrief[q.id]=o; save(); if(ov.isConnected) render(o); })
       .catch(()=>{ if(ov.isConnected) fallback(); });   // 失败时降级到内置 NPC 叙事
   })();
@@ -1904,7 +1916,7 @@ function renderCfg(){
 
   /* ---- 头像 ---- */
   function paintGrid(){
-    const list=[{id:"_player",name:"我的头像"}].concat(D.npcs.map(n=>({id:n.id,name:n.name})));
+    const list=[{id:"_player",name:"我的头像"}].concat(D.npcs.map(n=>({id:n.id,name:WDCfg.npcName(n.id,n.name)})));
     const g=$("#avGrid",ov);
     g.innerHTML=list.map(x=>`<div class="avcell"><div class="avbox"><img src="${avOf(x.id)}" alt="" onerror="this.style.display='none'"></div>
       <div class="avnm">${esc(x.name)}</div>
@@ -1945,10 +1957,13 @@ function renderCfg(){
     const g=$("#npcList",ov);
     g.innerHTML=D.npcs.map(n=>{
       const cn=WDCfg.npcName(n.id,n.name);
+      const ct=WDCfg.npcTitle(n.id,n.title||"");
       const cp=WDCfg.npcPersona(n.id);
       return `<div class="npcfgcard">
-        <div class="cfgrow"><label>原名</label><span class="small">${esc(n.name)} · ${esc(n.title||"")}</span></div>
-        <div class="cfgrow"><label>自定义名</label><input type="text" data-nn="${n.id}" maxlength="12" placeholder="${esc(n.name)}" value="${esc(cn)}"></div>
+        <div class="cfgrow"><label>角色ID</label><span class="small">${esc(n.id)}（系统固定，不可改）</span></div>
+        <div class="cfgrow"><label>原始名衔</label><span class="small">${esc(n.name)}${n.title?" · "+esc(n.title):""}</span></div>
+        <div class="cfgrow"><label>自定义名</label><input type="text" data-nn="${n.id}" maxlength="12" placeholder="${esc(n.name)}" value="${esc(cn===n.name?"":cn)}"></div>
+        <div class="cfgrow"><label>自定义称号</label><input type="text" data-nt="${n.id}" maxlength="16" placeholder="${esc(n.title||"称号")}" value="${esc(ct===(n.title||"")?"":ct)}"></div>
         <div class="cfgrow" style="align-items:flex-start"><label>人设描述</label><textarea data-np="${n.id}" maxlength="300" rows="3" placeholder="描述该角色的性格、说话风格、与玩家的关系等基准信息，AI 将以此为参考生成符合预期的对话">${esc(cp)}</textarea></div>
         <div class="small" id="npcMsg_${n.id}" style="color:var(--ok)"></div>
       </div>`;
@@ -1959,6 +1974,13 @@ function renderCfg(){
         const id=inp.dataset.nn;
         WDCfg.setNpcName(id,inp.value.trim());
         const m=$("#npcMsg_"+id,ov); if(m){ m.textContent="名字已保存 · 对话即刻生效"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2000); }
+      };
+    });
+    g.querySelectorAll("[data-nt]").forEach(inp=>{
+      inp.onblur=()=>{
+        const id=inp.dataset.nt;
+        WDCfg.setNpcTitle(id,inp.value.trim());
+        const m=$("#npcMsg_"+id,ov); if(m){ m.textContent="称号已保存 · 对话即刻生效"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2000); }
       };
     });
     g.querySelectorAll("[data-np]").forEach(ta=>{
@@ -2055,7 +2077,7 @@ function renderMem(){
     let best=1e9; done.forEach(x=>{ const d=r.done[x].durS; if(d>0&&d<best)best=d; });
     const wrongs=Object.keys(r.wrongs).map(k=>[k,r.wrongs[k].n]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
     const dig=WDMem.digest(id);
-    return `<div class="memcard"><b>${esc(n?n.name:id)}</b>${n&&n.title?" · "+esc(n.title):""}
+    return `<div class="memcard"><b>${esc(dName(id))}</b>${dTitle(id)?" · "+esc(dTitle(id)):""}
       <br>遇见 ${r.meet} · 对话 ${r.talks} · 同行修习 ${Math.round(r.learnMin)} 分钟
       <br>已封印 ${done.length} 个任务（一次通关 ${one}${best<1e9?" · 最快 "+memFmt(best):""}） · 在途 ${Object.keys(r.entered).length}
       ${wrongs.length?"<br>错题集中："+wrongs.map(x=>esc(x[0])+"×"+x[1]).join("、"):""}
@@ -2093,7 +2115,7 @@ function renderAch(){
 function renderHeart(){
   const ov=panel(`<h2>心语</h2><div class="mt">好感对话 · 完成任务可提升好感</div>`+
     D.npcs.map(n=>{ const fav=st.fav[n.id]||0; const hs=D.hearts[n.id]||[]; const seen=st.seenHearts[n.id]||[];
-      return `<div class="heart"><div class="hn">${esc(n.name)} <span class="ht">${esc(n.title)} · 好感 ${fav}</span></div></div>`+
+      return `<div class="heart"><div class="hn">${esc(dName(n.id))} <span class="ht">${esc(dTitle(n.id))} · 好感 ${fav}</span></div></div>`+
         hs.map(h=>{ const ok=fav>=h.at;
           return `<div class="heart${ok?"":" locked"}"><div class="ht">${ok?`好感 ≥ ${h.at}`:`好感 ≥ ${h.at} 解锁`}</div>
           <div class="hl">${ok?esc(h.t):"？？？"}</div></div>`;}).join("");
@@ -2149,7 +2171,7 @@ async function genPersona(npcId, feedback){
   const persona=st.personas[npcId];
   const sys="你是游戏角色设定师。基于给定的游戏世界背景与NPC基础信息，产出严谨的角色人设卡片。只输出JSON。";
   const user="游戏背景信息：\n"+JSON.stringify(buildWorldBrief(),null,1)
-    +"\n\n要设定的NPC："+JSON.stringify({姓名:npc.name,称号:npc.title,背景:npc.intro})
+    +"\n\n要设定的NPC："+JSON.stringify({id:npcId,姓名:dName(npcId),称号:dTitle(npcId),背景:npc.intro})
     +(persona?("\n\n当前已有人设（供参考）："+JSON.stringify(persona.card)):"")
     +(feedback?("\n\n用户的修改意见（必须采纳）："+feedback):"")
     +"\n\n请输出JSON，字段：name(姓名)、identity(身份背景，30-50字)、personality(性格特征，3-4个短语)、style(对话风格描述)、relations(与其他角色关系数组，每项{name,rel})。人设要贴合北京导游备考世界观，性格鲜明、可信。";
@@ -2157,14 +2179,14 @@ async function genPersona(npcId, feedback){
   let card;
   try{ card=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) card=JSON.parse(m[0]); else throw e; }
-  card.id=npcId; card.name=card.name||npc.name;
+  card.id=npcId; card.name=card.name||dName(npcId);
   return card;
 }
 /* 生成任务说明：游戏隐喻叙事 + 背景故事 + 知识拓展（替代旧版独立任务描述模块） */
 async function genQuestBrief(q){
   const npc=NPC[q.npc]||NPC.qingxuan;
   const persona=st.personas[q.npc]&&st.personas[q.npc].card;
-  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容。玩家在做任务=网络游戏行为（开荒副本/砍怪/刷本/团战），NPC与玩家是游戏世界里的并肩关系，绝非师生。要求：\n1. 用游戏隐喻解释任务：任务是一个具体的游戏化关卡——秘境探幽、妖兽战斗、谜题破解、咒文吟诵、攻城之战等，必须使用任务卡上标注的关卡名与难度层级\n2. 描述关卡背景故事，融入『遗忘迷雾/问道录/引灯人』仙侠世界观\n3. 根据任务知识点提供适度拓展信息，帮助理解记忆\n4. 不剧透未解锁环节，不跑题，不给考试答案\n5. NPC台词像网游NPC：简短、有性格、有江湖气，可用游戏黑话（开荒/掉落/翻车/通关）；禁用教书先生口吻（掌握了/要记住/同学们/好好复习）\n6. 严禁AI腔：不用'首先/其次/总之/综上'，不排比堆砌，不空洞夸奖，句子长短错落\n7. 只输出JSON";
+  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容。玩家在做任务=网络游戏行为（开荒副本/砍怪/刷本/团战），NPC与玩家是游戏世界里的并肩关系，绝非师生。要求：\n1. 用游戏隐喻解释任务：任务是一个具体的游戏化关卡——秘境探幽、妖兽战斗、谜题破解、咒文吟诵、攻城之战等，必须使用任务卡上标注的关卡名与难度层级\n2. 描述关卡背景故事，融入『导游异次元/遗忘之雾/传奇导游/导游试炼』世界观（玩家是误入导游异次元的外来者，唯有通关导游试炼驱逐遗忘之雾才能重返家园）\n3. 根据任务知识点提供适度拓展信息，帮助理解记忆\n4. 不剧透未解锁环节，不跑题，不给考试答案\n5. NPC台词像网游NPC：简短、有性格、有江湖气，可用游戏黑话（开荒/掉落/翻车/通关）；禁用教书先生口吻（掌握了/要记住/同学们/好好复习）\n6. 严禁AI腔：不用'首先/其次/总之/综上'，不排比堆砌，不空洞夸奖，句子长短错落\n7. 只输出JSON";
   // 汇总本任务试炼涉及的考点，供 AI 拓展
   const quiz=D.quizzes[q.id]||[];
   const pids=[...new Set(quiz.map(z=>z.pid).filter(Boolean))];
@@ -2180,7 +2202,7 @@ async function genQuestBrief(q){
     return o?(o.name+" "+o.words+"词"):"";
   }).filter(Boolean).join("、");
   const user="游戏背景信息：\n"+JSON.stringify(buildWorldBrief())
-    +"\n\n当前任务："+JSON.stringify({日次:q.day,环节:q.name,类型:q.tlabel,目标:q.goal,NPC:npc.name+"·"+npc.title,关卡定位:questMetaphor(q)})
+    +"\n\n当前任务："+JSON.stringify({日次:q.day,环节:q.name,类型:q.tlabel,目标:q.goal,NPC:dName(q.npc)+"·"+dTitle(q.npc),关卡定位:questMetaphor(q)})
     +(persona?("\n\n该NPC已确认人设，台词必须符合："+JSON.stringify(persona)):"")
     +(knowledge?("\n\n任务涉及知识点（可在说明中自然拓展）：\n"+knowledge):"")
     +(oralInfo?("\n\n涉及英文导游词："+oralInfo):"")
@@ -2394,7 +2416,7 @@ function openPersonaPanel(){
     <div class="kitbar" style="margin-top:6px"><button class="btn sm" data-grow="${n.id}" type="button">🌙 推演角色成长</button></div>
     <div id="gr_${n.id}" class="small" style="font-size:12px;color:var(--gold)"></div>`;
     return `<div class="book" id="pc_${n.id}">
-      <div class="bp"><img src="${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(n.id):""}" alt="" style="width:24px;height:24px;image-rendering:pixelated;vertical-align:-6px;margin-right:6px"><span class="pid">${esc(n.name)}</span><em>${esc(n.title)}</em> ${status}</div>
+      <div class="bp"><img src="${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(n.id):""}" alt="" style="width:24px;height:24px;image-rendering:pixelated;vertical-align:-6px;margin-right:6px"><span class="pid">${esc(dName(n.id))}</span><em>${esc(dTitle(n.id))}</em> ${status}</div>
       ${c?`<div style="font-size:13px;line-height:1.7">
         <div><b style="color:var(--neon)">身份：</b>${esc(c.identity||"")}</div>
         <div><b style="color:var(--neon)">性格：</b>${esc(Array.isArray(c.personality)?c.personality.join("、"):c.personality)}</div>
@@ -2467,6 +2489,13 @@ function parseMention(text){
   // @所有人/各位/全员/大家 → 全员应答
   if(/^(所有人|各位|全员|大家|全部|所有人呢|都有)$/.test(tok)) return "__ALL__";
   for(const id in MENTION_ALIASES){ if(MENTION_ALIASES[id].some(a=>tok===a||tok.startsWith(a)||a.startsWith(tok)&&tok.length>=2)) return id; }
+  // 玩家自定义名/称号同样可被 @ 触发（ID 仍为系统固定值）
+  if(window.WDCfg){
+    for(const id of Object.keys(NPC)){
+      const cn=WDCfg.npcName(id,""), ct=WDCfg.npcTitle(id,"");
+      if((cn&&(tok===cn||tok.startsWith(cn)))||(ct&&(tok===ct||tok.startsWith(ct)))) return id;
+    }
+  }
   return null;
 }
 /* 网络检索 / 资料库匹配 / 对话生成已整体移入独立模块 wd-chat.js（window.WDChat），

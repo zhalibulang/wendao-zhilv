@@ -279,15 +279,42 @@ const driver=`
     reset(); renderCfg();
     WDCfg.set('address','上仙'); renderMem();
   });
-  run('WDCfg NPC名字/人设自定义',()=>{
+  run('WDCfg NPC名字/称号/人设自定义',()=>{
     reset();
     WDCfg.setNpcName('qingxuan','老青');
     if(WDCfg.npcName('qingxuan','青玄')!=='老青')throw new Error('自定义名字未生效');
+    WDCfg.setNpcTitle('qingxuan','灯首');
+    if(WDCfg.npcTitle('qingxuan','掌灯真人')!=='灯首')throw new Error('自定义称号未生效');
     WDCfg.setNpcPersona('qingxuan','性格沉稳，说话慢条斯理');
     if(WDCfg.npcPersona('qingxuan')!=='性格沉稳，说话慢条斯理')throw new Error('人设描述未存储');
-    // 空自定义名应回退原名
-    WDCfg.setNpcName('smq','');
+    // 空自定义名/称号应回退原值；ID 不变
+    WDCfg.setNpcName('smq',''); WDCfg.setNpcTitle('smq','');
     if(WDCfg.npcName('smq','司马青')!=='司马青')throw new Error('空自定义名应回退原名');
+    if(WDCfg.npcTitle('smq','山河剑客')!=='山河剑客')throw new Error('空自定义称号应回退原称号');
+  });
+  run('默认世界观重构：导游异次元+遗忘怪',()=>{
+    reset();
+    const wb=WDChat.worldBrief();
+    if(typeof wb!=='object')throw new Error('默认世界观应为结构对象');
+    if(!wb.世界观.includes('导游异次元'))throw new Error('新世界观未生效');
+    if(!wb.隐喻系统.includes('遗忘怪'))throw new Error('新隐喻系统未生效');
+    if(!Array.isArray(wb.NPC基础信息)||!wb.NPC基础信息[0].id)throw new Error('NPC 信息须保留 ID');
+    // 自定义名/称号应进入背景信息，ID 保持系统值
+    WDCfg.setNpcName('xuanji','星官'); WDCfg.setNpcTitle('xuanji','观星主簿');
+    const wb2=WDChat.worldBrief();
+    const xj=wb2.NPC基础信息.find(n=>n.id==='xuanji');
+    if(xj.姓名!=='星官'||xj.称号!=='观星主簿')throw new Error('自定义名衔未进入NPC基础信息');
+  });
+  run('宿主 dName/dTitle 与点名路由',()=>{
+    reset();
+    WDCfg.setNpcName('qingxuan',''); WDCfg.setNpcTitle('qingxuan','');
+    if(dName('qingxuan')!=='青玄先生')throw new Error('默认显示名异常：'+dName('qingxuan'));
+    WDCfg.setNpcName('tiemian','老塔');
+    if(dName('tiemian')!=='老塔')throw new Error('dName 未读自定义');
+    // 不带@直接呼叫自定义名也能路由到该 NPC
+    if(routeNpc('老塔，问个事')!=='tiemian')throw new Error('自定义名未参与点名路由');
+    // @自定义名可解析
+    if(parseMention('@老塔 在吗')!=='tiemian')throw new Error('@自定义名解析失败');
   });
   run('WDCfg 游戏背景信息自定义',()=>{
     reset();
