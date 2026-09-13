@@ -3,7 +3,8 @@ const fs = require('fs');
 
 function makeEl(tag){
   const el = {
-    tagName:(tag||'div').toUpperCase(), children:[], style:{}, dataset:{},
+    tagName:(tag||'div').toUpperCase(), children:[], dataset:{},
+    style:{_v:{},setProperty(k,v){this._v[k]=v;},getProperty(k){return this._v[k];}},
     classList:{_s:new Set(),add(...c){c.forEach(x=>this._s.add(x));},remove(...c){c.forEach(x=>this._s.delete(x));},
       toggle(c,f){f?this._s.add(c):this._s.delete(c);},contains(c){return this._s.has(c);}},
     _html:'',_text:'',value:'',disabled:false,type:'',
@@ -369,6 +370,103 @@ const driver=`
     const s=WDChat.sysPrompt('qingxuan',false);
     if(!s.includes('老青'))throw new Error('自定义名字未注入prompt');
     if(!s.includes('沉稳寡言的剑客'))throw new Error('自定义人设未注入prompt');
+  });
+  /* ===== 云蘅结算接棒 + 任务树可点 + 置底任务卡 + 折叠（本轮需求）===== */
+  run('云蘅五幕引路词全覆盖',()=>{
+    for(let a=1;a<=5;a++) if(!NPC_MATRIX.yunheng['act'+a])throw new Error('云蘅缺 act'+a+' 引路词');
+    if(!npcActTopic('yunheng'))throw new Error('云蘅当前幕话题缺失');
+  });
+  run('任务树叶子可点击（data-leaf 不被 data-toggle 拦截）',()=>{
+    reset();
+    const tree=buildQuestTree();
+    const dayNode=tree[0].children[0];
+    const leafHtml=renderTreeNode(dayNode.children[0]);
+    if(!leafHtml.includes('data-leaf='))throw new Error('叶子行缺 data-leaf');
+    if(leafHtml.includes('data-toggle'))throw new Error('叶子行不得含 data-toggle（会拦截点击）');
+    const dayHtml=renderTreeNode(dayNode);
+    if(!dayHtml.includes('data-toggle='))throw new Error('日节点缺 data-toggle（折叠失效）');
+    if(!dayHtml.includes('data-expanded='))throw new Error('日节点缺展开态');
+  });
+  run('云蘅结算回应：任务NPC之后接棒且含三要素',()=>{
+    reset(); st.unlocked=1;
+    const q=D.quests.find(x=>x.id==='D01M');
+    settleQuest(q,true,null);
+    const idxAck=st.dialogue.findIndex(m=>m.role==='npc'&&m.npc===q.npc&&(m.text||'').includes('已交付'));
+    const idxYh=st.dialogue.findIndex(m=>m.role==='npc'&&m.npc==='yunheng');
+    if(idxAck<0)throw new Error('任务NPC结算回复缺失');
+    if(idxYh<0)throw new Error('云蘅结算回应缺失');
+    if(idxYh<idxAck)throw new Error('云蘅必须在任务NPC结算回复之后接棒');
+    const ym=st.dialogue[idxYh], t=ym.text;
+    if(!t.includes(q.name))throw new Error('缺任务总结（关卡名）');
+    if(!t.includes('+'+q.xp+'修行'))throw new Error('缺收获数字');
+    if(!/全对|磕绊|星盘/.test(t))throw new Error('缺经验分析');
+    if(!/下一关|巡夜/.test(t))throw new Error('缺下一步引导');
+    if(!ym.refs||!ym.refs.some(x=>x.qid===q.id))throw new Error('云蘅回应缺已完成任务ref');
+    if(!qDone(q.id)||st.xp<q.xp)throw new Error('结算未生效（done/修行）');
+  });
+  run('云蘅结算回应：试炼有错时引导星盘清错',()=>{
+    reset(); st.unlocked=1;
+    const q=D.quests.find(x=>x.id==='D01M');
+    settleQuest(q,false,null);
+    const yh=st.dialogue.filter(m=>m.role==='npc'&&m.npc==='yunheng').pop();
+    if(!/磕绊|星盘/.test(yh.text))throw new Error('有错时应提示复盘/星盘');
+  });
+  run('对话流置底当前任务卡（无打字态时位于末尾）',()=>{
+    reset(); st.unlocked=1;
+    let captured=null; const oqs=document.querySelector;
+    document.querySelector=function(s,el){ const r=oqs.call(document,s,el); if(s==='#stream') captured=r; return r; };
+    try{ renderChat(); }finally{ document.querySelector=oqs; }
+    if(!captured)throw new Error('未捕获#stream');
+    const h=captured.innerHTML;
+    if(!h.includes('pinwrap')||!h.includes('当前任务'))throw new Error('置底任务卡缺失');
+    const aq=firstActiveQuest();
+    if(!aq)throw new Error('首日应有在途任务');
+    if(!h.includes('data-q="'+aq.id+'"'))throw new Error('置底卡未指向当前在途任务');
+    if(h.lastIndexOf('pinwrap')<h.lastIndexOf('statbar'))throw new Error('置底卡应位于流末尾');
+  });
+  run('无在途任务时置底卡显示引导',()=>{
+    reset();
+    for(let day=1;day<=45;day++)for(const q of byDay[day].quests)st.done[q.id]=new Date().toISOString();
+    let captured=null; const oqs=document.querySelector;
+    document.querySelector=function(s,el){ const r=oqs.call(document,s,el); if(s==='#stream') captured=r; return r; };
+    try{ renderChat(); }finally{ document.querySelector=oqs; }
+    const h=captured?captured.innerHTML:'';
+    if(!h.includes('当前无在途关卡'))throw new Error('无在途任务时应显示引导置底卡');
+    if(!/巡夜|星盘/.test(h.slice(h.lastIndexOf('pinwrap'))))throw new Error('引导缺巡夜/星盘去向');
+  });
+  run('已完成任务折叠/展开',()=>{
+    reset(); st.unlocked=1; st.done['D01M']=new Date().toISOString();
+    let captured=null; const oqs=document.querySelector;
+    document.querySelector=function(s,el){ const r=oqs.call(document,s,el); if(s==='#stream') captured=r; return r; };
+    try{ renderChat(); }finally{ document.querySelector=oqs; }
+    let h=captured?captured.innerHTML:'';
+    if(!h.includes('data-fold="D01M"')||!h.includes('data-foldhead="D01M"'))throw new Error('已完成任务未渲染为折叠链接');
+    if(h.includes('qfoldbody'))throw new Error('默认应为折叠态');
+    st._qFold=st._qFold||{}; st._qFold['D01M']=true;
+    document.querySelector=function(s,el){ const r=oqs.call(document,s,el); if(s==='#stream') captured=r; return r; };
+    try{ renderChat(true); }finally{ document.querySelector=oqs; }
+    h=captured.innerHTML;
+    if(!h.includes('qfoldbody')||!h.includes('data-open="D01M"'))throw new Error('展开后缺完整任务卡/回看按钮');
+  });
+  run('最新NPC回复自动关联当前任务chip',()=>{
+    reset(); st.unlocked=1;
+    st.dialogue.push({role:'player',text:'随便聊聊',at:new Date().toISOString()});
+    st.dialogue.push({role:'npc',npc:'qingxuan',text:'雾里自有一段路要走',at:new Date().toISOString()});
+    let captured=null; const oqs=document.querySelector;
+    document.querySelector=function(s,el){ const r=oqs.call(document,s,el); if(s==='#stream') captured=r; return r; };
+    try{ renderChat(); }finally{ document.querySelector=oqs; }
+    const h=captured?captured.innerHTML:'';
+    const aq=firstActiveQuest();
+    if(!h.includes('↪ 当前任务'))throw new Error('最新NPC回复未自动关联当前任务');
+    if(!h.includes('data-ref="'+aq.id+'"'))throw new Error('chip 未指向在途任务');
+    if(h.split('↪ 当前任务').length-1!==1)throw new Error('仅最新一条应自动关联');
+  });
+  run('sysPrompt 要求回复点出当前关卡名',()=>{
+    reset(); st.unlocked=1;
+    const aq=firstActiveQuest();
+    const s=WDChat.sysPrompt('qingxuan',false);
+    if(!s.includes('「'+aq.name+'」'))throw new Error('sysPrompt未注入当前关卡名');
+    if(!s.includes('至少自然点到一次'))throw new Error('缺对话-任务关联硬约束');
   });
   /* 异步收尾：respond 未配置 AI 时应同步降级为本地话术（永不 reject） */
   (async()=>{

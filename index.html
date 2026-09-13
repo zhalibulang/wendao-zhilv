@@ -78,6 +78,23 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .qcard.done{opacity:.75;border-color:var(--border)}
 .qcard.done .qn::after{content:" ✓";color:var(--ok)}
 .qcard.now{border-color:var(--neon)}
+/* 置底当前任务卡（需求2a） */
+.pinwrap{margin-top:16px;border:2px solid var(--neon);background:rgba(0,229,255,.05);box-shadow:0 0 12px rgba(0,229,255,.22);padding:8px 10px}
+.pinwrap .pinhead{font-size:11px;letter-spacing:.2em;color:var(--neon);margin-bottom:2px}
+.pinwrap .qcard{margin-top:6px;box-shadow:2px 2px 0 #000}
+.pinwrap.idle{border-color:var(--border-lit);background:var(--bg2);box-shadow:none}
+.pinwrap.idle .pinhead{color:var(--gold)}
+.pinwrap .pintip{font-size:12.5px;color:var(--fg2);padding:4px 2px}
+/* 已完成任务折叠（需求2c） */
+.qfold{margin-top:10px}
+.qfoldhead{display:flex;align-items:center;gap:7px;border:1px dashed var(--border-lit);background:var(--bg2);padding:7px 10px;font-size:12px;color:var(--fg2);cursor:pointer;max-width:100%}
+.qfoldhead:hover{background:var(--bg)}
+.qfoldhead .fcar{color:var(--gold);font-size:10px;flex:none}
+.qfoldhead .ftext{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qfoldhead .fhint{margin-left:auto;font-size:10.5px;color:var(--dim);flex:none}
+.qfoldbody{margin-top:6px}
+/* 最新回复自动关联当前任务 chip（需求2b） */
+.qref.cur{border-color:var(--neon);color:var(--neon);background:rgba(0,229,255,.14)}
 .nowtag{font-size:10.5px;color:#1a0f2e;background:var(--neon);padding:2px 8px;margin-left:8px;letter-spacing:.12em;box-shadow:1px 1px 0 #000;font-weight:600}
 .donetag{color:var(--ok);font-size:12px;margin-right:8px;white-space:nowrap}
 .btn{display:inline-block;border:2px solid var(--border-lit);background:linear-gradient(180deg,var(--bg3) 0%,var(--bg2) 100%);color:var(--fg);font:inherit;font-size:13.5px;
@@ -484,7 +501,7 @@ if(!NPC.yunheng){
   D.npcs.unshift(GUIDE); NPC.yunheng=GUIDE;
 }
 const NPC_MATRIX={
-  yunheng:{act1:"先随我识一遍同行诸人——导游试炼的路，要分给能担起来的人。",act2:"律法塔就在前方，铁面先生候你多时；我为你引路。",act3:"行会风云起，柳首座的纱幕之后藏着整团人心，随我来。",act4:"星轨已明，玄机夫人的观星台在遗迹最高处。"},
+  yunheng:{act1:"先随我识一遍同行诸人——导游试炼的路，要分给能担起来的人。",act2:"律法塔就在前方，铁面先生候你多时；我为你引路。",act3:"行会风云起，柳首座的纱幕之后藏着整团人心，随我来。",act4:"星轨已明，玄机夫人的观星台在遗迹最高处。",act5:"金榜台已近——最后一段雾路，我送你到台下。"},
   qingxuan:{act1:"山河游学，先理文脉——把考点当封印，一枚枚激活。",act2:"塔律文脉：法条幽深，我替你先理一寸脉络。",act3:"文脉识人心：带团如理脉，先理清游客要看的景。",act4:"脉映星图：北京风物是这道文脉最后一程。"},
   smq:{act1:"山河志第一页——三千年的城，从蓟城讲到大都。",act2:"剑指塔律：文物法规如剑谱，一式不可错。",act3:"行会演武：带团节奏如剑招，快慢全在蓄与发。",act4:"遗迹访古：木构斗拱，是我剑下最后的对手。"},
   tiemian:{act1:"新丁先立规矩：考规如塔基，逾矩者塔门不启。",act2:"一百零八道法条如剑阵，错一道便放遗忘怪出关。",act3:"行会合同与投诉，是塔外的妖——同样归我管。",act4:"遗迹保护条例的封印也在塔上，携卷而来。"},
@@ -492,7 +509,7 @@ const NPC_MATRIX={
   moxiaogu:{act1:"机关匣已就位！四百余枚知识符印等你来点数！",act2:"新铸律法锁三十把——法规题在这里排队咬人！",act3:"行会账目题最绕，我的算签都不够用了！",act4:"遗迹星符对谜——古建题妖最狡猾！"},
   xuanji:{act1:"星盘初启：错题妖尚幼，趁早记下它们的模样。",act2:"星照塔律：你错过的法条妖，会在我盘里发亮。",act3:"实务之错最隐晦，星盘替你一一显形。",act4:"收服错题妖，就在这最后一幕——别留妖过夜。"}
 };
-function curActN(){ let n=1; DAYS.forEach(d=>{ if(st&&st.day>=d.day&&d.act){ const v=+d.act.slice(3); if(v>n) n=v; } }); return Math.min(4,Math.max(1,n)); }
+function curActN(){ let n=1; DAYS.forEach(d=>{ if(st&&st.day>=d.day&&d.act){ const v=+d.act.slice(3); if(v>n) n=v; } }); return Math.min(5,Math.max(1,n)); }
 function npcActTopic(id){ const m=NPC_MATRIX[id]; return m&&m["act"+curActN()]; }
 /* v2：任务以 day 字段关联，装载时挂回 day 对象（主线优先排序） */
 DAYS.forEach(d=>{ d.quests=[]; });
@@ -789,7 +806,7 @@ function playerOpener(npcId){
   return pool[seed%pool.length];
 }
 function hashStr(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h; }
-/* 统一应答：把玩家发言落档 → 指定 NPC 群聊接话（永不冷场） */
+/* 统一应答：把玩家发言落档 → 指定 NPC 群聊接话（永不冷场）；落档注入当前任务 refs（需求2b） */
 function npcAnswer(targets,text){
   const all=targets.length>1;
   typing(true,all);
@@ -797,7 +814,10 @@ function npcAnswer(targets,text){
   let done=0;
   targets.forEach(id=>{
     aiRespond(id,text,all).then(r=>{
-      st.dialogue.push({role:"npc",npc:id,text:r.text,at:new Date().toISOString(),day:st.day});
+      const aqR=firstActiveQuest();
+      const m={role:"npc",npc:id,text:r.text,at:new Date().toISOString(),day:st.day};
+      if(!r.refs&&aqR) m.refs=[{qid:aqR.id}];   // 关联当前在途任务，流内可跳转
+      st.dialogue.push(m);
       if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
       save();
       if(r.degraded) toast(dName(id)+"以本地话术接了话（AI暂不可用）");
@@ -830,12 +850,18 @@ function yunhengProxy(text){
   typing(true,true);
   toast("云蘅正在为你引荐"+nm+"……");
   aiRespond("yunheng",proxyText,true).then(r=>{
-    st.dialogue.push({role:"npc",npc:"yunheng",text:r.text,at:new Date().toISOString(),day:st.day});
+    const aqP=firstActiveQuest();
+    const m={role:"npc",npc:"yunheng",text:r.text,at:new Date().toISOString(),day:st.day};
+    if(!r.refs&&aqP) m.refs=[{qid:aqP.id}];
+    st.dialogue.push(m);
     if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
     save(); renderChat(true);
     /* 紧接着职能 NPC 回应玩家原话 */
     aiRespond(target,text,true).then(r2=>{
-      st.dialogue.push({role:"npc",npc:target,text:r2.text,at:new Date().toISOString(),day:st.day});
+      const aqP2=firstActiveQuest();
+      const m2={role:"npc",npc:target,text:r2.text,at:new Date().toISOString(),day:st.day};
+      if(!r2.refs&&aqP2) m2.refs=[{qid:aqP2.id}];
+      st.dialogue.push(m2);
       if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
       save(); typing(false); renderChat();
     }).catch(()=>{ typing(false); renderChat(); });
@@ -878,6 +904,17 @@ function refineAction(id,q,extra){
     m.text=t; save(); renderChat();
   }).catch(()=>{});
 }
+/* 任务卡 HTML 构建器：流内任务卡与置底当前任务卡共用同一渲染 */
+function qcardHtml(q,firstActiveId){
+  const done=qDone(q.id); const un=questUnlocked(q);
+  const now=!done&&un&&q.id===firstActiveId;
+  return `<div class="qcard${done?" done":""}${un?"":" locked"}${now?" now":""}" data-q="${q.id}">
+    <div class="qn">${esc(q.name)}<span class="rk">${q.rarity==="epic"?"✦":q.rarity==="fine"?"•":""}</span>${now?'<span class="nowtag">进行中</span>':""}</div>
+    <div class="qg">${esc(q.goal)}</div>
+    <div class="qr"><span>+${q.xp} 修行</span><span>+${q.coin} 铜钱</span><span class="dur">${fmtDur(q.dur)}</span>
+    <span style="margin-left:auto">${done?"<span class='donetag'>✓ 已完成</span><button class='btn sm ghost' data-open='"+q.id+"'>回看</button>":un?`<button class="btn sm primary" data-open="${q.id}">进入</button>`:"🔒 前序未完"}</span></div>
+  </div>`;
+}
 function renderChat(keep){
   const view=$("#stream");
   if(!view) return; // 非对话视图（任务/星盘/弹层中触发行动报等）时静默跳过，下次进入对话视图重渲染
@@ -889,7 +926,11 @@ function renderChat(keep){
     for(const q of d.quests){ if(!qDone(q.id)&&questUnlocked(q)){ firstActive=q.id; break; } }
   }
   // Append persisted dialogue (player questions + NPC AI responses)
-  const allMsgs=stream.concat(st.dialogue.map(d=>({t:d.role,npc:d.npc,x:d.text,qid:d.qid,refs:d.refs})));
+  // 最新一条 NPC 回复打 _cur 标记：无显式 refs 时渲染层自动补「当前任务」关联 chip（需求2b）
+  const dlgMsgs=st.dialogue.map(d=>({t:d.role,npc:d.npc,x:d.text,qid:d.qid,refs:d.refs}));
+  let lastNpc=-1; dlgMsgs.forEach((m,i)=>{ if(m.t==="npc") lastNpc=i; });
+  if(lastNpc>=0&&!dlgMsgs[lastNpc].refs) dlgMsgs[lastNpc]._cur=true;
+  const allMsgs=stream.concat(dlgMsgs);
   /* 状态栏（需求4）：Lv/心气/灵力，置于流顶，不遮对话；refreshStat 每秒刷新 */
   const uavSrc=(window.WDCfg&&WDCfg.avatarURL("_player"))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL("_player"):"");
   const STATBAR=`<div id="statbar" class="statbar" role="status" aria-label="玩家状态">
@@ -899,12 +940,24 @@ function renderChat(keep){
   </div>`;
   let html=STATBAR+allMsgs.map(r=>{
     if(r.t==="sysday") return `<div class="sys daysep">${esc(r.x)}</div>`;
-    if(r.t==="sys") return `<div class="msg sysline"><div class="bubble" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>${esc(r.x)}</span>${r.qid?`<button class="btn sm ghost" data-open="${r.qid}" style="flex:none">回看</button>`:""}</div></div>`;
+    if(r.t==="sys"){
+      /* 已完成任务（需求2c）：折叠为可点链接行——点击展开完整任务卡，再点收起；回看按钮直达弹层 */
+      if(r.qid&&QMAP[r.qid]){
+        const folded=!(st._qFold&&st._qFold[r.qid]);
+        return `<div class="qfold" data-fold="${r.qid}">
+          <div class="qfoldhead" data-foldhead="${r.qid}"><span class="fcar">${folded?"▸":"▾"}</span><span class="ftext">${esc(r.x)}</span>
+          <span class="fhint">${folded?"展开":"收起"}</span>
+          <button class="btn sm ghost" data-open="${r.qid}" type="button" style="flex:none">回看</button></div>
+          ${folded?"":`<div class="qfoldbody"><div class="msg"><div class="avatar">　</div><div class="body" style="max-width:100%">${qcardHtml(QMAP[r.qid],firstActive)}</div></div></div>`}
+        </div>`;
+      }
+      return `<div class="msg sysline"><div class="bubble">${esc(r.x)}</div></div>`;
+    }
     if(r.t==="npc"){ const n=NPC[r.npc]||NPC.qingxuan;
       const dn=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(r.npc,n.name):n.name;
       const dt=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(r.npc,n.title||""):(n.title||"");
-      const rlist=r.refs&&r.refs.length?r.refs:(r.qid?[{qid:r.qid}]:[]);
-      const chips=rlist.map(x=>{ const qq=QMAP[x.qid]; return qq?`<button class="qref" data-ref="${qq.id}">📜 ${esc(qq.name)}</button>`:""; }).join("");
+      const rlist=r.refs&&r.refs.length?r.refs:(r.qid?[{qid:r.qid}]:(r._cur&&firstActive?[{qid:firstActive,cur:true}]:[]));
+      const chips=rlist.map(x=>{ const qq=QMAP[x.qid]; return qq?`<button class="qref${x.cur?" cur":""}" data-ref="${qq.id}"${x.cur?' title="跳到当前任务"':""}>${x.cur?"↪ 当前任务 · ":"📜 "}${esc(qq.name)}</button>`:""; }).join("");
       const navSrc=(window.WDCfg&&WDCfg.avatarURL(r.npc))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):"");
       const av=navSrc?`<img class="pixav" src="${navSrc}" alt="" onerror="this.onerror=null;this.src='${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):""}'">`:esc(dn[0]);
       return `<div class="msg"><div class="avatar">${av}</div><div class="body">
@@ -914,21 +967,23 @@ function renderChat(keep){
     if(r.t==="player"){ const uav=uavSrc?`<img class="pixav" src="${uavSrc}" alt="我" onerror="this.onerror=null;this.src='${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL("_player"):""}'">`:"　";
       return `<div class="msg me"><div class="body">
       <div class="bubble">${esc(r.x)}</div></div><div class="avatar uav">${uav}</div></div>`; }
-    if(r.t==="quest"){ const q=QMAP[r.qid]; if(!q) return ""; const done=qDone(q.id); const un=questUnlocked(q);
-      const now=!done&&un&&r.qid===firstActive;
-      return `<div class="msg"><div class="avatar">　</div><div class="body" style="max-width:100%">
-      <div class="qcard${done?" done":""}${un?"":" locked"}${now?" now":""}" data-q="${q.id}">
-        <div class="qn">${esc(q.name)}<span class="rk">${q.rarity==="epic"?"✦":q.rarity==="fine"?"•":""}</span>${now?'<span class="nowtag">进行中</span>':""}</div>
-        <div class="qg">${esc(q.goal)}</div>
-        <div class="qr"><span>+${q.xp} 修行</span><span>+${q.coin} 铜钱</span><span class="dur">${fmtDur(q.dur)}</span>
-        <span style="margin-left:auto">${done?"<span class='donetag'>✓ 已完成</span><button class='btn sm ghost' data-open='"+q.id+"'>回看</button>":un?`<button class="btn sm primary" data-open="${q.id}">进入</button>`:"🔒 前序未完"}</span></div>
-      </div></div></div>`; }
+    if(r.t==="quest"){ const q=QMAP[r.qid]; if(!q) return "";
+      return `<div class="msg"><div class="avatar">　</div><div class="body" style="max-width:100%">${qcardHtml(q,firstActive)}</div></div>`; }
     return "";
   }).join("");
   if(TYPING){
     html+=`<div class="msg"><div class="avatar">…</div><div class="body">
       <div class="name"><b>${TYPING.multi?"诸位 NPC":"NPC"}</b> 接话中</div>
       <div class="bubble typing"><span></span><span></span><span></span></div></div></div>`;
+  }
+  /* 置底当前任务卡（需求2a）：最新任务信息始终在流最下端，保持视觉优先可见 */
+  const aqPin=QMAP[firstActive];
+  if(aqPin){
+    html+=`<div class="pinwrap" id="pinQuest"><div class="pinhead">⬇ 当前任务</div>${qcardHtml(aqPin,firstActive)}</div>`;
+  }else{
+    const pd=byDay[st.day]||byDay[1], pp=dayProg(pd);
+    html+=`<div class="pinwrap idle" id="pinQuest"><div class="pinhead">⬇ 当前无在途关卡</div>
+      <div class="pintip">${pp.all>0&&pp.n===pp.all?"今日 "+pp.n+"/"+pp.all+" 圆满——去巡夜温故，或上星盘清错题。":"此刻没有可进入的关卡——去「任务」页纵览全程，先破前序解锁下一环。"}</div></div>`;
   }
   view.innerHTML=html;
   bindChat();
@@ -949,6 +1004,18 @@ function bindChat(){
   // NPC 名称链接 → 点击自动发起与其的对话（玩家口吻开场白 + 标准三段回应）
   document.querySelectorAll(".nl[data-npc]").forEach(el=>{
     el.onpointerdown=e=>{ e.stopPropagation(); talkToNpc(el.dataset.npc); };
+  });
+  // 已完成任务折叠头（需求2c）：点击展开/收起完整任务卡
+  document.querySelectorAll("[data-foldhead]").forEach(h=>{
+    h.onpointerdown=e=>{
+      if(e.target.closest("[data-open]")) return; // 回看按钮自行处理
+      e.stopPropagation(); SFX.tap();
+      const qid=h.dataset.foldhead;
+      st._qFold=st._qFold||{}; st._qFold[qid]=!st._qFold[qid];
+      renderChat(true);
+      const el=document.querySelector('.qfold[data-fold="'+qid+'"]');
+      if(el) el.scrollIntoView({block:"nearest"});
+    };
   });
 }
 function heartNew(){
@@ -1388,35 +1455,74 @@ function openQuest(qid){
   const closeQuest=()=>{ if(questTimer){clearInterval(questTimer);questTimer=0;} if(window.WDMem)WDMem.setActive(null); ov.remove(); };
   $("#qx",ov).onpointerdown=closeQuest;
   const qx2=$("#qx2",ov); if(qx2) qx2.onpointerdown=closeQuest;
-  if(finBtn) finBtn.onpointerdown=()=>{
-    st.xp+=q.xp; st.coin+=q.coin; st.done[q.id]=new Date().toISOString();
-    /* NPC 记忆：任务完成——通关时长由进入时间戳自动算出，首通且全对记一次性通关 */
-    if(window.WDMem){ WDMem.finish(q.npc,q.id,{onePass:quizPerfect}); if(questTimer){clearInterval(questTimer);questTimer=0;} }
-    st.fav[q.npc]=(st.fav[q.npc]||0)+1;
-    record("任务完成", q.name+"（+"+q.xp+" 修行 +"+q.coin+" 铜钱）");
-    if(st.day===q.day&&q.kind==="main"&&st.unlocked===q.day&&st.unlocked<45) st.unlocked++;
-    maybeUnlockDay();
-    // 玩家行动自动入流：先落模板战报，AI 在线时异步润色（群聊里玩家先报，NPC 再接）
-    const aid=pushAction("我交割了「"+q.name+"」（+"+q.xp+"修行 +"+q.coin+"铜钱）。");
-    refineAction(aid,q);
-    // 三节点之②③合并为一条群聊消息（NPC 不连发多条）：认可 + 后续任务预告，refs 携带任务跳转
-    const fresh=D.quests.filter(qq=>!qDone(qq.id)&&questUnlocked(qq)&&qq.prev&&qq.prev.includes(q.id));
-    let ackText=(doneLine(q,byDay[q.day])||"很好。")+"「"+q.name+"」已交付（+"+q.xp+"修行 +"+q.coin+"铜钱）。";
-    const refs=[{qid:q.id}];
-    if(fresh.length){
-      const nq=fresh[0]; const nd=byDay[nq.day];
-      ackText+=" "+(pubLine(nq,nd)||"新的一程开启了。")+"「"+nq.name+"」已现形，随到随打。";
-      refs.push({qid:nq.id});
-    }
-    st.dialogue.push({role:"npc",npc:q.npc,text:ackText,refs,at:new Date().toISOString(),day:st.day});
-    if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-    // NPC 个人故事线：随任务里程碑自然续写
-    WDChat.storyAppend(q.npc,"与玩家并肩，见证了「"+q.name+"」的交付");
-    // 交付特效：完成印章 + 修行/铜钱飘字 + 金粒子
-    WDFx.questDone(q.xp,q.coin);
-    SFX.win(); ov.remove(); checkAch(); checkLevelUp(); save(); render();
-    toast(doneLine(q,byDay[q.day])||"完成");
-  };
+  if(finBtn) finBtn.onpointerdown=()=>{ settleQuest(q,quizPerfect,ov); };
+}
+/* ---------- 任务结算（finBtn 抽取为全局函数，便于测试与复用） ---------- */
+function settleQuest(q,quizPerfect,ov){
+  st.xp+=q.xp; st.coin+=q.coin; st.done[q.id]=new Date().toISOString();
+  /* NPC 记忆：任务完成——通关时长由进入时间戳自动算出，首通且全对记一次性通关 */
+  if(window.WDMem){ WDMem.finish(q.npc,q.id,{onePass:quizPerfect}); if(questTimer){clearInterval(questTimer);questTimer=0;} }
+  st.fav[q.npc]=(st.fav[q.npc]||0)+1;
+  record("任务完成", q.name+"（+"+q.xp+" 修行 +"+q.coin+" 铜钱）");
+  if(st.day===q.day&&q.kind==="main"&&st.unlocked===q.day&&st.unlocked<45) st.unlocked++;
+  maybeUnlockDay();
+  // 玩家行动自动入流：先落模板战报，AI 在线时异步润色（群聊里玩家先报，NPC 再接）
+  const aid=pushAction("我交割了「"+q.name+"」（+"+q.xp+"修行 +"+q.coin+"铜钱）。");
+  refineAction(aid,q);
+  // 三节点之②③合并为一条群聊消息（NPC 不连发多条）：认可 + 后续任务预告，refs 携带任务跳转
+  const fresh=D.quests.filter(qq=>!qDone(qq.id)&&questUnlocked(qq)&&qq.prev&&qq.prev.includes(q.id));
+  let ackText=(doneLine(q,byDay[q.day])||"很好。")+"「"+q.name+"」已交付（+"+q.xp+"修行 +"+q.coin+"铜钱）。";
+  const refs=[{qid:q.id}];
+  const nq=fresh[0]||null;
+  if(nq){
+    const nd=byDay[nq.day];
+    ackText+=" "+(pubLine(nq,nd)||"新的一程开启了。")+"「"+nq.name+"」已现形，随到随打。";
+    refs.push({qid:nq.id});
+  }
+  st.dialogue.push({role:"npc",npc:q.npc,text:ackText,refs,at:new Date().toISOString(),day:st.day});
+  if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+  /* 引路人云蘅结算接棒（需求1）：任务NPC结算回复之后立即给出——任务总结+经验分析+下一任务引导。
+     本地模板同步落流（<200ms），AI 在线时异步润色就地替换（不耗灵力，同战报润色模式） */
+  const ymsg={id:"yh_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),role:"npc",npc:"yunheng",
+    text:yunhengSettleLocal(q,nq,quizPerfect),refs:[{qid:q.id}].concat(nq?[{qid:nq.id}]:[]),
+    at:new Date().toISOString(),day:st.day};
+  st.dialogue.push(ymsg);
+  if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+  refineYunheng(ymsg.id,q,nq,quizPerfect);
+  // NPC 个人故事线：随任务里程碑自然续写
+  WDChat.storyAppend(q.npc,"与玩家并肩，见证了「"+q.name+"」的交付");
+  // 交付特效：完成印章 + 修行/铜钱飘字 + 金粒子
+  WDFx.questDone(q.xp,q.coin);
+  SFX.win(); if(ov)ov.remove(); checkAch(); checkLevelUp(); save(); render();
+  toast(doneLine(q,byDay[q.day])||"完成");
+}
+/* 云蘅结算本地模板（降级兜底 + AI 润色前的即时版本）：三段式——总结/经验/引导 */
+function yunhengSettleLocal(q,nq,perfect){
+  const d=byDay[q.day], p=dayProg(d);
+  const total=D.quests.filter(x=>qDone(x.id)).length;
+  const parts=[];
+  parts.push("「"+q.name+"」收进行囊了（+"+q.xp+"修行 +"+q.coin+"铜钱）。"+(doneLine(q,d)||"干净利落。"));
+  parts.push(perfect
+    ?"试炼全对——这一式的根基扎得稳。当日 "+p.n+"/"+p.all+"，全程已破 "+total+"/"+D.quests.length+"。"
+    :"试炼里有磕绊，错处已记上星盘——回头清一遍，别让遗忘怪过夜。当日 "+p.n+"/"+p.all+"，全程已破 "+total+"/"+D.quests.length+"。");
+  if(nq) parts.push("下一关「"+nq.name+"」（"+nq.tlabel+"，约"+nq.dur+"分钟）已现形——"+WDChat.howTo(nq)+"。路我已看好，随时动身。");
+  else parts.push("今日功课已尽——去巡夜温故，或上星盘清错题，明日雾散再战。");
+  return parts.join("");
+}
+/* 云蘅结算 AI 润色：就地替换本地模板，保持结构不变 */
+function refineYunheng(id,q,nq,perfect){
+  if(!dsReady()) return;
+  const d=byDay[q.day], p=dayProg(d);
+  const total=D.quests.filter(x=>qDone(x.id)).length;
+  const sys="你是游戏『问道之旅·四十五日』的引路人「云蘅」——导游异次元的接引者，不授业只引路，说话简短、有性格、有江湖气。任务NPC结算完毕后，你立即给玩家一段完整的收束回应，依次自然衔接三层（不写序号、不分条、不加标题）：①任务总结——点出刚交付的关卡与收获；②经验分析——一句到位地点出这次打得如何、该补哪里；③下一任务引导——明确下一步做什么、怎么入手。≤150字；禁AI腔（首先/其次/总之），禁教书先生口吻（掌握了/要记住），严禁出现已淘汰概念（提灯、引灯、问道录、仙侠、仙师、封妖塔、掌灯等）。只输出正文，不要引号。";
+  const user="刚完成关卡：「"+q.name+"」（"+q.tlabel+"，+"+q.xp+"修行 +"+q.coin+"铜钱"+(perfect?"，试炼全对":"，试炼有错")+"）；当日进度 "+p.n+"/"+p.all+"，全程 "+total+"/"+D.quests.length+"。"
+    +(nq?("下一关：「"+nq.name+"」（"+nq.tlabel+"，约"+nq.dur+"分钟），目标："+(nq.goal||"通关")+"。"):"今日任务已清，可引导巡夜温故或上星盘清错题。");
+  dsChat([{role:"system",content:sys},{role:"user",content:user}],false).then(t=>{
+    t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,220);
+    if(!t) return;
+    const m=st.dialogue.find(x=>x.id===id); if(!m) return;
+    m.text=t; save(); renderChat(true);
+  }).catch(()=>{});
 }
 function maybeUnlockDay(){
   const d=byDay[st.unlocked];
@@ -2630,9 +2736,10 @@ function renderTreeNode(node){
   const expanded = hasKids && treeDefaultExpanded(node);
   const stateCls = node.state ? " "+node.state : "";
   const leafCls = node.leaf ? " leaf" : "";
+  /* 叶子行只挂 data-leaf——若同时挂 data-toggle，bindTree 的 toggle 分支会拦截点击导致任务打不开 */
   return `<div class="tnode" data-level="${node.level}" data-has-children="${hasKids}" data-expanded="${expanded}" data-tid="${esc(node.id)}">
-    <div class="trow${stateCls}${leafCls}" data-toggle="${esc(node.id)}" ${node.leaf?`data-leaf="${esc(node.id)}"`:""}>
-      <span class="ttog" data-toggle="${esc(node.id)}">${hasKids?'<span class="tcar">▶</span>':''}</span>
+    <div class="trow${stateCls}${leafCls}" ${node.leaf?`data-leaf="${esc(node.id)}"`:`data-toggle="${esc(node.id)}"`}>
+      <span class="ttog"${node.leaf?"":` data-toggle="${esc(node.id)}"`}>${hasKids?'<span class="tcar">▶</span>':''}</span>
       <span class="tdot"></span>
       <span class="tlabel">${esc(node.label)}</span>
       ${node.meta?`<span class="tmeta">${esc(node.meta)}</span>`:""}
@@ -2642,16 +2749,16 @@ function renderTreeNode(node){
 }
 function bindTree(container, onLeaf){
   container.onpointerdown=e=>{
-    const tog=e.target.closest("[data-toggle]");
+    /* 先查叶子：叶子行已不挂 data-toggle，此处顺序双保险 */
     const leaf=e.target.closest("[data-leaf]");
+    if(leaf){ e.stopPropagation(); SFX.tap(); onLeaf&&onLeaf(leaf.dataset.leaf); return; }
+    const tog=e.target.closest("[data-toggle]");
     if(tog){
       const n=tog.closest(".tnode"); if(!n) return;
       e.stopPropagation();
       const id=n.dataset.tid; const cur=n.dataset.expanded==="true";
       n.dataset.expanded=String(!cur); setTreeExp(id,!cur); SFX.tap();
-      return;
     }
-    if(leaf){ e.stopPropagation(); SFX.tap(); onLeaf&&onLeaf(leaf.dataset.leaf); }
   };
 }
 function setAllTreeExpanded(nodes, val){

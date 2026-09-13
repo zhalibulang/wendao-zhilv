@@ -199,7 +199,7 @@ const WDChat={
       const host=NPC[aq.npc]
         ?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(aq.npc,NPC[aq.npc].name):NPC[aq.npc].name)
         :aq.npc;
-      sys+="\n【当下情境】玩家在第"+st.day+"日，在途关卡「"+aq.name+"」（"+aq.tlabel+"，约"+aq.dur+"分钟，接洽人："+host+"），要求："+(aq.goal||"通关")+"。";
+      sys+="\n【当下情境】玩家在第"+st.day+"日，在途关卡「"+aq.name+"」（"+aq.tlabel+"，约"+aq.dur+"分钟，接洽人："+host+"），要求："+(aq.goal||"通关")+"。你的回复须至少自然点到一次「"+aq.name+"」这一关卡名，让对话与当前任务明确关联；不要报任务编号或系统字段名。";
     }else{
       sys+="\n【当下情境】玩家在第"+st.day+"日，今日关卡已清——可引导其巡夜温故、上星盘清错题，或预告下一幕。";
     }
