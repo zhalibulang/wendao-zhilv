@@ -480,15 +480,15 @@ const QMAP = Object.fromEntries(D.quests.map(q=>[q.id,q]));
    所有 NPC 自序章起即由云蘅引见现身（不再按幕锁于雾中），
    但各章互动话题仍随当前幕推进；任务解锁门禁不受影响。 */
 if(!NPC.yunheng){
-  const GUIDE={id:"yunheng",name:"云蘅",title:"引路人",intro:"执一盏引魂灯的女子，行走在五幕之间。不授业，只引路——把合适的人，在合适的时刻，带到你面前。"};
+  const GUIDE={id:"yunheng",name:"云蘅",title:"引路人",intro:"导游异次元的接引者，行走在五幕之间。不授业，只引路——把合适的人，在合适的时刻，带到你面前。"};
   D.npcs.unshift(GUIDE); NPC.yunheng=GUIDE;
 }
 const NPC_MATRIX={
-  yunheng:{act1:"先随我识一遍同行诸人——灯，要分给能提灯的人。",act2:"律法塔就在前方，铁面先生候你多时；我为你执灯。",act3:"行会风云起，柳首座的纱幕之后藏着整团人心，随我来。",act4:"星轨已明，玄机夫人的观星台在遗迹最高处。"},
-  qingxuan:{act1:"山河游学，先学执灯——把考点当灯芯，一盏盏点亮。",act2:"灯照塔律：法条幽深，我用灯替你先照一寸。",act3:"灯下识人心：带团如点灯，先照亮游客要看的景。",act4:"灯映星图：北京风物是这盏灯最后一层灯罩。"},
+  yunheng:{act1:"先随我识一遍同行诸人——导游试炼的路，要分给能担起来的人。",act2:"律法塔就在前方，铁面先生候你多时；我为你引路。",act3:"行会风云起，柳首座的纱幕之后藏着整团人心，随我来。",act4:"星轨已明，玄机夫人的观星台在遗迹最高处。"},
+  qingxuan:{act1:"山河游学，先理文脉——把考点当封印，一枚枚激活。",act2:"塔律文脉：法条幽深，我替你先理一寸脉络。",act3:"文脉识人心：带团如理脉，先理清游客要看的景。",act4:"脉映星图：北京风物是这道文脉最后一程。"},
   smq:{act1:"山河志第一页——三千年的城，从蓟城讲到大都。",act2:"剑指塔律：文物法规如剑谱，一式不可错。",act3:"行会演武：带团节奏如剑招，快慢全在蓄与发。",act4:"遗迹访古：木构斗拱，是我剑下最后的对手。"},
-  tiemian:{act1:"新丁先立规矩：考规如塔基，逾矩者塔门不启。",act2:"一百零八层封妖塔，层层关着一条会咬人的法条。",act3:"行会合同与投诉，是塔外的妖——同样归我管。",act4:"遗迹保护条例的封印也在塔上，携卷而来。"},
-  liuruyan:{act1:"纱中幻景：讲解词先在纱后排演千遍，再对人启齿。",act2:"塔下经营：旅行社条例是行商的纱，薄而不透。",act3:"行会风云正是我主场——千团穿雾，未失一人。",act4:"纱覆遗迹：应急处理，先护人，再护纱，后护物。"},
+  tiemian:{act1:"新丁先立规矩：考规如塔基，逾矩者塔门不启。",act2:"一百零八道法条如剑阵，错一道便放遗忘怪出关。",act3:"行会合同与投诉，是塔外的妖——同样归我管。",act4:"遗迹保护条例的封印也在塔上，携卷而来。"},
+  liuruyan:{act1:"纱中幻景：讲解词先在纱后排演千遍，再对人启齿。",act2:"塔下经营：旅行社条例是行商的纱，薄而不透。",act3:"行会风云正是我主场——千团穿行遗忘之雾，未失一人。",act4:"纱覆遗迹：应急处理，先护人，再护纱，后护物。"},
   moxiaogu:{act1:"机关匣已就位！四百余枚知识符印等你来点数！",act2:"新铸律法锁三十把——法规题在这里排队咬人！",act3:"行会账目题最绕，我的算签都不够用了！",act4:"遗迹星符对谜——古建题妖最狡猾！"},
   xuanji:{act1:"星盘初启：错题妖尚幼，趁早记下它们的模样。",act2:"星照塔律：你错过的法条妖，会在我盘里发亮。",act3:"实务之错最隐晦，星盘替你一一显形。",act4:"收服错题妖，就在这最后一幕——别留妖过夜。"}
 };
@@ -523,9 +523,16 @@ function reconcile(){
   st.cards=st.cards||{}; st.seenHearts=st.seenHearts||{};
   st.edits=st.edits||{}; st._treeExp=st._treeExp||{};
   st.personas=st.personas||{}; st.aiBrief=st.aiBrief||{};
+  /* 世界观重构后：清除含已淘汰旧概念的人设/任务说明缓存，强制用新设定重生成 */
+  (function purgeObsolete(){
+    const obs=["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者"];
+    const hasObs=o=>obs.some(t=>JSON.stringify(o||"").includes(t));
+    Object.keys(st.personas).forEach(id=>{ if(hasObs(st.personas[id])) delete st.personas[id]; });
+    Object.keys(st.aiBrief).forEach(id=>{ if(hasObs(st.aiBrief[id])) delete st.aiBrief[id]; });
+  })();
   if(!st.npcGrowth||typeof st.npcGrowth!=="object") st.npcGrowth={};
   if(!Array.isArray(st.dialogue)) st.dialogue=[];
-  /* 对话流迁移清洗：老版本存档中残留的教师腔/旧话术，按映射表就地换为仙侠版（重复执行幂等） */
+  /* 对话流迁移清洗：老版本存档中残留的教师腔/旧话术，按映射表就地换为导游异次元版（重复执行幂等） */
   const DIALECT_FIX=[["你吃透了","这页残卷已被你收进袖中"],["读透它","翻开它"],["读透","读穿"],
     ["新的一页——慢慢地，别急。","新秘境在雾中显形，进去走一遭。"],["新的一页交到你手上——翻开它，再接受试炼","新卷已在你手上展开——读它，再赴试炼"],
     ["这页交给你，读完了回来找我。","这页残卷会自己说话——翻开它。"],["旧页重读，温故一遍。","封印松了，旧妖又探头——回去再钉一钉。"],
@@ -536,7 +543,7 @@ function reconcile(){
     ["这一段，读出声来。","把这段咒文念出声来，城门才应你。"],["吟游时刻——出声，才算数。","吟游时刻：咒不成声，护罩不生。"],
     ["大试炼开启。全场肃静。","守关妖王现身。全场肃静，一次过。"],["攻城时刻。一次过。","攻城时刻——大试炼开启。"],
     ["这里有一条线索，拓下来。","雾中有一枚符文，拓下来。"],["把这条线绣进你的地图。","线索符文现形，绣进你的山河图。"],
-    ["先整备行囊。磨刀不误砍柴工。","先整备法器——利其器，方能斩妖。"],["夜巡时刻，过几张卡再睡。","夜巡时刻，提灯过卡，驱散今夜之雾。"],
+    ["先整备行囊。磨刀不误砍柴工。","先整备法器——利其器，方能斩妖。"],["夜巡时刻，过几张卡再睡。","夜巡时刻，过几张记忆卡，驱散今夜之雾。"],
     ["睡前过卡，梦替你巩固。","睡前巡一圈，雾不敢近身。"],["睡前过卡，睡眠替你巩固。","睡前巡一圈，雾不敢近身。"],
     ["今日圆满。去领赏吧。","今日圆满。天梯赐赏，去领吧。"],["读完这页，你眼里多了点什么。","秘境已探，你眼里多了雾外的光。"],
     ["不错，这页你吃透了。","这页残卷，已被你收进袖中。"],["温故有效。它现在是你的了。","封印重新钉牢——它现在属于你了。"],
@@ -590,7 +597,7 @@ function refreshStat(persist){
 const level=()=>Math.floor(st.xp/50)+1;
 let lastLv=1;
 function checkLevelUp(){ const lv=level(); if(lv>lastLv){ record("等级提升","Lv."+lastLv+" → Lv."+lv+" · "+title()); toast("等级提升 · Lv."+lv+"「"+title()+"」","gold");
-    pushAction("境界突破——Lv."+lv+"「"+title()+"」。"); WDChat.storyAppend("qingxuan","玩家境界突破至Lv."+lv+"——引灯人的灯又亮了一分。");
+    pushAction("境界突破——Lv."+lv+"「"+title()+"」。"); WDChat.storyAppend("qingxuan","玩家境界突破至Lv."+lv+"——文脉导游的脉络又亮了一分。");
     WDFx.levelUp(lv,title()); renderChat(); } lastLv=Math.max(lastLv,lv); }
 function title(){ return st.unlocked>=45?"金榜引路人":st.unlocked>=42?"问道行者·终章":st.unlocked>=31?"遗迹探索者":st.unlocked>=21?"行会行者":st.unlocked>=9?"律法塔学徒":"山河游学者"; }
 const qDone=id=>!!st.done[id];
@@ -635,7 +642,7 @@ function buildStream(){
     }
   }
   const t=totals();
-  if(t.c===t.a&&t.a>0) out.push({t:"sys",x:`全程圆满（${t.a}/${t.a}）· 问道录已满`});
+  if(t.c===t.a&&t.a>0) out.push({t:"sys",x:`全程圆满（${t.a}/${t.a}）· 导游试炼功德圆满`});
   return out;
 }
 /* 隐喻引擎：任务类型→游戏化元素（秘境/封印/妖兽/咒文/攻城…），稀有度→难度层级，直观反映关卡强度 */
@@ -661,7 +668,7 @@ function pubLine(q,d){
     boss:["守关妖王现身。全场肃静，一次过。","攻城时刻——大试炼开启。","此战即天梯。稳住，一次登阶。"],
     clue:["雾中有一枚符文，拓下来。","线索符文现形，绣进你的山河图。"],
     gear:["先整备法器——利其器，方能斩妖。"],
-    flash:["夜巡时刻，提灯过卡，驱散今夜之雾。","睡前巡一圈，雾不敢近身。"],
+    flash:["夜巡时刻，过几张记忆卡，驱散今夜之雾。","睡前巡一圈，雾不敢近身。"],
     reward:["今日圆满。天梯赐赏，去领吧。"]};
   const arr=pool[q.type]||pool.study;
   const idx=(hash(q.id)+d.day)%arr.length;
@@ -862,7 +869,7 @@ function pushAction(text){
 function refineAction(id,q,extra){
   if(!dsReady()) return;
   dsChat([
-    {role:"system",content:"你是游戏『问道之旅·四十五日』的战斗记录官。用一句第一人称、网游战斗日志口吻总结玩家的行动。要求：仙侠游戏风，简短有力≤36字，像玩家在群里报喜不装腔；禁AI腔（不排比、不总结、不感叹过度、不用'首先/总之'）；禁教师口吻。只输出这句话本身，不要引号。"},
+    {role:"system",content:"你是游戏『问道之旅·四十五日』的战斗记录官。用一句第一人称、网游战斗日志口吻总结玩家的行动。要求：导游异次元游戏风，简短有力≤36字，像玩家在群里报喜不装腔；禁AI腔（不排比、不总结、不感叹过度、不用'首先/总之'）；禁教师口吻。只输出这句话本身，不要引号。"},
     {role:"user",content:"玩家行动：完成关卡「"+q.name+"」（类型："+q.tlabel+"，难度定位："+questMetaphor(q)+"，奖励：+"+q.xp+"修行 +"+q.coin+"铜钱）"+(extra||"")+"\n参考模板（可重写或另起更妙的）：我刚交割了「"+q.name+"」。"}
   ],false).then(t=>{
     t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,60);
@@ -2165,16 +2172,31 @@ async function dsChat(messages, wantJson){
 }
 /* 结构化游戏背景信息文件（供 DeepSeek 读取世界观/机制/NPC 基础）——正文装配在 wd-chat.js */
 function buildWorldBrief(){ return WDChat.worldBrief(); }
+/* NPC 职能定位（导游异次元世界观，与人设生成/任务说明共用） */
+const NPC_ROLE={
+  yunheng:"引路人——导游异次元的接引者，为误入此界的玩家开启导游试炼之路",
+  qingxuan:"文脉导游——理清四十五日试炼的主线脉络，让散落的导游知识重归文脉",
+  smq:"山河导游——专长北京地理山川、长城、十三陵等山河形胜",
+  tiemian:"律法导游——专长旅游法规、政策条例，错一条法条便放遗忘怪出关",
+  liuruyan:"接待导游——专长旅行社接待、人际沟通与服务礼仪",
+  moxiaogu:"古迹导游——专长故宫、天坛等古迹建筑与历史年表",
+  xuanji:"记忆导游——专长复习方法、错题记忆与英文背诵"
+};
+/* 已淘汰的旧世界观概念（人设/任务生成中严禁出现） */
+const OBSOLETE_TERMS=["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者"];
 /* 生成 NPC 人设卡片（可带修改意见重生成） */
 async function genPersona(npcId, feedback){
   const npc=D.npcs.find(n=>n.id===npcId)||NPC[npcId];
   const persona=st.personas[npcId];
   const sys="你是游戏角色设定师。基于给定的游戏世界背景与NPC基础信息，产出严谨的角色人设卡片。只输出JSON。";
   const user="游戏背景信息：\n"+JSON.stringify(buildWorldBrief(),null,1)
-    +"\n\n要设定的NPC："+JSON.stringify({id:npcId,姓名:dName(npcId),称号:dTitle(npcId),背景:npc.intro})
-    +(persona?("\n\n当前已有人设（供参考）："+JSON.stringify(persona.card)):"")
+    +"\n\n要设定的NPC："+JSON.stringify({id:npcId,姓名:dName(npcId),称号:dTitle(npcId),职能:NPC_ROLE[npcId]||"",背景:npc.intro})
+    +(persona?("\n\n当前已有人设（供参考，若含旧概念须改写）："+JSON.stringify(persona.card)):"")
     +(feedback?("\n\n用户的修改意见（必须采纳）："+feedback):"")
-    +"\n\n请输出JSON，字段：name(姓名)、identity(身份背景，30-50字)、personality(性格特征，3-4个短语)、style(对话风格描述)、relations(与其他角色关系数组，每项{name,rel})。人设要贴合北京导游备考世界观，性格鲜明、可信。";
+    +"\n\n【世界观硬约束】本游戏世界观是「自在世界跌入导游异次元，遗忘之雾入侵，玩家通关导游试炼以拯救世界并重返家园」。"
+    +"严禁出现以下已淘汰的旧概念："+OBSOLETE_TERMS.join("、")+"。"
+    +"人设须贴合导游异次元的传奇导游设定，性格鲜明、可信。"
+    +"\n\n请输出JSON，字段：name(姓名)、identity(身份背景，30-50字，须体现其导游职能)、personality(性格特征，3-4个短语)、style(对话风格描述)、relations(与其他角色关系数组，每项{name,rel})。";
   const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], true);
   let card;
   try{ card=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
@@ -2186,7 +2208,7 @@ async function genPersona(npcId, feedback){
 async function genQuestBrief(q){
   const npc=NPC[q.npc]||NPC.qingxuan;
   const persona=st.personas[q.npc]&&st.personas[q.npc].card;
-  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容。玩家在做任务=网络游戏行为（开荒副本/砍怪/刷本/团战），NPC与玩家是游戏世界里的并肩关系，绝非师生。要求：\n1. 用游戏隐喻解释任务：任务是一个具体的游戏化关卡——秘境探幽、妖兽战斗、谜题破解、咒文吟诵、攻城之战等，必须使用任务卡上标注的关卡名与难度层级\n2. 描述关卡背景故事，融入『导游异次元/遗忘之雾/传奇导游/导游试炼』世界观（玩家是误入导游异次元的外来者，唯有通关导游试炼驱逐遗忘之雾才能重返家园）\n3. 根据任务知识点提供适度拓展信息，帮助理解记忆\n4. 不剧透未解锁环节，不跑题，不给考试答案\n5. NPC台词像网游NPC：简短、有性格、有江湖气，可用游戏黑话（开荒/掉落/翻车/通关）；禁用教书先生口吻（掌握了/要记住/同学们/好好复习）\n6. 严禁AI腔：不用'首先/其次/总之/综上'，不排比堆砌，不空洞夸奖，句子长短错落\n7. 只输出JSON";
+  const sys="你是游戏『问道之旅·四十五日』的叙事引擎。严格依世界观与任务主线生成内容。玩家在做任务=网络游戏行为（开荒副本/砍怪/刷本/团战），NPC与玩家是游戏世界里的并肩关系，绝非师生。要求：\n1. 用游戏隐喻解释任务：任务是一个具体的游戏化关卡——秘境探幽、妖兽战斗、谜题破解、咒文吟诵、攻城之战等，必须使用任务卡上标注的关卡名与难度层级\n2. 描述关卡背景故事，融入『导游异次元/遗忘之雾/传奇导游/导游试炼』世界观（玩家是误入导游异次元的外来者，唯有通关导游试炼驱逐遗忘之雾才能重返家园）\n3. 根据任务知识点提供适度拓展信息，帮助理解记忆\n4. 不剧透未解锁环节，不跑题，不给考试答案\n5. NPC台词像网游NPC：简短、有性格、有江湖气，可用游戏黑话（开荒/掉落/翻车/通关）；禁用教书先生口吻（掌握了/要记住/同学们/好好复习）\n6. 严禁AI腔：不用'首先/其次/总之/综上'，不排比堆砌，不空洞夸奖，句子长短错落\n7. 只输出JSON\n8. 严禁使用已淘汰的旧概念：提灯、引灯、问道录、仙侠、仙师、封妖塔、幻纱行、机关童子、观星者、掌灯、镇塔尊者；统一用导游异次元世界观术语";
   // 汇总本任务试炼涉及的考点，供 AI 拓展
   const quiz=D.quizzes[q.id]||[];
   const pids=[...new Set(quiz.map(z=>z.pid).filter(Boolean))];
@@ -2548,12 +2570,12 @@ function intro(){
     <div class="mt" style="letter-spacing:.3em">序 章</div>
     <h2 style="font-size:24px;letter-spacing:.2em">问道之旅 · 四十五日</h2>
     <div class="sec" style="text-align:left;font-size:14.5px">
-      <p>燕京古城被「遗忘迷雾」笼罩。山河的记忆、律法的回响、行会的技艺，正在消散。</p>
-      <p>四十五日之内，修满一方问道录、踏上金榜台的人，能唤回这座城的光。</p>
-      <p>你是新一代行吟者——<b>${esc(st.player)}</b>。雾锁的城门下，青玄先生掌灯而立，等你多时。</p>
+      <p>你所在的自在世界意外跌入「导游异次元」。遗忘之雾正在吞噬一切，唯有通关导游试炼，才能驱散迷雾、重返家园。</p>
+      <p>四十五日之内，通过五幕试炼、踏上金榜台的人，能唤回这座城的光。</p>
+      <p>你是误入此界的外来者——<b>${esc(st.player)}</b>。迷雾笼罩的城门前，青玄先生与几位传奇导游，已候你多时。</p>
       <p class="note" style="border-left-color:var(--hair)">一切修行都在此处完成：读卷、试炼、录音、巡夜、星盘。无需他物。</p>
     </div>
-    <div class="foot" style="justify-content:center"><button class="btn primary" id="begin">接过问道录，启程</button></div>
+    <div class="foot" style="justify-content:center"><button class="btn primary" id="begin">踏入导游试炼，启程</button></div>
   </div>`;
   document.body.appendChild(ov);
   $("#begin",ov).onpointerdown=()=>{ ov.remove(); save(); render(); };

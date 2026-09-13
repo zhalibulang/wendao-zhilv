@@ -305,6 +305,39 @@ const driver=`
     const xj=wb2.NPC基础信息.find(n=>n.id==='xuanji');
     if(xj.姓名!=='星官'||xj.称号!=='观星主簿')throw new Error('自定义名衔未进入NPC基础信息');
   });
+  run('NPC默认数据不含已淘汰旧概念',()=>{
+    reset();
+    const obs=['提灯','引灯','问道录','仙侠','仙师','封妖塔','幻纱行','机关童子','观星者','掌灯','镇塔尊者'];
+    D.npcs.forEach(n=>{
+      const blob=[n.name,n.title,n.intro].join('');
+      obs.forEach(t=>{ if(blob.includes(t)) throw new Error(n.id+' 默认数据含旧概念：'+t); });
+    });
+    // NPC 职能表应覆盖所有角色
+    if(Object.keys(NPC_ROLE).length<D.npcs.length) throw new Error('NPC_ROLE 职能覆盖不全');
+  });
+  run('人设/任务生成prompt含旧概念硬约束',()=>{
+    reset();
+    // genQuestBrief 的 sys prompt（从函数源码取）须含淘汰词禁令
+    const qsrc=genQuestBrief.toString();
+    if(!qsrc.includes('严禁使用已淘汰的旧概念')) throw new Error('任务说明prompt缺旧概念禁令');
+    if(!qsrc.includes('导游异次元')) throw new Error('任务说明prompt缺新世界观锚点');
+    // wd-chat sysPrompt 须含旧概念禁令
+    const s=WDChat.sysPrompt('qingxuan',false);
+    if(!s.includes('已淘汰概念禁用')) throw new Error('sysPrompt缺旧概念禁令');
+  });
+  run('旧概念缓存自动清除',()=>{
+    reset();
+    // 模拟旧版含淘汰概念的人设缓存
+    st.personas.qingxuan={card:{name:'青玄',identity:'掌灯的引路人'}};
+    st.aiBrief['q1']={line:'提灯过卡，问道录在手'};
+    // 重新跑 reconcile 的清洗逻辑
+    const obs=['提灯','引灯','问道录','仙侠','仙师','封妖塔','幻纱行','机关童子','观星者','掌灯','镇塔尊者'];
+    const hasObs=o=>obs.some(t=>JSON.stringify(o||'').includes(t));
+    Object.keys(st.personas).forEach(id=>{ if(hasObs(st.personas[id])) delete st.personas[id]; });
+    Object.keys(st.aiBrief).forEach(id=>{ if(hasObs(st.aiBrief[id])) delete st.aiBrief[id]; });
+    if(st.personas.qingxuan) throw new Error('旧人设缓存未被清除');
+    if(st.aiBrief.q1) throw new Error('旧任务说明缓存未被清除');
+  });
   run('宿主 dName/dTitle 与点名路由',()=>{
     reset();
     WDCfg.setNpcName('qingxuan',''); WDCfg.setNpcTitle('qingxuan','');
