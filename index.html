@@ -2271,7 +2271,7 @@ function renderSave(){
     </div>
     <div class="estatus ${dsReady()?"saved":"dirty"}" id="dsStatus">${dsReady()?"● 已配置 · AI 功能可用":"○ 未配置 · 使用内置内容"}</div>
     <div class="savegrid" style="margin-top:6px">
-      <button class="btn sm" id="dsBrief" type="button" ${dsReady()?"":"disabled"}>📜 查看游戏背景信息</button>
+      <button class="btn sm" id="dsBrief" type="button">📜 查看/编辑游戏背景信息</button>
       <button class="btn sm" id="dsPersona" type="button" ${dsReady()?"":"disabled"}>🎭 生成 NPC 人设</button>
     </div>
   </div>
@@ -2293,11 +2293,33 @@ function renderSave(){
       dsChat([{role:"user",content:"只回复：ok"}]).then(()=>{ s.textContent="● 已配置并连通 · AI 功能可用"; s.className="estatus saved"; toast("密钥有效"); })
         .catch(e=>{ s.textContent="● 已保存，但调用失败："+e.message+"（仍可离线使用）"; s.className="estatus dirty"; toast("连通测试失败："+e.message); });
     } else { s.className="estatus dirty"; s.textContent="○ 未配置 · 使用内置内容"; toast("已清除密钥"); }
-    $("#dsBrief",ov).disabled=!dsReady(); $("#dsPersona",ov).disabled=!dsReady();
+    $("#dsPersona",ov).disabled=!dsReady();
   };
   $("#dsBrief",ov).onpointerdown=()=>{ SFX.tap();
-    panel(`<h2>游戏背景信息（供 DeepSeek）</h2><div class="mt">结构化世界观 · 机制 · NPC 基础 · 叙事约束</div>
-      <div class="book"><div class="cen" style="white-space:pre-wrap;font-size:13px;line-height:1.7">${esc(JSON.stringify(buildWorldBrief(),null,2))}</div></div>`);
+    /* 与配置中心世界观 tab 同源：优先用自定义版本，否则载入系统默认 JSON */
+    const cur=(WDCfg&&WDCfg.customWorldBrief())||"";
+    const defaultStruct=WDChat.worldBrief();
+    const defaultTxt=typeof defaultStruct==="string"?defaultStruct:JSON.stringify(defaultStruct,null,2);
+    const initVal=cur||JSON.stringify(typeof buildWorldBrief==="function"?buildWorldBrief():defaultStruct,null,2);
+    const p=panel(`<h2>游戏背景信息（供 DeepSeek）</h2><div class="mt">可直接编辑；保存后 AI 以此为准生成对话。留空则使用系统默认。</div>
+      <div style="margin-top:8px"><textarea id="briefEdit" maxlength="8000" rows="18" style="width:100%;font:inherit;font-size:12px;line-height:1.5;font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:8px">${esc(initVal)}</textarea></div>
+      <div class="savegrid" style="margin:8px 0">
+        <button class="btn sm primary" id="briefSave" type="button">保存</button>
+        <button class="btn sm" id="briefDefault" type="button">载入系统默认（可编辑）</button>
+        <button class="btn sm ghost" id="briefClear" type="button">清空并恢复默认</button>
+      </div>
+      <div class="small" id="briefMsg" style="color:var(--ok)"></div>`);
+    $("#briefSave",p).onpointerdown=()=>{ SFX.tap();
+      WDCfg.setWorldBrief($("#briefEdit",p).value);
+      const m=$("#briefMsg",p); m.textContent="已保存 · AI 对话即刻采用"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+    };
+    $("#briefDefault",p).onpointerdown=()=>{ SFX.tap();
+      $("#briefEdit",p).value=JSON.stringify(typeof buildWorldBrief==="function"?buildWorldBrief():defaultStruct,null,2);
+    };
+    $("#briefClear",p).onpointerdown=()=>{ SFX.tap();
+      WDCfg.setWorldBrief(""); $("#briefEdit",p).value="";
+      const m=$("#briefMsg",p); m.textContent="已清空 · 恢复系统默认世界观"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+    };
   };
   $("#dsPersona",ov).onpointerdown=()=>{ SFX.tap(); openPersonaPanel(); };
 
