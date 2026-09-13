@@ -25,6 +25,9 @@ const WDChat={
   /* ---------- 结构化游戏背景信息（世界观/机制/NPC/叙事约束） ---------- */
   worldBrief(){
     const {D}=CTX;
+    /* 用户自定义游戏背景信息优先（配置中心编辑） */
+    const custom=(window.WDCfg&&WDCfg.customWorldBrief)?WDCfg.customWorldBrief():null;
+    if(custom&&custom.trim()) return custom.trim();
     return {
       游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
       游戏目的:"玩家在游戏中备考北京导游资格证。做任务就是网络游戏行为：研习新考点=开荒新副本，复习=回炉重刷副本并重新封印苏醒的旧妖，题组试炼=砍怪打谜题妖，英文背诵=施法吟咒，大试炼=攻城团战，巡夜=日常巡逻任务。玩家与NPC是游戏世界里并肩作战的关系（队友/接头人/引路人），绝非老师与学生——没有人在上课，大家在同一个江湖里打怪升级。",
@@ -157,9 +160,13 @@ const WDChat={
     const g=this.growthOf(npcId);
     const st=CTX.getSt();
     const aq=CTX.quest&&CTX.quest();
-    let sys="你是游戏『问道之旅·四十五日』里的游戏NPC「"+npc.name+"」（"+npc.title+"）。玩家是与你并肩刷任务的同道，你们同处一个游戏世界，绝非师生。说话像网游里的NPC：简短、有性格、有江湖气，句子长短错落。\n"
+    /* 自定义名字/人设（WDCfg 未挂载则用原名） */
+    const cfg=window.WDCfg&&window.WDCfg.ready?window.WDCfg.ready():null;
+    const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
+    const persona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
+    let sys="你是游戏『问道之旅·四十五日』里的游戏NPC「"+dispName+"」（"+npc.title+"）。玩家是与你并肩刷任务的同道，你们同处一个游戏世界，绝非师生。说话像网游里的NPC：简短、有性格、有江湖气，句子长短错落。\n"
       +"【行为边界·绝不可越界】"
-      +"1）你始终是「"+npc.name+"」本人，绝不出戏，绝不承认自己是AI/程序/模型，不提接口、密钥、存档等系统外物；"
+      +"1）你始终是「"+dispName+"」本人，绝不出戏，绝不承认自己是AI/程序/模型，不提接口、密钥、存档等系统外物；"
       +"2）不替玩家做决定、不代替玩家操作，只给情报、建议与引导；"
       +"3）绝不直接给考试答案或题库原题答案，只能用比喻、口诀和思路启发；"
       +"4）不剧透尚未解锁的幕次与任务，不编造游戏中不存在的机制、道具、人物；"
@@ -189,8 +196,7 @@ const WDChat={
     /* 本章互动话题（NPC 职能重构：全角色×四章矩阵） */
     const topic=CTX.actTopic&&CTX.actTopic(npcId);
     if(topic) sys+="\n本章（当前幕）你正与玩家同行的话题：「"+topic+"」——你的话可自然贴着它。";
-    /* 配置中心：玩家称呼/自称 + NPC语气·风格·深度策略（WDCfg 未挂载则跳过） */
-    const cfg=window.WDCfg&&window.WDCfg.ready?window.WDCfg.ready():null;
+    /* 配置中心：玩家称呼/自称 + NPC语气·风格·深度策略 + 自定义人设 */
     if(cfg){
       const how=cfg.address?("\n你须称呼玩家为「"+cfg.address+"」"):"";
       const self=cfg.selfName?("\n玩家自称「"+cfg.selfName+"」"):"";
@@ -201,6 +207,8 @@ const WDChat={
         +(st2.depth?("；深度："+(st2.depth==="deep"?"进阶（可谈原理与延伸）":"基础（只讲结论与口诀）")):"")
         +"。";
     }
+    /* 用户自定义人设描述：作为 AI 生成角色设定的参考依据 */
+    if(persona) sys+="\n【用户设定的角色基准】"+persona+"——你的言行须贴合此描述，作为角色塑造的第一参考。";
     /* NPC 记忆画像（WDMem 未挂载则跳过）——具体反馈与记忆引用的数据源 */
     const mem=window.WDMem&&window.WDMem.digest?window.WDMem.digest(npcId):null;
     if(mem) sys+="\n【你与这位玩家的记忆】"+mem+"（情绪反馈须从中取具体事实，自然引用，不要罗列数据）";
@@ -228,10 +236,12 @@ const WDChat={
     const st=CTX.getSt();
     const aq=CTX.quest&&CTX.quest();
     const persona=st.personas[npcId]&&st.personas[npcId].card;
-    const g=this.growthOf(npcId);
+    const customPersona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
+    const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
     const hist=this.historyOf(npcId,6);
     let ctx="游戏背景：\n"+JSON.stringify(this.worldBrief())
-      +"\n\n角色信息："+JSON.stringify({姓名:npc.name,称号:npc.title,背景:npc.intro})
+      +"\n\n角色信息："+JSON.stringify({姓名:dispName,称号:npc.title,背景:npc.intro})
+      +(customPersona?("\n用户设定角色基准："+customPersona):"")
       +(persona?("\n已确认人设："+JSON.stringify(persona)):"")
       +"\n\n当前游戏状态：第"+st.day+"日，已解锁至第"+st.unlocked+"日，修行"+st.xp+"，等级Lv."+CTX.level()
       +(aq?("\n当前关卡："+JSON.stringify({名称:aq.name,类型:aq.tlabel,时长:aq.dur+"分钟",接洽NPC:(NPC[aq.npc]||{}).name||aq.npc,目标:aq.goal,建议动作:this.howTo(aq)}))
@@ -305,9 +315,10 @@ const WDChat={
       const web=await this.webSearch(userText.replace(/@[^\s，。,,]+/g,"").trim());
       const sys=this.sysPrompt(npcId,brief);
       const context=this.buildContext(npcId,userText,web);
+      const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
       const raw=await CTX.dsChat([
         {role:"system",content:sys},
-        {role:"user",content:context+"\n\n玩家说："+userText+"\n\n以"+npc.name+"的身份回应：自然成段地走完情境、剧情、任务三层，不写序号不分条，像群聊里的一次队内喊话，不是答疑课。"}
+        {role:"user",content:context+"\n\n玩家说："+userText+"\n\n以"+dispName+"的身份回应：自然成段地走完情境、剧情、任务三层，不写序号不分条，像群聊里的一次队内喊话，不是答疑课。"}
       ],false);
       let text=(raw||"").trim();
       if(text) text=this.deRepeat(npcId,text);

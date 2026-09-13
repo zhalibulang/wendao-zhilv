@@ -279,6 +279,37 @@ const driver=`
     reset(); renderCfg();
     WDCfg.set('address','上仙'); renderMem();
   });
+  run('WDCfg NPC名字/人设自定义',()=>{
+    reset();
+    WDCfg.setNpcName('qingxuan','老青');
+    if(WDCfg.npcName('qingxuan','青玄')!=='老青')throw new Error('自定义名字未生效');
+    WDCfg.setNpcPersona('qingxuan','性格沉稳，说话慢条斯理');
+    if(WDCfg.npcPersona('qingxuan')!=='性格沉稳，说话慢条斯理')throw new Error('人设描述未存储');
+    // 空自定义名应回退原名
+    WDCfg.setNpcName('smq','');
+    if(WDCfg.npcName('smq','司马青')!=='司马青')throw new Error('空自定义名应回退原名');
+  });
+  run('WDCfg 游戏背景信息自定义',()=>{
+    reset();
+    if(WDCfg.customWorldBrief()!=='')throw new Error('默认应为空');
+    WDCfg.setWorldBrief('自定义世界观测试');
+    if(WDCfg.customWorldBrief()!=='自定义世界观测试')throw new Error('自定义背景未存储');
+    // worldBrief 优先返回自定义文本
+    const wb=WDChat.worldBrief();
+    if(typeof wb!=='string'||wb!=='自定义世界观测试')throw new Error('worldBrief 未优先使用自定义');
+    // 清空后恢复默认结构
+    WDCfg.setWorldBrief('');
+    const wb2=WDChat.worldBrief();
+    if(typeof wb2!=='object'||!wb2.游戏名)throw new Error('清空后未恢复默认结构');
+  });
+  run('WDChat sysPrompt 注入自定义名字+人设',()=>{
+    reset();
+    WDCfg.setNpcName('qingxuan','老青');
+    WDCfg.setNpcPersona('qingxuan','沉稳寡言的剑客');
+    const s=WDChat.sysPrompt('qingxuan',false);
+    if(!s.includes('老青'))throw new Error('自定义名字未注入prompt');
+    if(!s.includes('沉稳寡言的剑客'))throw new Error('自定义人设未注入prompt');
+  });
   /* 异步收尾：respond 未配置 AI 时应同步降级为本地话术（永不 reject） */
   (async()=>{
     try{

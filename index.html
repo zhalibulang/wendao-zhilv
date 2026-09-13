@@ -265,6 +265,7 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 .cfgtabs button{font:inherit;font-size:12.5px;padding:5px 12px;background:var(--bg3);border:2px solid var(--border);color:var(--fg2);cursor:pointer}
 .cfgtabs button.on{background:var(--bg2);border-color:var(--neon);color:var(--neon);box-shadow:2px 2px 0 #000}
 .cfgpane{display:none}.cfgpane.on{display:block}
+.npcfgcard{border:1px solid var(--border);padding:8px 10px;margin:6px 0;border-radius:4px;background:var(--bg2)}
 .cfgrow{display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap}
 .cfgrow label{font-size:12.5px;color:var(--dim);min-width:64px}
 .cfgrow input[type=text],.cfgrow input[type=password],.cfgrow input[type=number],.cfgrow textarea,.cfgrow select{
@@ -795,11 +796,34 @@ function sendChat(){
   st.dialogue.push({role:"player",text:v,at:new Date().toISOString(),day:st.day});
   if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
   save(); renderChat(true);
-  // @全员 → 各 NPC 并行接话；@单人 → 指定回应；无 @ → 智能路由一位职能匹配的 NPC
+  // @全员 → 各 NPC 并行接话；@单人 → 指定回应；无 @ → 云蘅代为引荐职能NPC
   if(mentioned==="__ALL__") npcAnswer(Object.keys(MENTION_ALIASES),v);
   else if(mentioned) npcAnswer([mentioned],v);
-  else npcAnswer([routeNpc(v)],v);
+  else yunhengProxy(v);
 }
+/* 云蘅代@机制：未指定 NPC 时，云蘅先接话引荐，再由职能 NPC 回应 */
+function yunhengProxy(text){
+  const target=routeNpc(text);
+  /* 如果路由结果就是云蘅自己，只回一句即可 */
+  if(target==="yunheng"){ npcAnswer(["yunheng"],text); return; }
+  const n=NPC[target]||NPC.qingxuan;
+  /* 云蘅先以引路人身份接住话，并替玩家引荐职能 NPC */
+  const proxyText="@"+n.name+" 这位道友问了「"+String(text).replace(/^@[^\s，。,,\s]+\s*/,"").slice(0,20)+"」——你来说说";
+  typing(true,true);
+  toast("云蘅正在为你引荐"+n.name+"……");
+  aiRespond("yunheng",proxyText,true).then(r=>{
+    st.dialogue.push({role:"npc",npc:"yunheng",text:r.text,at:new Date().toISOString(),day:st.day});
+    if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+    save(); renderChat(true);
+    /* 紧接着职能 NPC 回应玩家原话 */
+    aiRespond(target,text,true).then(r2=>{
+      st.dialogue.push({role:"npc",npc:target,text:r2.text,at:new Date().toISOString(),day:st.day});
+      if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+      save(); typing(false); renderChat();
+    }).catch(()=>{ typing(false); renderChat(); });
+  }).catch(()=>{ typing(false); renderChat(); });
+}
+
 /* 点击对话流中的 NPC 名：自动生成玩家情境开场白并触发该 NPC 的标准回应 */
 function talkToNpc(npcId){
   if(!NPC[npcId]) return;
@@ -859,12 +883,13 @@ function renderChat(keep){
     if(r.t==="sysday") return `<div class="sys daysep">${esc(r.x)}</div>`;
     if(r.t==="sys") return `<div class="msg sysline"><div class="bubble" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>${esc(r.x)}</span>${r.qid?`<button class="btn sm ghost" data-open="${r.qid}" style="flex:none">回看</button>`:""}</div></div>`;
     if(r.t==="npc"){ const n=NPC[r.npc]||NPC.qingxuan;
+      const dn=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(r.npc,n.name):n.name;
       const rlist=r.refs&&r.refs.length?r.refs:(r.qid?[{qid:r.qid}]:[]);
       const chips=rlist.map(x=>{ const qq=QMAP[x.qid]; return qq?`<button class="qref" data-ref="${qq.id}">📜 ${esc(qq.name)}</button>`:""; }).join("");
       const navSrc=(window.WDCfg&&WDCfg.avatarURL(r.npc))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):"");
-      const av=navSrc?`<img class="pixav" src="${navSrc}" alt="" onerror="this.onerror=null;this.src='${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):""}'">`:esc(n.name[0]);
+      const av=navSrc?`<img class="pixav" src="${navSrc}" alt="" onerror="this.onerror=null;this.src='${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):""}'">`:esc(dn[0]);
       return `<div class="msg"><div class="avatar">${av}</div><div class="body">
-      <div class="name"><span class="nl" data-npc="${r.npc}" title="点击与${esc(n.name)}对话">${esc(n.name)}</span> · ${esc(n.title)}</div>
+      <div class="name"><span class="nl" data-npc="${r.npc}" title="点击与${esc(dn)}对话">${esc(dn)}</span> · ${esc(n.title)}</div>
       <div class="bubble">${esc(r.x)}</div>
       ${chips?`<div class="qrefs">${chips}</div>`:""}</div></div>`; }
     if(r.t==="player"){ const uav=uavSrc?`<img class="pixav" src="${uavSrc}" alt="我" onerror="this.onerror=null;this.src='${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL("_player"):""}'">`:"　";
@@ -1784,6 +1809,8 @@ function renderCfg(){
   <div class="cfgtabs">
     <button data-tab="av" class="on" type="button">头像</button>
     <button data-tab="call" type="button">称呼与语气</button>
+    <button data-tab="npc" type="button">NPC角色</button>
+    <button data-tab="world" type="button">世界观</button>
     <button data-tab="attr" type="button">初始属性</button>
     <button data-tab="data" type="button">数据</button>
   </div>
@@ -1824,6 +1851,23 @@ function renderCfg(){
     <div class="small" id="cfgCallMsg" style="color:var(--ok)"></div>
   </div>
 
+  <div class="cfgpane" data-pane="npc">
+    <div class="note">自定义 NPC 名字与人设基准。名字留空则用原名；人设描述作为 AI 生成对话的参考依据，让 NPC 更贴近你的预期。</div>
+    <div id="npcList"></div>
+  </div>
+
+  <div class="cfgpane" data-pane="world">
+    <div class="note">此处可编辑发送给 DeepSeek 的游戏背景信息。留空则使用系统默认设定；自定义内容将完全覆写默认值，AI 会以此为准生成对话。</div>
+    <div class="cfgrow" style="align-items:flex-start"><textarea id="cfgWorldBrief" maxlength="5000" rows="10" style="width:100%;font-size:12px;line-height:1.5" placeholder="留空则使用系统默认世界观。如需自定义，描述游戏世界设定、NPC关系、隐喻系统、叙事约束、语言要求等……">${esc(c.customWorldBrief||"")}</textarea></div>
+    <div class="savegrid" style="margin:6px 0">
+      <button class="btn sm primary" id="worldSave" type="button">保存</button>
+      <button class="btn sm ghost" id="worldReset" type="button">清空并恢复默认</button>
+      <button class="btn sm" id="worldViewDefault" type="button">查看默认设定</button>
+    </div>
+    <div class="small" id="worldMsg" style="color:var(--ok)"></div>
+    <div id="worldDefaultPreview" style="display:none;margin-top:8px"><div class="note" style="font-size:11px;white-space:pre-wrap;max-height:300px;overflow:auto">${esc(JSON.stringify(WDChat.worldBrief(),null,1))}</div></div>
+  </div>
+
   <div class="cfgpane" data-pane="attr">
     <div class="note">总点数 ${WDCfg.attrBudget()}（每项不低于 ${WDCfg.attrMin}）。力量→心气上限，敏捷→灵力上限，智力→修行加成预览。变更即时影响状态栏。</div>
     ${[["str","力量"],["agi","敏捷"],["int","智力"]].map(([k,lbl])=>`
@@ -1854,7 +1898,7 @@ function renderCfg(){
   ov.querySelectorAll(".cfgtabs button").forEach(b=>{
     b.onpointerdown=()=>{ SFX.tap();
       ov.querySelectorAll(".cfgtabs button").forEach(x=>x.classList.toggle("on",x===b));
-      ov.querySelectorAll(".cfgpane").forEach(p=>p.classList.toggle("on",p.dataset.tab===b.dataset.tab));
+      ov.querySelectorAll(".cfgpane").forEach(p=>p.classList.toggle("on",p.dataset.pane===b.dataset.tab));
     };
   });
 
@@ -1895,6 +1939,50 @@ function renderCfg(){
     });
   }
   paintGrid();
+
+  /* ---- NPC 角色自定义 ---- */
+  function paintNpc(){
+    const g=$("#npcList",ov);
+    g.innerHTML=D.npcs.map(n=>{
+      const cn=WDCfg.npcName(n.id,n.name);
+      const cp=WDCfg.npcPersona(n.id);
+      return `<div class="npcfgcard">
+        <div class="cfgrow"><label>原名</label><span class="small">${esc(n.name)} · ${esc(n.title||"")}</span></div>
+        <div class="cfgrow"><label>自定义名</label><input type="text" data-nn="${n.id}" maxlength="12" placeholder="${esc(n.name)}" value="${esc(cn)}"></div>
+        <div class="cfgrow" style="align-items:flex-start"><label>人设描述</label><textarea data-np="${n.id}" maxlength="300" rows="3" placeholder="描述该角色的性格、说话风格、与玩家的关系等基准信息，AI 将以此为参考生成符合预期的对话">${esc(cp)}</textarea></div>
+        <div class="small" id="npcMsg_${n.id}" style="color:var(--ok)"></div>
+      </div>`;
+    }).join("");
+    /* 失焦即保存 */
+    g.querySelectorAll("[data-nn]").forEach(inp=>{
+      inp.onblur=()=>{
+        const id=inp.dataset.nn;
+        WDCfg.setNpcName(id,inp.value.trim());
+        const m=$("#npcMsg_"+id,ov); if(m){ m.textContent="名字已保存 · 对话即刻生效"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2000); }
+      };
+    });
+    g.querySelectorAll("[data-np]").forEach(ta=>{
+      ta.onblur=()=>{
+        const id=ta.dataset.np;
+        WDCfg.setNpcPersona(id,ta.value.trim());
+        const m=$("#npcMsg_"+id,ov); if(m){ m.textContent="人设已保存 · 对话即刻生效"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2000); }
+      };
+    });
+  }
+  paintNpc();
+
+  /* ---- 游戏背景信息编辑 ---- */
+  $("#worldSave",ov).onpointerdown=()=>{ SFX.tap();
+    WDCfg.setWorldBrief($("#cfgWorldBrief",ov).value);
+    const m=$("#worldMsg",ov); m.textContent="已保存 · 下次对话即刻采用"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+  };
+  $("#worldReset",ov).onpointerdown=()=>{ SFX.tap();
+    WDCfg.setWorldBrief(""); $("#cfgWorldBrief",ov).value="";
+    const m=$("#worldMsg",ov); m.textContent="已清空 · 恢复系统默认世界观"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+  };
+  $("#worldViewDefault",ov).onpointerdown=()=>{ SFX.tap();
+    const p=$("#worldDefaultPreview",ov); p.style.display=p.style.display==="none"?"block":"none";
+  };
 
   /* ---- 称呼 / 自称 / 语气 ---- */
   ov.querySelectorAll("#addrPresets button,#addrHist button").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); $("#cfgAddr",ov).value=b.dataset.v; });

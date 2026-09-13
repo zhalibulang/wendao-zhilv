@@ -19,7 +19,8 @@ function defaults(){
   return {ver:VER, npcAvatar:{}, userAvatar:null,
     address:"", addressHist:[], selfName:"", bio:"",
     style:{tone:"",humor:"",depth:""},
-    attr:{str:2,agi:2,int:2}, hist:[], rejected:0};
+    attr:{str:2,agi:2,int:2}, hist:[], rejected:0,
+    npcNames:{}, npcPersonas:{}, customWorldBrief:""};
 }
 function sanitize(recount){
   if(!cfg.npcAvatar||typeof cfg.npcAvatar!=="object"){ if(recount&&cfg.npcAvatar!==undefined)cfg.rejected++; cfg.npcAvatar={}; }
@@ -31,6 +32,9 @@ function sanitize(recount){
   if(typeof cfg.address!=="string")cfg.address="";
   if(typeof cfg.selfName!=="string")cfg.selfName="";
   if(typeof cfg.bio!=="string")cfg.bio="";
+  if(!cfg.npcNames||typeof cfg.npcNames!=="object"){ if(recount&&cfg.npcNames!==undefined)cfg.rejected++; cfg.npcNames={}; }
+  if(!cfg.npcPersonas||typeof cfg.npcPersonas!=="object"){ if(recount&&cfg.npcPersonas!==undefined)cfg.rejected++; cfg.npcPersonas={}; }
+  if(typeof cfg.customWorldBrief!=="string")cfg.customWorldBrief="";
 }
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(cfg)); }catch(e){} }
 function emit(keys){ try{ window.dispatchEvent(new CustomEvent("wd:cfg",{detail:{keys:keys||[]}})); }catch(e){} }
@@ -124,6 +128,14 @@ const WDCfg={
     });
   },
   clearAvatar(id){ if(id==="_player") this.set("userAvatar",null,"移除我的头像"); else this.set("npcAvatar."+id,null,"移除NPC头像"); },
+  /* NPC 名字/人设自定义：用户可覆写 NPC 名称并提供基准描述供 AI 生成角色设定 */
+  npcName(id,original){ return (cfg.npcNames&&cfg.npcNames[id])||original||""; },
+  npcPersona(id){ return (cfg.npcPersonas&&cfg.npcPersonas[id])||""; },
+  setNpcName(id,name){ this.set("npcNames."+id,(name||"").slice(0,12),"NPC改名"); },
+  setNpcPersona(id,desc){ this.set("npcPersonas."+id,(desc||"").slice(0,300),"NPC人设描述"); },
+  /* 游戏背景信息用户自定义：DeepSeek 对话的 worldBrief 可被用户直接编辑覆写 */
+  customWorldBrief(){ return cfg.customWorldBrief||""; },
+  setWorldBrief(text){ this.set("customWorldBrief",(text||"").slice(0,5000),"编辑游戏背景信息"); },
   export(){
     return JSON.stringify({ver:VER, exportedAt:new Date().toISOString(), cfg:cfg},null,1);
   },
