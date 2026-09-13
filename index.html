@@ -1857,15 +1857,15 @@ function renderCfg(){
   </div>
 
   <div class="cfgpane" data-pane="world">
-    <div class="note">此处可编辑发送给 DeepSeek 的游戏背景信息。留空则使用系统默认设定；自定义内容将完全覆写默认值，AI 会以此为准生成对话。</div>
-    <div class="cfgrow" style="align-items:flex-start"><textarea id="cfgWorldBrief" maxlength="5000" rows="10" style="width:100%;font-size:12px;line-height:1.5" placeholder="留空则使用系统默认世界观。如需自定义，描述游戏世界设定、NPC关系、隐喻系统、叙事约束、语言要求等……">${esc(c.customWorldBrief||"")}</textarea></div>
+    <div class="note">此处可直接编辑发送给 DeepSeek 的游戏背景信息。留空 → 使用系统默认设定；输入内容（文本或 JSON）→ 完全覆写，AI 以此为准。</div>
+    <div class="cfgrow" style="align-items:flex-start"><textarea id="cfgWorldBrief" maxlength="8000" rows="14" style="width:100%;font-size:12px;line-height:1.5;font-family:ui-monospace,Menlo,Consolas,monospace" placeholder="留空使用系统默认。输入你的自定义版本（纯文本或 JSON 皆可，DeepSeek 原样接收）……">${esc(c.customWorldBrief||"")}</textarea></div>
     <div class="savegrid" style="margin:6px 0">
       <button class="btn sm primary" id="worldSave" type="button">保存</button>
+      <button class="btn sm" id="worldLoadDefault" type="button">载入系统默认（可直接编辑）</button>
       <button class="btn sm ghost" id="worldReset" type="button">清空并恢复默认</button>
-      <button class="btn sm" id="worldViewDefault" type="button">查看默认设定</button>
     </div>
     <div class="small" id="worldMsg" style="color:var(--ok)"></div>
-    <div id="worldDefaultPreview" style="display:none;margin-top:8px"><div class="note" style="font-size:11px;white-space:pre-wrap;max-height:300px;overflow:auto">${esc(JSON.stringify(WDChat.worldBrief(),null,1))}</div></div>
+    <div id="worldDefaultPreview" style="display:none;margin-top:8px"><div class="note" style="font-size:11px;white-space:pre-wrap;max-height:300px;overflow:auto"></div></div>
   </div>
 
   <div class="cfgpane" data-pane="attr">
@@ -1973,15 +1973,20 @@ function renderCfg(){
 
   /* ---- 游戏背景信息编辑 ---- */
   $("#worldSave",ov).onpointerdown=()=>{ SFX.tap();
-    WDCfg.setWorldBrief($("#cfgWorldBrief",ov).value);
-    const m=$("#worldMsg",ov); m.textContent="已保存 · 下次对话即刻采用"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+    const v=$("#cfgWorldBrief",ov).value;
+    WDCfg.setWorldBrief(v);
+    const m=$("#worldMsg",ov); m.textContent=v?"已保存 · 下次对话即刻采用":"已清空 · 恢复系统默认世界观";
+    setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
   };
   $("#worldReset",ov).onpointerdown=()=>{ SFX.tap();
     WDCfg.setWorldBrief(""); $("#cfgWorldBrief",ov).value="";
     const m=$("#worldMsg",ov); m.textContent="已清空 · 恢复系统默认世界观"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
   };
-  $("#worldViewDefault",ov).onpointerdown=()=>{ SFX.tap();
-    const p=$("#worldDefaultPreview",ov); p.style.display=p.style.display==="none"?"block":"none";
+  $("#worldLoadDefault",ov).onpointerdown=()=>{ SFX.tap();
+    const wb=WDChat.worldBrief();
+    const txt=typeof wb==="string"?wb:JSON.stringify(wb,null,2);
+    $("#cfgWorldBrief",ov).value=txt;
+    const m=$("#worldMsg",ov); m.textContent="系统默认已载入编辑器 · 直接改完保存即可"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
   };
 
   /* ---- 称呼 / 自称 / 语气 ---- */

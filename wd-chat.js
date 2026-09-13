@@ -24,10 +24,11 @@ const WDChat={
 
   /* ---------- 结构化游戏背景信息（世界观/机制/NPC/叙事约束） ---------- */
   worldBrief(){
-    const {D}=CTX;
     /* 用户自定义游戏背景信息优先（配置中心编辑） */
     const custom=(window.WDCfg&&WDCfg.customWorldBrief)?WDCfg.customWorldBrief():null;
     if(custom&&custom.trim()) return custom.trim();
+    if(!CTX||!CTX.D) return "（游戏背景信息尚未加载）";
+    const {D}=CTX;
     return {
       游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
       游戏目的:"玩家在游戏中备考北京导游资格证。做任务就是网络游戏行为：研习新考点=开荒新副本，复习=回炉重刷副本并重新封印苏醒的旧妖，题组试炼=砍怪打谜题妖，英文背诵=施法吟咒，大试炼=攻城团战，巡夜=日常巡逻任务。玩家与NPC是游戏世界里并肩作战的关系（队友/接头人/引路人），绝非老师与学生——没有人在上课，大家在同一个江湖里打怪升级。",
