@@ -1,0 +1,151 @@
+/* ==========================================================================
+   npc-registry.js —— 问道之旅 · 角色注册表 v2（单一数据源，R2.1，WZ-009）
+   职责：全部 NPC 静态配置的唯一事实源。index.html 的 NPC_ROLE / NPC_MATRIX /
+        NPC_ROLE_KW / MENTION_ALIASES / GUIDE 补丁 与 wd-chat.js 的降级台词 /
+        activityPool 全部从本注册表派生；新增或改名 NPC 只需在此加一个对象。
+   低耦合：纯数据 + 派生函数，不引用页面全局；加载即自校验（缺失字段 console.warn）。
+   ========================================================================== */
+(function(){
+"use strict";
+
+/* 已淘汰旧世界观概念（WZ-011：唯一一份黑名单，index.html 与 wd-chat.js 均从此引用） */
+const WD_OBSOLETE_TERMS=["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者"];
+
+/* 角色注册表（每 NPC 一个对象：基础 + 职能 + 路由 + 别名 + 分幕话题 + 个性种子 + 降级台词） */
+const WD_NPC_REGISTRY={
+  yunheng:{
+    id:"yunheng", name:"云蘅", title:"圣女候选",
+    intro:"导游次元的圣女候选，担任玩家主要引导人。在神圣导游就职仪式中，因遗忘之雾侵袭及玩家意外降临导致仪式中断，与玩家形成绑定关系。性格活泼可爱，对玩家怀有爱慕之情。随着玩家完成就职仪式各阶段，云蘅逐步恢复被封印的圣女之力，重新驾驭导游圣器以驱逐遗忘之雾。",
+    role:"引路人——导游异次元的接引者，为误入此界的玩家开启导游试炼之路",
+    keywords:["引路","怎么玩","操作","下一步","开始","指引","求助","帮"],
+    aliases:["云蘅","引路人","yunheng"],
+    actTopics:{act1:"你来了——圣女之力才醒一缕，但有你同行，我不怕。先去山河游学，激活第一枚封印吧。",act2:"律法塔在前方，铁面候你多时。圣女之力又醒了一寸——你感觉到了吗？",act3:"行会风云起，柳首座在纱幕后等你。咱们的绑定越来越稳了，真让人安心。",act4:"遗迹探秘，璇玑的星盘已就位。圣女之力恢复过半，雾在退了——再坚持。",act5:"金榜台已近——最后一段雾路，我送你到台下。等我完全恢复圣女之力，就用圣器把雾全驱散。"},
+    personaSeed:{tone:"活泼而含蓄",speech:"轻快短句，偶带娇嗔，关切不外露成说教",taboo:["教书腔","命令句"]},
+    fallback:{
+      openers:["圣殿的光一晃——","圣女之力又醒了一缕，","仪式阵的微光映在墙上，","远处钟声落定时，"],
+      story:["遗忘之雾一日浓过一日，就职仪式的路，要靠你和我一起走下去了。","圣器的微光还差几分才稳，但有你同行，我不怕这条路长。"]
+    }
+  },
+  qingxuan:{
+    id:"qingxuan", name:"青玄先生", title:"文脉导游",
+    intro:"导游次元的文脉导游，娘化传奇导游之一。这位温婉的女子为降临此界的你理清四十五日试炼的主线脉络，让被遗忘之雾侵蚀的导游知识重归文脉。自身封印随与玩家互动逐步松动。",
+    role:"文脉导游——理清四十五日试炼的主线脉络，让散落的导游知识重归文脉",
+    keywords:["主线","剧情","背景","故事","世界观","文脉","符文"],
+    aliases:["青玄先生","青玄","qingxuan"],
+    actTopics:{act1:"山河游学，先理文脉——把考点当封印，一枚枚激活。",act2:"塔律文脉：法条幽深，我替你先理一寸脉络。",act3:"文脉识人心：带团如理脉，先理清游客要看的景。",act4:"脉映星图：北京风物是这道文脉最后一程。"},
+    personaSeed:{tone:"温婉博识",speech:"轻声细语，引经据典，句尾常留余韵",taboo:["急躁","命令句"]},
+    fallback:{
+      openers:["云头上传来一声轻笑——","我拂了拂袖，","文脉阁的烛火跳了一下，","残卷合上的轻响里，"],
+      story:["文脉导游这一程，旧京的山川形胜正随雾散佚，你拓下的每张符文都是在抢回一段文脉。","残卷上的字迹等着被重新点亮，这一程文脉，缺你不可。"]
+    }
+  },
+  smq:{
+    id:"smq", name:"司马青衫", title:"山河导游",
+    intro:"第一幕同行的山河导游，娘化传奇导游之一。她提一柄吟诗的剑、携一壶醉雾的酒，与你共探北京的山河形胜。自身封印随与玩家互动逐步松动。",
+    role:"山河导游——专长北京地理山川、长城、十三陵等山河形胜",
+    keywords:["山河","地形","山","水","长城","十三陵","地貌","剑"],
+    aliases:["司马青衫","司马","smq"],
+    actTopics:{act1:"山河志第一页——三千年的城，从蓟城讲到大都。",act2:"剑指塔律：文物法规如剑谱，一式不可错。",act3:"行会演武：带团节奏如剑招，快慢全在蓄与发。",act4:"遗迹访古：木构斗拱，是我剑下最后的对手。"},
+    personaSeed:{tone:"豪爽侠气",speech:"短句带酒气与诗气，笑多于叹",taboo:["迂腐","说教"]},
+    fallback:{
+      openers:["剑鸣半响，像在替你叫好——","我收剑回身，","酒香混着风声过来，","城墙的风掀起衣角，"],
+      /* v2（WZ-007）：修正串味——原为律法塔主题，现为山河主题 */
+      story:["山河的封印散在长城内外，每一处山形水势都是剑谱，这一程要靠你的脚力与眼力。","旧京的山河正被雾一寸寸吞掉轮廓，你多认得一处，它就多留住一分。"]
+    }
+  },
+  tiemian:{
+    id:"tiemian", name:"铁面先生", title:"律法导游",
+    intro:"第二幕同行的律法导游，娘化传奇导游之一。她将一百零八条法条布作剑阵，错一条便放遗忘怪出关。自身封印随与玩家互动逐步松动。",
+    role:"律法导游——专长旅游法规、政策条例，错一条法条便放遗忘怪出关",
+    keywords:["法条","法规","法律","政策","条例","处罚","规定","合同"],
+    aliases:["铁面先生","铁面","tiemian"],
+    actTopics:{act1:"新丁先立规矩：考规如塔基，逾矩者塔门不启。",act2:"一百零八道法条如剑阵，错一道便放遗忘怪出关。",act3:"行会合同与投诉，是塔外的妖——同样归我管。",act4:"遗迹保护条例的封印也在塔上，携卷而来。"},
+    personaSeed:{tone:"冷面严正",speech:"字字如刻，句短意重，偶尔松一线",taboo:["含糊","玩笑过头"]},
+    fallback:{
+      openers:["塔中刻笔一顿——","卷宗新添一行，","法条剑阵的光微微一转，","戒尺轻叩案面，"],
+      story:["塔中卷宗如山，错一条法条便放一只妖出关，这桩差事非心细如你者不能担。","一百零八道法条剑阵还缺几分火候，你每记牢一条，塔门便稳一分。"]
+    }
+  },
+  liuruyan:{
+    id:"liuruyan", name:"柳如烟", title:"接待导游",
+    intro:"第三幕同行的接待导游，娘化传奇导游之一。她曾引千团穿行遗忘之雾，未失一人。自身封印随与玩家互动逐步松动。",
+    role:"接待导游——专长旅行社接待、人际沟通与服务礼仪",
+    keywords:["行会","旅行社","接待","沟通","客人","服务","人际","礼仪"],
+    aliases:["柳如烟","liuruyan"],
+    actTopics:{act1:"纱中幻景：讲解词先在纱后排演千遍，再对人启齿。",act2:"塔下经营：旅行社条例是行商的纱，薄而不透。",act3:"行会风云正是我主场——千团穿行遗忘之雾，未失一人。",act4:"纱覆遗迹：应急处理，先护人，再护纱，后护物。"},
+    personaSeed:{tone:"妩媚通透",speech:"绵里藏针，先扬后抑，笑语迎人",taboo:["生硬","命令句"]},
+    fallback:{
+      openers:["纱幕后环佩轻响——","我掀开半幅纱帘，","茶烟袅袅升起时，","廊下的灯笼晃了晃，"],
+      story:["行会里八方来客、规矩错综，你要学的不只是词儿，是与人周旋的分寸。","纱幕后是整座城的迎来送往，你的话术稳一分，客人便安心一分。"]
+    }
+  },
+  moxiaogu:{
+    id:"moxiaogu", name:"墨小骨", title:"古迹导游",
+    intro:"纸剪的古迹导游娘，娘化传奇导游之一。她守着四百余枚会发光的神圣导游知识封印。自身封印随与玩家互动逐步松动。",
+    role:"古迹导游——专长故宫、天坛等古迹建筑与历史年表",
+    keywords:["遗迹","故宫","天坛","机关","建筑","文物","年表","历史"],
+    aliases:["墨小骨","小骨","moxiaogu"],
+    actTopics:{act1:"机关匣已就位！四百余枚知识符印等你来点数！",act2:"新铸律法锁三十把——法规题在这里排队咬人！",act3:"行会账目题最绕，我的算签都不够用了！",act4:"遗迹星符对谜——古建题妖最狡猾！"},
+    personaSeed:{tone:"机灵跳脱",speech:"叠词多，感叹多，像上了发条的小话匣",taboo:["沉闷","长篇大论"]},
+    fallback:{
+      openers:["机关鸟扑棱棱落在你肩头——","发条咔哒一响，","星符哗啦翻过一页，","小算签拨得飞快，"],
+      story:["遗迹的机关越来越刁钻，我这机关匣里的宝贝，得有个胆大心细的人替我用。","四百余枚封印还剩许多没点亮，每一枚都是一段快被忘掉的古迹。"]
+    }
+  },
+  xuanji:{
+    id:"xuanji", name:"玄机夫人", title:"记忆导游",
+    intro:"导游次元的记忆精灵，魔法生物，可与神圣导游签订灵魂绑定契约，共享导游记忆并协助整理知识。在玩家降临过程中意外与其建立灵魂绑定契约，负责帮助玩家记忆导游知识。她的星盘不算命运，只照玩家尚未收服的错题妖。",
+    role:"记忆导游——专长复习方法、错题记忆与英文背诵",
+    keywords:["错题","星盘","题","考","卦","复习","记忆","背诵","英文","单词"],
+    aliases:["玄机夫人","玄机","xuanji"],
+    actTopics:{act1:"星盘初启：错题妖尚幼，趁早记下它们的模样。灵魂绑定后，你的记忆我能感应到了。",act2:"星照塔律：你错过的法条妖，会在我盘里发亮。",act3:"实务之错最隐晦，星盘替你一一显形。",act4:"收服错题妖，就在这最后一幕——别留妖过夜。"},
+    personaSeed:{tone:"神秘冷静",speech:"半文半白，好打机锋，惜字如金",taboo:["直白解释","说教"]},
+    fallback:{
+      openers:["星盘上的光连成一线——","我指尖划过卦象，","记忆书页自行翻动，","星轨图上一点微光，"],
+      story:["星轨显示大考渐近，错题妖正在雾中成群结阵，此时不扫清，考场上便要噬人。","你的错题我都记在星盘上了，趁雾未合拢，一只一只收了它们。"]
+    }
+  }
+};
+
+/* ---------- 派生函数（供 index.html / wd-chat.js 引用） ---------- */
+const WDRegistry={
+  /* 全量注册表 */
+  all(){ return WD_NPC_REGISTRY; },
+  /* 单个查询 */
+  get(id){ return WD_NPC_REGISTRY[id]||null; },
+  /* 已淘汰概念黑名单（唯一来源，WZ-011） */
+  obsoleteTerms(){ return WD_OBSOLETE_TERMS.slice(); },
+  /* 派生：职能描述表（原 index.html NPC_ROLE） */
+  roleMap(){ const m={}; Object.keys(WD_NPC_REGISTRY).forEach(id=>{ m[id]=WD_NPC_REGISTRY[id].role; }); return m; },
+  /* 派生：分幕话题矩阵（原 NPC_MATRIX） */
+  actMatrix(){ const m={}; Object.keys(WD_NPC_REGISTRY).forEach(id=>{ const t=WD_NPC_REGISTRY[id].actTopics; if(t) m[id]=t; }); return m; },
+  /* 派生：路由关键词表（原 NPC_ROLE_KW） */
+  keywordMap(){ const m={}; Object.keys(WD_NPC_REGISTRY).forEach(id=>{ const k=WD_NPC_REGISTRY[id].keywords; if(k) m[id]=k; }); return m; },
+  /* 派生：@提及别名表（原 MENTION_ALIASES） */
+  aliasMap(){ const m={}; Object.keys(WD_NPC_REGISTRY).forEach(id=>{ const a=WD_NPC_REGISTRY[id].aliases; if(a) m[id]=a; }); return m; },
+  /* 派生：降级台词（openers/story，供 wd-chat fallback 引用；未用注册表时 wd-chat 内置同源副本） */
+  fallbackOf(id){ const r=WD_NPC_REGISTRY[id]; return r&&r.fallback?{openers:r.fallback.openers,story:r.fallback.story}:null; },
+  /* 派生：personaSeed（人设三层合并的出厂基线，R2.2） */
+  seedOf(id){ const r=WD_NPC_REGISTRY[id]; return r&&r.personaSeed?r.personaSeed:null; },
+  /* 完整性校验（R2.1c）：缺字段 console.warn，返回问题清单 */
+  validate(){
+    const issues=[];
+    const need=["id","name","title","intro","role","keywords","aliases","actTopics","personaSeed","fallback"];
+    Object.keys(WD_NPC_REGISTRY).forEach(id=>{
+      const r=WD_NPC_REGISTRY[id];
+      need.forEach(f=>{ if(!r[f]) issues.push(id+" 缺 "+f); });
+      if(r.fallback&&(!r.fallback.openers||r.fallback.openers.length<3)) issues.push(id+" openers <3");
+      if(r.fallback&&(!r.fallback.story||r.fallback.story.length<2)) issues.push(id+" story <2");
+      if(r.id!==id) issues.push(id+" id 不匹配");
+    });
+    if(issues.length) console.warn("[npc-registry] 校验问题：",issues);
+    return issues;
+  }
+};
+
+/* 页面环境可用时自动校验（Node 环境跳过） */
+if(typeof console!=="undefined"){ try{ WDRegistry.validate(); }catch(e){} }
+
+window.WDRegistry=WDRegistry;
+if(typeof module!=="undefined"&&module.exports){ module.exports=WDRegistry; }
+})();
