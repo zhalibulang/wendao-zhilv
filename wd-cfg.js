@@ -20,7 +20,8 @@ function defaults(){
     address:"", addressHist:[], selfName:"", bio:"",
     style:{tone:"",humor:"",depth:""},
     attr:{str:2,agi:2,int:2}, hist:[], rejected:0,
-    npcNames:{}, npcTitles:{}, npcPersonas:{}, customWorldBrief:""};
+    npcNames:{}, npcTitles:{}, npcPersonas:{}, customWorldBrief:"",
+    aiDocument:""};
 }
 function sanitize(recount){
   if(!cfg.npcAvatar||typeof cfg.npcAvatar!=="object"){ if(recount&&cfg.npcAvatar!==undefined)cfg.rejected++; cfg.npcAvatar={}; }
@@ -36,6 +37,7 @@ function sanitize(recount){
   if(!cfg.npcTitles||typeof cfg.npcTitles!=="object"){ if(recount&&cfg.npcTitles!==undefined)cfg.rejected++; cfg.npcTitles={}; }
   if(!cfg.npcPersonas||typeof cfg.npcPersonas!=="object"){ if(recount&&cfg.npcPersonas!==undefined)cfg.rejected++; cfg.npcPersonas={}; }
   if(typeof cfg.customWorldBrief!=="string")cfg.customWorldBrief="";
+  if(typeof cfg.aiDocument!=="string")cfg.aiDocument="";
 }
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(cfg)); }catch(e){} }
 function emit(keys){ try{ window.dispatchEvent(new CustomEvent("wd:cfg",{detail:{keys:keys||[]}})); }catch(e){} }
@@ -139,6 +141,11 @@ const WDCfg={
   /* 游戏背景信息用户自定义：DeepSeek 对话的 worldBrief 可被用户直接编辑覆写 */
   customWorldBrief(){ return cfg.customWorldBrief||""; },
   setWorldBrief(text){ this.set("customWorldBrief",(text||"").slice(0,8000),"编辑游戏背景信息"); },
+  /* AI 接口文档用户自定义：完整覆写 sysPrompt 的约束条款（行为边界/语气/自主权/回复结构/语言要求等）。
+     留空 → 使用系统默认约束；非空 → 完全替代默认约束段，AI 以用户文档为准。
+     这是统一 AI 互动思路的唯一编辑入口。 */
+  aiDocument(){ return cfg.aiDocument||""; },
+  setAiDocument(text){ this.set("aiDocument",(text||"").slice(0,12000),"编辑AI接口文档"); },
   export(){
     return JSON.stringify({ver:VER, exportedAt:new Date().toISOString(), cfg:cfg},null,1);
   },

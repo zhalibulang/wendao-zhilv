@@ -428,11 +428,121 @@ const driver=`
     st.aiBrief['q1']={line:'提灯过卡，问道录在手'};
     // 重新跑 reconcile 的清洗逻辑
     const obs=['提灯','引灯','问道录','仙侠','仙师','封妖塔','幻纱行','机关童子','观星者','掌灯','镇塔尊者'];
-    const hasObs=o=>obs.some(t=>JSON.stringify(o||'').includes(t));
+    const hasObs=o=>obs.some(t=>JSON.stringify(o||"").includes(t));
     Object.keys(st.personas).forEach(id=>{ if(hasObs(st.personas[id])) delete st.personas[id]; });
     Object.keys(st.aiBrief).forEach(id=>{ if(hasObs(st.aiBrief[id])) delete st.aiBrief[id]; });
     if(st.personas.qingxuan) throw new Error('旧人设缓存未被清除');
     if(st.aiBrief.q1) throw new Error('旧任务说明缓存未被清除');
+  });
+  /* ===== AI 接口文档 + 条款检查 + NPC人设同步（v28）===== */
+  run('AI接口文档：默认为空，使用系统默认约束',()=>{
+    reset();
+    WDCfg.setAiDocument('');
+    WDCfg.setWorldBrief('');
+    if(WDCfg.aiDocument()!=='')throw new Error('默认aiDocument应为空');
+    const sys=WDChat.sysPrompt('qingxuan',false);
+    if(!sys.includes('行为边界'))throw new Error('空aiDocument时sysPrompt应使用默认约束');
+  });
+  run('AI接口文档：用户文档非空时完全替代默认约束',()=>{
+    reset();
+    WDCfg.setWorldBrief('');
+    WDCfg.setAiDocument('用户自定义约束：你是酷酷的NPC，不用提灯。');
+    const sys=WDChat.sysPrompt('qingxuan',false);
+    if(!sys.includes('用户自定义约束'))throw new Error('sysPrompt未使用用户文档');
+    if(sys.includes('【行为边界·绝不可越界】'))throw new Error('用户文档应完全替代默认约束段');
+    /* 动态上下文仍应追加 */
+    if(!sys.includes('当下情境'))throw new Error('动态上下文应始终追加');
+  });
+  run('AI接口文档：用户文档清空后恢复默认',()=>{
+    reset();
+    WDCfg.setWorldBrief('');
+    WDCfg.setAiDocument('临时文档');
+    WDCfg.setAiDocument('');
+    const sys=WDChat.sysPrompt('qingxuan',false);
+    if(!sys.includes('行为边界'))throw new Error('清空后应恢复默认约束');
+  });
+  run('defaultAiDocument：可获取完整默认文档',()=>{
+    reset();
+    const doc=WDChat.defaultAiDocument('yunheng','云蘅','圣女候选',false);
+    if(!doc.includes('云蘅'))throw new Error('默认文档缺NPC名');
+    if(!doc.includes('行为边界'))throw new Error('默认文档缺行为边界');
+    if(!doc.includes('娘化次元'))throw new Error('默认文档缺娘化约束');
+    if(!doc.includes('≤220字'))throw new Error('默认文档缺字数限制');
+  });
+  run('条款检查：AI腔检测',()=>{
+    reset();
+    const chk=WDChat.clauseCheck('首先，你要记住，总之这道题很重要。',null);
+    if(chk.pass)throw new Error('应检测到违规');
+    const types=chk.violations.map(v=>v.type);
+    if(!types.includes('AI腔'))throw new Error('应检测到AI腔');
+    if(!types.includes('教书先生口吻'))throw new Error('应检测到教书先生口吻');
+  });
+  run('条款检查：已淘汰旧概念检测',()=>{
+    reset();
+    const chk=WDChat.clauseCheck('提灯在前，引灯在后，问道录在手。',null);
+    if(chk.pass)throw new Error('应检测到旧概念');
+    const types=chk.violations.map(v=>v.type);
+    if(!types.includes('已淘汰概念'))throw new Error('应检测到已淘汰概念');
+  });
+  run('条款检查：超长回复检测',()=>{
+    reset();
+    const long='这是一段很长的回复。'.repeat(35);
+    const chk=WDChat.clauseCheck(long,null);
+    if(chk.pass)throw new Error('应检测到超长回复');
+    if(!chk.violations.some(v=>v.type==='超长回复'))throw new Error('应检测到超长回复');
+  });
+  run('条款检查：合规回复通过',()=>{
+    reset();
+    WDCfg.setWorldBrief('');
+    WDCfg.setAiDocument('');
+    const chk=WDChat.clauseCheck('雾在涌，但有你同行我不惧。这一关过得利落，圣女之力又醒一寸。',null);
+    if(!chk.pass)throw new Error('合规回复应通过检查');
+  });
+  run('条款检查：关卡关联检测',()=>{
+    reset(); st.unlocked=1;
+    WDCfg.setWorldBrief('');
+    const q=D.quests.find(x=>x.id==='D01M');
+    /* 保存原始 quest 函数，修改后恢复，避免影响后续测试 */
+    const origQuest=WDChat._ctx?WDChat._ctx.quest:null;
+    if(WDChat._ctx) WDChat._ctx.quest=()=>q;
+    const chk=WDChat.clauseCheck('你好呀','qingxuan');
+    if(chk.pass)throw new Error('在途关卡时未提及关卡名应报关卡脱节');
+    if(!chk.violations.some(v=>v.type==='关卡脱节'))throw new Error('应检测到关卡脱节');
+    if(WDChat._ctx) WDChat._ctx.quest=origQuest;
+  });
+  run('NPC人设同步：worldBrief角色设定动态使用用户自定义人设',()=>{
+    reset();
+    /* 清除上轮测试残留的 customWorldBrief，确保 worldBrief 返回对象（而非自定义字符串） */
+    WDCfg.setWorldBrief('');
+    /* 同时清除可能残留的NPC自定义名字 */
+    WDCfg.setNpcName('qingxuan','');
+    WDCfg.setNpcPersona('qingxuan','活泼好动爱打趣的文脉导游');
+    const wb=WDChat.worldBrief();
+    const txt=typeof wb==='string'?wb:JSON.stringify(wb);
+    if(!txt.includes('活泼好动爱打趣'))throw new Error('worldBrief角色设定未同步用户自定义人设');
+    /* 清除自定义后应回退到内置intro */
+    WDCfg.setNpcPersona('qingxuan','');
+    const wb2=WDChat.worldBrief();
+    const txt2=typeof wb2==='string'?wb2:JSON.stringify(wb2);
+    /* 应包含NPC名字（内置名"青玄先生"含"青玄"） */
+    if(!txt2.includes('青玄'))throw new Error('清除自定义后人设应回退到内置');
+  });
+  run('NPC人设同步：worldBrief角色设定使用用户自定义名字',()=>{
+    reset();
+    WDCfg.setWorldBrief('');
+    WDCfg.setNpcName('tiemian','铁面娘');
+    const wb=WDChat.worldBrief();
+    const txt=typeof wb==='string'?wb:JSON.stringify(wb);
+    if(!txt.includes('铁面娘'))throw new Error('worldBrief角色设定未同步用户自定义名字');
+  });
+  run('clauseLog存档：违规记录持久化',()=>{
+    reset();
+    if(!Array.isArray(st.clauseLog))throw new Error('clauseLog应为数组');
+    st.clauseLog.push({at:new Date().toISOString(),npc:'yunheng',violations:[{type:'AI腔',msg:'测试',snippet:'首先'}],text:'测试'});
+    save();
+    load();
+    if(!st.clauseLog||st.clauseLog.length!==1)throw new Error('clauseLog未持久化');
+    if(st.clauseLog[0].npc!=='yunheng')throw new Error('clauseLog数据不一致');
   });
   run('宿主 dName/dTitle 与点名路由',()=>{
     reset();
@@ -561,7 +671,9 @@ const driver=`
   });
   run('sysPrompt 要求回复点出当前关卡名',()=>{
     reset(); st.unlocked=1;
+    WDCfg.setWorldBrief(''); WDCfg.setAiDocument('');
     const aq=firstActiveQuest();
+    if(!aq)throw new Error('无在途关卡');
     const s=WDChat.sysPrompt('qingxuan',false);
     if(!s.includes('「'+aq.name+'」'))throw new Error('sysPrompt未注入当前关卡名');
     if(!s.includes('至少自然点到一次'))throw new Error('缺对话-任务关联硬约束');

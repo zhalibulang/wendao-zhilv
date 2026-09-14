@@ -20,7 +20,7 @@ function now(){ return new Date().toISOString(); }
 const WDChat={
 
   /* 依赖注入（幂等，可重复初始化） */
-  init(ctx){ CTX=ctx; },
+  init(ctx){ CTX=ctx; this._ctx=ctx; },
 
   /* ---------- 结构化游戏背景信息（世界观/机制/NPC/叙事约束） ---------- */
   worldBrief(){
@@ -29,18 +29,26 @@ const WDChat={
     if(custom&&custom.trim()) return custom.trim();
     if(!CTX||!CTX.D) return "（游戏背景信息尚未加载）";
     const {D}=CTX;
+    /* NPC 角色设定动态构建：优先使用用户自定义人设/名字/称号，
+       确保玩家编辑的 NPC 设定实时同步到世界观文件 */
+    const npcList=D.npcs.map(n=>{
+      const name=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(n.id,n.name):n.name;
+      const title=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(n.id,n.title):(n.title||"");
+      const persona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(n.id):"";
+      const desc=persona||n.intro||"";
+      return {id:n.id,name,title,desc};
+    });
+    /* 构建角色设定字符串：用户自定义人设优先于内置设定 */
+    const charList=npcList.map(n=>n.name+"（"+(n.title||"")+"，"+n.desc+"）").join("｜");
     return {
       游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
       游戏目的:"玩家意外降临导游次元，与圣女候选云蘅及记忆精灵璇玑形成绑定。玩家须完成神圣导游就职仪式的各个阶段，助云蘅逐步恢复被封印的圣女之力，重新驾驭导游圣器以驱逐遗忘之雾。做任务就是就职仪式的修行：研习新考点=激活神圣导游知识封印，复习=重封苏醒的旧妖，题组试炼=斩谜题妖，英文背诵=咒文吟诵，大试炼=守城之战，巡夜=夜巡驱雾。",
       世界观:"玩家意外降临导游次元——一个正在被遗忘之雾吞噬的娘化世界（所有居民皆为女性，唯独玩家是男性外来者）。次元中最后一个未被侵蚀的城市是北京，玩家只能在此完成导游就职仪式。圣女候选云蘅在神圣导游就职仪式中因遗忘之雾侵袭及玩家意外降临导致仪式中断，与玩家形成绑定关系。记忆精灵璇玑（魔法生物，可与神圣导游签订灵魂绑定契约）在玩家降临过程中意外与其建立契约，负责帮助玩家记忆导游知识。随着玩家完成就职仪式各阶段，云蘅逐步恢复被封印的圣女之力；其他传奇导游亦通过与玩家互动逐步松动自身封印，重新激活神圣导游之力。最终玩家就职成功，云蘅完全恢复力量并使用圣器驱逐遗忘之雾。",
-      角色设定:"云蘅（圣女候选，玩家主要引导人，对玩家怀有爱慕之情，性格活泼可爱）｜璇玑（记忆精灵/魔法生物，与玩家灵魂绑定，协助整理导游知识记忆）｜青玄（文脉导游，娘化）｜司马青衫（山河导游，娘化）｜铁面（律法导游，娘化）｜柳如烟（接待导游，娘化）｜墨小骨（古迹导游，娘化纸偶）｜玄机夫人→璇玑兼任记忆导游职能。整个次元为娘化次元，仅玩家为男性。",
+      角色设定:charList+"。整个次元为娘化次元，仅玩家为男性。"+"（注：以上角色名字/称号/人设均以玩家配置中心的自定义为准，玩家可随时编辑覆写）",
       隐喻系统:"每个复习任务都是一个游戏化关卡：新学任务=秘境探幽/残卷修复/重激活神圣导游知识封印；复习任务=封印重临（遗忘之雾侵袭神圣导游知识封印，生成遗忘怪，需要玩家反复击杀）；题组练习=谜题斩妖（联手布置的模拟大阵，生成精英级遗忘怪）；英文背诵=咒文吟诵（激活神圣导游知识封印的核心仪轨）；大试炼=攻城之战（遗忘之雾催生怪物攻城）；线索卡=符文拓印；行囊准备=法器整备；巡夜记忆卡=夜巡驱雾。难度层级：common=雾卒、fine=妖将、epic=妖王。",
       剧情节点:"关键剧情过场节点：①玩家初次降临 ②与云蘅形成绑定 ③与璇玑建立灵魂契约 ④完成阶段性仪式（每幕BOSS） ⑤圣女力量恢复关键节点 ⑥最终就职仪式。过场由AI根据背景和故事线虚构，呈现为云蘅与玩家一问一答形式，简短沉浸，自然融入对话流，不过度打断正常交互。",
       游戏机制:["读卷：翻页研习考点，关键词高亮、记忆锚助记","试炼：是非+填空，答错录入星盘错题","吟游：英文导游词朗读、录音、打字复述自评","巡夜：按1/3/7/15日间隔重刷记忆卡","五幕四十五日任务链，主线环环前置解锁","修行=经验值升级，铜钱可在集市兑换","圣女力量恢复进度略超前于玩家游戏进展"],
-      NPC基础信息:D.npcs.map(n=>({id:n.id,
-        姓名:(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(n.id,n.name):n.name,
-        称号:(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(n.id,n.title):(n.title||""),
-        背景:n.intro})),
+      NPC基础信息:npcList.map(n=>({id:n.id,姓名:n.name,称号:n.title,背景:n.desc})),
       叙事约束:"NPC 是游戏NPC不是教师：像网游NPC那样简短、有性格、有江湖气地说话；对话服务当日任务目标，不剧透未解锁环节，不跑题，不出现考试答案；禁止教书先生式表达（掌握了/要记住/同学们/认真听讲/布置作业/劳逸结合等）。所有NPC皆为女性角色（娘化次元），仅玩家为男性。",
       自由对话机制:"对话流是类游戏群聊的自由发言场：玩家可输入任意文本，系统保证每次发言至少有一位与其角色设定和职能匹配的 NPC 出面接话；@角色名可指定 NPC，@所有人则全员各回一句。NPC 对题外话也要先以角色身份接住，再轻巧引回主线，不许冷场。云蘅作为圣女候选与玩家主要引导人，在关键节点主动发起剧情过场（一问一答形式）。",
       NPC回复结构:"每条 NPC 回复含三要素：①情境互动——针对玩家当前状态或刚完成的行为回应并给具体正向反馈；②剧情意义——说明该任务在五幕主线与圣女力量恢复中的分量；③任务发布——明确目标、要求、预期成果及下一步。云蘅的回复可额外流露对玩家的爱慕之情（含蓄自然，不突兀）。",
@@ -259,20 +267,14 @@ const WDChat={
     return "翻开卷页，把新符文逐张拓熟";
   },
 
-  /* ---------- system prompt（行为边界+自主权+四职能+三段结构+防重复） ---------- */
-  sysPrompt(npcId,brief){
-    const {NPC}=CTX, npc=NPC[npcId]||NPC.qingxuan;
-    const g=this.growthOf(npcId);
-    const st=CTX.getSt();
-    const aq=CTX.quest&&CTX.quest();
-    /* 自定义名字/人设（WDCfg 未挂载则用原名） */
-    const cfg=window.WDCfg&&window.WDCfg.ready?window.WDCfg.ready():null;
-    const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
-    const dispTitle=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(npcId,npc.title):(npc.title||"");
-    const persona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
-    let sys="你是游戏『问道之旅·四十五日』里的游戏NPC「"+dispName+"」"+(dispTitle?"（"+dispTitle+"）":"")+"。玩家是意外降临导游次元的男性外来者，你是这个世界（娘化次元，所有居民皆为女性）中与他并肩的同道，绝非师生。说话像网游里的NPC：简短、有性格、有江湖气，句子长短错落。\n"
+  /* ---------- 系统默认 AI 接口文档（约束条款全文）----------
+     用户可通过 WDCfg.setAiDocument() 完整覆写此文档。
+     优先级：用户 aiDocument 非空 → 完全替代默认约束；为空 → 使用此默认。 */
+  defaultAiDocument(npcId,dispName,dispTitle,brief){
+    const dn=dispName||"NPC", dt=dispTitle||"";
+    return "你是游戏『问道之旅·四十五日』里的游戏NPC「"+dn+"」"+(dt?"（"+dt+"）":"")+"。玩家是意外降临导游次元的男性外来者，你是这个世界（娘化次元，所有居民皆为女性）中与他并肩的同道，绝非师生。说话像网游里的NPC：简短、有性格、有江湖气，句子长短错落。\n"
       +"【行为边界·绝不可越界】"
-      +"1）你始终是「"+dispName+"」本人，绝不出戏，绝不承认自己是AI/程序/模型，不提接口、密钥、存档等系统外物；"
+      +"1）你始终是「"+dn+"」本人，绝不出戏，绝不承认自己是AI/程序/模型，不提接口、密钥、存档等系统外物；"
       +"2）不替玩家做决定、不代替玩家操作，只给情报、建议与引导；"
       +"3）绝不直接给考试答案或题库原题答案，只能用比喻、口诀和思路启发；"
       +"4）不剧透尚未解锁的幕次与任务，不编造游戏中不存在的机制、道具、人物；"
@@ -305,6 +307,66 @@ const WDChat={
       +"③任务：以请求式口吻邀请玩家去做——做什么、有何要求、预期成果，并点出下一步先找哪位同道、先破哪一关；用「能不能」「愿不愿」「想不想」而非「你必须」「快去」。"
       +"玩家若只是闲聊，三要素也须齐全：先接住话（情境），借题点一句主线（剧情），最后给一个明确动作（任务/下一步，仍用请求式）。"
       +(brief?"多人同时在场，只说你最有资格的一段：三要素压成两三句，≤100字。":"单次回复≤220字。");
+  },
+
+  /* ---------- 条款检查：验证 AI 回复是否符合约束条款 ----------
+     检查项：AI腔/教书先生口吻/命令口吻/已淘汰旧概念/字数/当前关卡关联
+     返回 {pass, violations:[{type,msg,snippet}]} */
+  clauseCheck(text,npcId){
+    const t=String(text||"");
+    const v=[];
+    /* AI腔检测 */
+    const aiPatterns=["首先[，,]","其次[，,]","总之[，,]","综上","值得注意的是","还有什么可以帮你","作为AI","我是一个AI","作为语言模型"];
+    aiPatterns.forEach(p=>{
+      const m=t.match(new RegExp(p));
+      if(m) v.push({type:"AI腔",msg:"检测到AI腔表达",snippet:m[0]});
+    });
+    /* 教书先生口吻检测 */
+    const teacherPatterns=["掌握了","要记住","同学们","认真听讲","认真复习","布置作业","劳逸结合","好好复习","请记住","你需要记住"];
+    teacherPatterns.forEach(p=>{
+      if(t.includes(p)) v.push({type:"教书先生口吻",msg:"使用了教书先生式表达",snippet:p});
+    });
+    /* 命令口吻检测 */
+    const cmdPatterns=["你必须","你要[^能]","赶紧去","立即做","快去","你应该[^用]"];
+    cmdPatterns.forEach(p=>{
+      const m=t.match(new RegExp(p));
+      if(m&&!(t.includes("能不能")||t.includes("愿不愿")||t.includes("想不想")))
+        v.push({type:"命令口吻",msg:"使用了命令式语气",snippet:m[0]});
+    });
+    /* 已淘汰旧概念检测 */
+    const obsolete=["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者"];
+    obsolete.forEach(p=>{
+      if(t.includes(p)) v.push({type:"已淘汰概念",msg:"使用了已淘汰的旧世界观概念",snippet:p});
+    });
+    /* 字数检测 */
+    if(t.length>280) v.push({type:"超长回复",msg:"回复超过220字上限（含标点"+t.length+"字）",snippet:t.slice(0,20)+"…"});
+    /* 当前关卡关联检测（如有在途关卡） */
+    let aq=null;
+    try{ const c=this._ctx||CTX; aq=(c&&c.quest)?c.quest():null; }catch(e){ aq=null; }
+    if(aq&&npcId&&!t.includes(aq.name)){
+      v.push({type:"关卡脱节",msg:"回复未点到当前在途关卡「"+aq.name+"」",snippet:"（缺失）"});
+    }
+    return {pass:v.length===0, violations:v, text:t};
+  },
+
+  /* ---------- system prompt（行为边界+自主权+四职能+三段结构+防重复） ----------
+     优先级：用户 aiDocument 非空 → 完全替代默认约束段；为空 → 使用默认。
+     动态上下文（当前关卡/话题/人设/记忆/成长/防重复）始终追加。 */
+  sysPrompt(npcId,brief){
+    const {NPC}=CTX, npc=NPC[npcId]||NPC.qingxuan;
+    const g=this.growthOf(npcId);
+    const st=CTX.getSt();
+    const aq=CTX.quest&&CTX.quest();
+    /* 自定义名字/人设（WDCfg 未挂载则用原名） */
+    const cfg=window.WDCfg&&window.WDCfg.ready?window.WDCfg.ready():null;
+    const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
+    const dispTitle=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(npcId,npc.title):(npc.title||"");
+    const persona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
+    /* 优先级：用户 AI 接口文档非空 → 完全替代默认约束；为空 → 使用默认约束 */
+    const userDoc=(window.WDCfg&&WDCfg.aiDocument)?WDCfg.aiDocument():"";
+    let sys=userDoc&&userDoc.trim()
+      ? userDoc.trim()+"\n"
+      : this.defaultAiDocument(npcId,dispName,dispTitle,brief)+"\n";
     /* 当下情境：当前关卡/当日进度，供三段结构就地取材 */
     if(aq){
       const host=NPC[aq.npc]
@@ -453,8 +515,18 @@ const WDChat={
       ],false);
       let text=(raw||"").trim();
       if(text) text=this.deRepeat(npcId,text);
+      /* 条款检查：AI 回复后自动执行，违规记录入存档（不影响返回，仅日志） */
+      if(text){
+        const chk=this.clauseCheck(text,npcId);
+        if(!chk.pass){
+          st.clauseLog=st.clauseLog||[];
+          st.clauseLog.push({at:now(),npc:npcId,violations:chk.violations,text:text.slice(0,80)});
+          if(st.clauseLog.length>50) st.clauseLog=st.clauseLog.slice(-50);
+          CTX.save();
+        }
+      }
       this.bumpTalk(npcId);
-      return {text:text||this.fallback(npcId,userText),degraded:!text};
+      return {text:text||this.fallback(npcId,userText),degraded:!text,clauseCheck:text?this.clauseCheck(text,npcId):null};
     }catch(e){
       return {text:this.fallback(npcId,userText),degraded:true};
     }

@@ -532,7 +532,7 @@ function defState(){
     dsKey:"", personas:{}, aiBrief:{},
     dialogue:[],
     npcGrowth:{},
-    hp:88, energy:24, quizOk:0, quizAttempts:{}, cutscenes:{}, dailyCtx:{}, created:new Date().toISOString()};
+    hp:88, energy:24, quizOk:0, quizAttempts:{}, cutscenes:{}, dailyCtx:{}, clauseLog:[], created:new Date().toISOString()};
 }
 let st=null, view="chat", questTimer=0;
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){} }
@@ -548,6 +548,7 @@ function reconcile(){
   st.personas=st.personas||{}; st.aiBrief=st.aiBrief||{};
   st.cutscenes=st.cutscenes||{};
   st.dailyCtx=st.dailyCtx||{};
+  if(!Array.isArray(st.clauseLog)) st.clauseLog=[];
   /* 世界观重构后：清除含已淘汰旧概念的人设/任务说明缓存，强制用新设定重生成
      同时清除旧 schema 的 aiBrief（缺 scene/necessity/impact/reward 字段），强制用新剧情先行 schema 重生成 */
   (function purgeObsolete(){
@@ -2315,6 +2316,7 @@ function renderCfg(){
     <button data-tab="call" type="button">称呼与语气</button>
     <button data-tab="npc" type="button">NPC角色</button>
     <button data-tab="world" type="button">世界观</button>
+    <button data-tab="aidoc" type="button">AI文档</button>
     <button data-tab="attr" type="button">初始属性</button>
     <button data-tab="data" type="button">数据</button>
   </div>
@@ -2370,6 +2372,24 @@ function renderCfg(){
     </div>
     <div class="small" id="worldMsg" style="color:var(--ok)"></div>
     <div id="worldDefaultPreview" style="display:none;margin-top:8px"><div class="note" style="font-size:11px;white-space:pre-wrap;max-height:300px;overflow:auto"></div></div>
+  </div>
+
+  <div class="cfgpane" data-pane="aidoc">
+    <div class="note">AI 接口文档——统一编辑 AI 的互动思路。此文档非空时，将完全替代系统默认的 NPC 行为约束（行为边界/语气基调/自主权限/回复结构/语言要求等）。留空 → 使用系统默认。已生成 NPC 人设和世界观背景的优先级高于内置设定，始终生效。</div>
+    <div class="cfgrow" style="align-items:flex-start"><textarea id="cfgAiDoc" maxlength="12000" rows="18" style="width:100%;font-size:12px;line-height:1.5;font-family:ui-monospace,Menlo,Consolas,monospace" placeholder="留空使用系统默认约束。载入系统默认后可直接编辑，保存后立即生效……">${esc(c.aiDocument||"")}</textarea></div>
+    <div class="savegrid" style="margin:6px 0">
+      <button class="btn sm primary" id="aiDocSave" type="button">保存</button>
+      <button class="btn sm" id="aiDocLoadDefault" type="button">载入系统默认（可直接编辑）</button>
+      <button class="btn sm ghost" id="aiDocReset" type="button">清空并恢复默认</button>
+    </div>
+    <div class="small" id="aiDocMsg" style="color:var(--ok)"></div>
+    <h3 style="font-size:13.5px;color:var(--cyber);margin:12px 0 6px">条款检查</h3>
+    <div class="note">检查最近 AI 回复是否符合约束条款（AI腔/教书先生口吻/命令口吻/已淘汰旧概念/字数/关卡关联）。</div>
+    <div class="savegrid" style="margin:6px 0">
+      <button class="btn sm primary" id="clauseCheckBtn" type="button">检查最近对话</button>
+      <button class="btn sm ghost" id="clauseClearBtn" type="button">清除违规记录</button>
+    </div>
+    <div id="clauseCheckResult" style="margin-top:8px"></div>
   </div>
 
   <div class="cfgpane" data-pane="attr">
@@ -2501,6 +2521,55 @@ function renderCfg(){
     const txt=typeof wb==="string"?wb:JSON.stringify(wb,null,2);
     $("#cfgWorldBrief",ov).value=txt;
     const m=$("#worldMsg",ov); m.textContent="系统默认已载入编辑器 · 直接改完保存即可"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+  };
+
+  /* ---- AI 接口文档编辑 ---- */
+  $("#aiDocSave",ov).onpointerdown=()=>{ SFX.tap();
+    const v=$("#cfgAiDoc",ov).value;
+    WDCfg.setAiDocument(v);
+    const m=$("#aiDocMsg",ov); m.textContent=v?"已保存 · 下次对话即刻采用用户文档":"已清空 · 恢复系统默认约束";
+    setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+  };
+  $("#aiDocReset",ov).onpointerdown=()=>{ SFX.tap();
+    WDCfg.setAiDocument(""); $("#cfgAiDoc",ov).value="";
+    const m=$("#aiDocMsg",ov); m.textContent="已清空 · 恢复系统默认约束"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+  };
+  $("#aiDocLoadDefault",ov).onpointerdown=()=>{ SFX.tap();
+    const txt=WDChat.defaultAiDocument("qingxuan",WDCfg.npcName("qingxuan","青玄"),WDCfg.npcTitle("qingxuan","文脉导游"),false);
+    $("#cfgAiDoc",ov).value=txt;
+    const m=$("#aiDocMsg",ov); m.textContent="系统默认已载入编辑器 · 直接改完保存即可"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+  };
+  /* ---- 条款检查 ---- */
+  $("#clauseCheckBtn",ov).onpointerdown=()=>{ SFX.tap();
+    const log=st.clauseLog||[];
+    const r=$("#clauseCheckResult",ov);
+    if(!log.length){
+      r.innerHTML='<div class="note" style="color:var(--ok)">暂无违规记录——最近对话均通过条款检查。</div>';
+      return;
+    }
+    /* 统计违规类型分布 */
+    const typeCount={};
+    log.forEach(e=>e.violations.forEach(v=>{typeCount[v.type]=(typeCount[v.type]||0)+1;}));
+    const total=log.length;
+    const html=`
+      <div class="note" style="margin-bottom:6px">最近 ${total} 条违规记录（最多保留50条）</div>
+      <div style="font-size:12px;margin-bottom:8px">${Object.entries(typeCount).map(([t,c])=>`<span style="display:inline-block;margin:2px 4px;padding:2px 8px;background:var(--bg2);border-radius:8px;color:var(--danger)">${esc(t)} ×${c}</span>`).join("")}</div>
+      <div style="max-height:300px;overflow:auto;font-size:11.5px;line-height:1.6">
+        ${log.slice(-10).reverse().map((e,i)=>{
+          const npcName=WDCfg.npcName(e.npc,e.npc);
+          return `<div style="border-left:2px solid var(--danger);padding:4px 8px;margin:4px 0;background:var(--bg2)">
+            <div style="color:var(--dim)">${esc(npcName)} · ${e.at.slice(5,16)}</div>
+            <div style="color:var(--fg2)">${e.violations.map(v=>`<b style="color:var(--danger)">[${esc(v.type)}]</b> ${esc(v.msg)} <span style="color:var(--dim)">「${esc(v.snippet)}」</span>`).join("；")}</div>
+            <div style="color:var(--dim);font-size:10.5px;margin-top:2px">原文：${esc(e.text)}…</div>
+          </div>`;
+        }).join("")}
+      </div>`;
+    r.innerHTML=html;
+  };
+  $("#clauseClearBtn",ov).onpointerdown=()=>{ SFX.tap();
+    st.clauseLog=[]; save();
+    const r=$("#clauseCheckResult",ov);
+    r.innerHTML='<div class="note" style="color:var(--ok)">违规记录已清除。</div>';
   };
 
   /* ---- 称呼 / 自称 / 语气 ---- */
