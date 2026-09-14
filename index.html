@@ -1851,6 +1851,41 @@ function openEditor(card){
   };
   drawHist();
 }
+/* 巡夜卡匣 · NPC 引导话术：含知识点提示但不直接给答案，请求式口吻激励回忆 */
+function fcHint(it,mode){
+  if(!it) return "翻面看看吧。";
+  const id=(it.id||"").toUpperCase();
+  const m=id.match(/^([A-Z]+\d*)/);
+  const prefix=m?m[1]:"";
+  let npcId="xuanji";
+  if(prefix==="S1"||prefix==="S2") npcId="smq";
+  else if(prefix==="S3") npcId="tiemian";
+  else if(prefix==="S4") npcId="liuruyan";
+  else if(prefix==="S5") npcId="moxiaogu";
+  else if(prefix==="S6") npcId="xuanji";
+  const npc=dName(npcId);
+  const t=it.text||"";
+  let clue="这条考点的核心";
+  if(/\d{4}\s*年/.test(t)) clue="这段有个年份要记牢";
+  else if(/[北京上海嘉兴南湖故宫天坛十三陵长城颐和园中南海人民大会堂]/.test(t)) clue="这和某个地点有关";
+  else if(/代表大会|会议|全会|大会|一大|二大/.test(t)) clue="这讲的是一场会议";
+  else if(/条例|法规|法条|规定|办法|处罚/.test(t)) clue="这是某条法规";
+  else if(/旅行社|接待|客人|服务|导游|礼仪/.test(t)) clue="这讲的是接待实务";
+  else if(/[建筑|遗迹|文物|年表|历史|朝代]/.test(t)) clue="这讲的是古迹史实";
+  let h=0; for(let i=0;i<id.length;i++){h=(h*31+id.charCodeAt(i))>>>0;}
+  const pre=mode==="pre"?[
+    `「${npc}」轻声道：${clue}——心里先有个数，翻面核对一下？`,
+    `「${npc}」递来残卷：${clue}，先回忆回忆，翻面对对看。`,
+    `「${npc}」眨眨眼：${clue}，还记得不？翻面瞧瞧答案。`,
+    `「${npc}」低声问：${clue}——翻面之前，你先想想。`
+  ]:[
+    `「${npc}」抚卷道：${clue}——还记得吗？翻面验验。`,
+    `「${npc}」递来旧符：${clue}，回忆一下，翻面对对。`,
+    `「${npc}」望着你：${clue}，心里有数了吗？翻面看看。`,
+    `「${npc}」轻叩案：${clue}——翻面之前，先想想。`
+  ];
+  return pre[h%pre.length];
+}
 function renderNight(){
   // 到期复习卡（已完成 study 任务）+ 预习卡（已解锁未完成 study 任务）——保证任意进度打开均有内容
   const due=[], later=[], pre=[];
@@ -1890,7 +1925,7 @@ function renderNight(){
     const cur=deck[i], it=cur.it, rev=showRev;
     if(cur.mode==="pre"){
       host.innerHTML=`<div class="flashcard"><div class="fc-id">预习 · ${esc(it.id)} · ${"★".repeat(+it.star||1)}</div>
-        <div class="fc-main">${esc(rev?it.text:"预习这条考点……")}</div>
+        <div class="fc-main">${esc(rev?it.text:fcHint(it,"pre"))}</div>
         ${rev?`<div class="fc-rev">${esc(it.text)}</div>`:""}
         <div style="margin-top:12px">${rev?`<button class="btn sm primary" id="fNext" type="button">记下了（完成后自动入复习队列）</button>`:`<button class="btn sm primary" id="fFlip" type="button">翻面</button>`}</div></div>
         <div class="tstate">${i+1} / ${deck.length}</div>`;
@@ -1899,7 +1934,7 @@ function renderNight(){
       return;
     }
     host.innerHTML=`<div class="flashcard"><div class="fc-id">${esc(it.id)} · ${"★".repeat(+it.star)}</div>
-      <div class="fc-main">${esc(rev?it.text:"回忆这条考点……")}</div>
+      <div class="fc-main">${esc(rev?it.text:fcHint(it,"due"))}</div>
       ${rev?`<div class="fc-rev">${esc(it.text)}</div>`:""}
       <div style="margin-top:12px">${rev?`
         <button class="btn sm" id="fAgain" type="button">生疏（明日再来）</button>
