@@ -848,6 +848,152 @@ const driver=`
     if(!src.includes('WDQuiz.record')) throw new Error('缺 WDQuiz.record 调用');
     if(!src.includes('WDQuiz.progress')) throw new Error('缺 WDQuiz.progress 调用');
   });
+  /* ===== 对话初始化机制 + NPC职责领域判断 + 发言时机智能 ===== */
+  run('对话初始化：首次进入对话系统生成引导对话',()=>{
+    reset(); st.unlocked=1;
+    if(st.dialogueInitDay!==0) throw new Error('新存档dialogueInitDay应=0');
+    if(st.dialogue.length!==0) throw new Error('新存档dialogue应为空');
+    ensureGuidanceScene();
+    if(st.dialogueInitDay!==st.day) throw new Error('引导对话生成后应标记当日');
+    if(st.dialogue.length<6) throw new Error('引导对话至少6条消息，实际'+st.dialogue.length);
+    /* 验证三类互动都存在 */
+    const hasYunheng=st.dialogue.some(m=>m.npc==='yunheng');
+    const hasPlayer=st.dialogue.some(m=>m.role==='player');
+    const hasFuncNpc=st.dialogue.some(m=>m.npc!=='yunheng'&&m.role==='npc');
+    if(!hasYunheng) throw new Error('缺云蘅发言');
+    if(!hasPlayer) throw new Error('缺玩家发言');
+    if(!hasFuncNpc) throw new Error('缺职能NPC发言');
+  });
+  run('对话初始化：每日仅生成一次（幂等）',()=>{
+    reset(); st.unlocked=1;
+    ensureGuidanceScene();
+    const cnt1=st.dialogue.length;
+    ensureGuidanceScene();  // 再次调用不应重复生成
+    if(st.dialogue.length!==cnt1) throw new Error('同日重复调用不应新增消息');
+  });
+  run('对话初始化：引导对话含云蘅-玩家互动',()=>{
+    reset(); st.unlocked=1;
+    ensureGuidanceScene();
+    /* 云蘅的消息后紧跟玩家消息 → 云蘅-玩家互动 */
+    const yhIdx=st.dialogue.findIndex(m=>m.npc==='yunheng');
+    if(yhIdx<0) throw new Error('缺云蘅消息');
+    const playerIdx=st.dialogue.findIndex(m=>m.role==='player');
+    if(playerIdx<0) throw new Error('缺玩家消息');
+  });
+  run('对话初始化：引导对话含云蘅-其他NPC互动',()=>{
+    reset(); st.unlocked=1;
+    ensureGuidanceScene();
+    /* 云蘅引荐职能NPC：云蘅消息后应有职能NPC回应 */
+    const yhMsgs=st.dialogue.filter(m=>m.npc==='yunheng'&&m.role==='npc');
+    const funcMsgs=st.dialogue.filter(m=>m.npc!=='yunheng'&&m.role==='npc');
+    if(yhMsgs.length<2) throw new Error('云蘅至少2条消息');
+    if(funcMsgs.length<1) throw new Error('职能NPC至少1条消息');
+  });
+  run('对话初始化：引导对话含玩家-其他NPC互动',()=>{
+    reset(); st.unlocked=1;
+    ensureGuidanceScene();
+    /* 玩家主动向职能NPC提问 */
+    const playerMsgs=st.dialogue.filter(m=>m.role==='player');
+    if(playerMsgs.length<2) throw new Error('玩家至少2条消息（含向NPC提问）');
+    const funcReply=st.dialogue.filter(m=>m.npc!=='yunheng'&&m.role==='npc');
+    if(funcReply.length<1) throw new Error('职能NPC至少有1条回应玩家');
+  });
+  run('对话初始化：引导对话消息标记guidance=true',()=>{
+    reset(); st.unlocked=1;
+    ensureGuidanceScene();
+    if(!st.dialogue.every(m=>m.guidance===true)) throw new Error('引导对话消息应标记guidance=true');
+  });
+  run('对话初始化：已有当日对话时不重复生成',()=>{
+    reset(); st.unlocked=1;
+    st.dialogue.push({role:'player',text:'已有对话',at:new Date().toISOString(),day:st.day});
+    ensureGuidanceScene();
+    if(st.dialogue.length!==1) throw new Error('已有对话时不应生成引导对话');
+    if(st.dialogueInitDay!==st.day) throw new Error('应标记当日已初始化');
+  });
+  run('judgeDomain：法条关键词强匹配铁面',()=>{
+    reset();
+    const dm=WDChat.judgeDomain('法条规定了什么');
+    if(dm.npcId!=='tiemian') throw new Error('法条应路由到铁面，实际'+dm.npcId);
+    if(dm.isDefault) throw new Error('强匹配不应是默认');
+    if(dm.score<2) throw new Error('核心词score应>=2');
+  });
+  run('judgeDomain：山河关键词强匹配司马青衫',()=>{
+    reset();
+    const dm=WDChat.judgeDomain('长城的地理特征');
+    if(dm.npcId!=='smq') throw new Error('山河应路由到司马青衫');
+    if(dm.isDefault) throw new Error('强匹配不应是默认');
+  });
+  run('judgeDomain：无明确指向默认云蘅',()=>{
+    reset();
+    const dm=WDChat.judgeDomain('今天天气怎么样');
+    if(dm.npcId!=='yunheng') throw new Error('无明确指向应默认云蘅');
+    if(!dm.isDefault) throw new Error('应标记为默认');
+  });
+  run('judgeDomain：NPC名直接点名强匹配',()=>{
+    reset();
+    WDCfg.setNpcName('tiemian','铁老');
+    const dm=WDChat.judgeDomain('铁老你说说');
+    if(dm.npcId!=='tiemian') throw new Error('点名应强匹配到铁面');
+    if(dm.score<3) throw new Error('NPC名匹配score应>=3');
+  });
+  run('shouldChimeIn：同speaker不插话',()=>{
+    reset();
+    const r=WDChat.shouldChimeIn('qingxuan',{text:'测试',speaker:'qingxuan'});
+    if(r.chime) throw new Error('同speaker不应插话');
+  });
+  run('shouldChimeIn：职责领域强相关时插话',()=>{
+    reset();
+    const r=WDChat.shouldChimeIn('tiemian',{text:'法条规定了什么',speaker:'yunheng'});
+    if(!r.chime) throw new Error('法条相关时铁面应插话');
+    if(!r.reason.includes('职责领域')) throw new Error('插话理由应含职责领域');
+  });
+  run('shouldChimeIn：被直接点名时插话',()=>{
+    reset();
+    WDCfg.setNpcName('smq','司马');
+    const r=WDChat.shouldChimeIn('smq',{text:'司马你来说',speaker:'yunheng'});
+    if(!r.chime) throw new Error('被点名时应插话');
+  });
+  run('shouldChimeIn：关卡接洽人优先发言',()=>{
+    reset(); st.unlocked=1;
+    const aq=firstActiveQuest();
+    if(!aq) throw new Error('应有在途任务');
+    const r=WDChat.shouldChimeIn(aq.npc,{text:'随便聊聊',speaker:'yunheng',quest:aq});
+    if(!r.chime) throw new Error('关卡接洽人应优先发言');
+  });
+  run('shouldChimeIn：无相关性不插话',()=>{
+    reset();
+    const r=WDChat.shouldChimeIn('xuanji',{text:'今天天气怎么样',speaker:'yunheng'});
+    if(r.chime) throw new Error('无相关性时不应插话');
+  });
+  run('relationshipContext：云蘅含爱慕之情',()=>{
+    reset();
+    const r=WDChat.relationshipContext('yunheng');
+    if(!r.includes('爱慕')) throw new Error('云蘅关系应含爱慕之情');
+    if(!r.includes('同门')) throw new Error('云蘅关系应含同门关系');
+  });
+  run('relationshipContext：各NPC关系非空',()=>{
+    reset();
+    for(const id of ['yunheng','qingxuan','smq','tiemian','liuruyan','moxiaogu','xuanji']){
+      const r=WDChat.relationshipContext(id);
+      if(!r) throw new Error(id+'关系描述为空');
+    }
+  });
+  run('sysPrompt 注入角色关系上下文',()=>{
+    reset();
+    const s=WDChat.sysPrompt('qingxuan',false);
+    if(!s.includes('角色关系')) throw new Error('sysPrompt缺角色关系段');
+    if(!s.includes('同门')) throw new Error('sysPrompt角色关系应含同门');
+  });
+  run('routeNpc 使用judgeDomain评分路由',()=>{
+    reset();
+    const id=routeNpc('法条规定了什么处罚');
+    if(id!=='tiemian') throw new Error('法条应路由到铁面，实际'+id);
+  });
+  run('routeNpc 无明确指向默认云蘅',()=>{
+    reset();
+    const id=routeNpc('你好啊');
+    if(id!=='yunheng') throw new Error('无指向应默认云蘅');
+  });
   /* 异步收尾：respond 未配置 AI 时应同步降级为本地话术（永不 reject） */
   (async()=>{
     try{

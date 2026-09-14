@@ -392,6 +392,9 @@ const WDChat={
     }
     /* 用户自定义人设描述：作为 AI 生成角色设定的参考依据 */
     if(persona) sys+="\n【用户设定的角色基准】"+persona+"——你的言行须贴合此描述，作为角色塑造的第一参考。";
+    /* 角色关系上下文：体现角色间的预设关系和对话风格差异化 */
+    const rel=this.relationshipContext(npcId);
+    if(rel) sys+="\n【角色关系】"+rel+"——你的对话风格、语气和内容须符合上述关系设定，与其他NPC互动时体现相互关系。";
     /* NPC 记忆画像（WDMem 未挂载则跳过）——具体反馈与记忆引用的数据源 */
     const mem=window.WDMem&&window.WDMem.digest?window.WDMem.digest(npcId):null;
     if(mem) sys+="\n【你与这位玩家的记忆】"+mem+"（情绪反馈须从中取具体事实，自然引用，不要罗列数据）";
@@ -543,8 +546,89 @@ const WDChat={
       return lead[hash(text)%lead.length]+text;
     }
     return text;
+  },
+
+  /* ---------- NPC职责领域判断：基于关键词评分路由 ----------
+     返回 {npcId, score, isDefault}：score越高匹配度越高，
+     score<阈值时isDefault=true，表示未明确指向，应默认由云蘅回应 */
+  judgeDomain(text){
+    const raw=String(text||"").replace(/@[^\s，。,,]+/g,"").trim();
+    if(!raw) return {npcId:"yunheng",score:0,isDefault:true};
+    /* 职能关键词权重表：核心词+2，边缘词+1 */
+    const DOMAIN_KW={
+      smq:{core:["山河","地形","长城","十三陵","地貌","剑","山","水","河流"],edge:["蓟城","大都","燕山","永定河","地理"]},
+      tiemian:{core:["法条","法规","法律","条例","处罚","规定","合同","投诉"],edge:["律法","塔","规矩","政策","罚"]},
+      liuruyan:{core:["行会","旅行社","接待","沟通","客人","服务","人际","礼仪","讲解词"],edge:["纱","带团","接待","游客","导游词"]},
+      moxiaogu:{core:["遗迹","故宫","天坛","机关","建筑","文物","年表","历史","古建"],edge:["斗拱","木构","机关匣","星符"]},
+      xuanji:{core:["错题","星盘","题","考","卦","复习","记忆","背诵","英文","单词","灵魂"],edge:["星轨","妖","封印","记忆碎片"]},
+      qingxuan:{core:["主线","剧情","背景","故事","世界观","文脉","符文"],edge:["脉络","风物","典故","旧京"]},
+      yunheng:{core:["引路","怎么玩","操作","下一步","开始","指引","求助","帮","圣女","就职"],edge:["仪式","圣器","雾","力量"]}
+    };
+    let best={npcId:"yunheng",score:0,isDefault:true};
+    for(const id in DOMAIN_KW){
+      const d=DOMAIN_KW[id];
+      let s=0;
+      d.core.forEach(k=>{ if(raw.includes(k)) s+=2; });
+      d.edge.forEach(k=>{ if(raw.includes(k)) s+=1; });
+      /* 直接呼叫NPC名/称号也算强匹配 */
+      if(window.WDCfg&&CTX.NPC[id]){
+        const cn=WDCfg.npcName(id,""), ct=WDCfg.npcTitle(id,"");
+        if(cn&&raw.includes(cn)) s+=3;
+        if(ct&&raw.includes(ct)) s+=2;
+      }
+      if(s>best.score){ best={npcId:id,score:s,isDefault:false}; }
+    }
+    /* score<2 视为未明确指向，默认由云蘅回应 */
+    if(best.score<2) best={npcId:"yunheng",score:best.score,isDefault:true};
+    return best;
+  },
+
+  /* ---------- NPC发言时机智能判断 ----------
+     判断某NPC是否应该在当前对话中插话。
+     factors: {text, speaker, recent, quest, relationship}
+     返回 true/false + 理由 */
+  shouldChimeIn(npcId, factors){
+    const {text, speaker, recent, quest}=factors||{};
+    if(!text||speaker===npcId) return {chime:false,reason:"同 speaker"};
+    /* 基于关键词评分判断相关性 */
+    const dm=this.judgeDomain(text);
+    if(dm.npcId===npcId&&dm.score>=2) return {chime:true,reason:"职责领域强相关"};
+    /* 被直接点名 */
+    const nm=dName2(npcId);
+    if(nm&&nm.length>=2&&text.includes(nm)) return {chime:true,reason:"被直接点名"};
+    /* 最近的对话中有该NPC发言且当前话题延续 */
+    if(recent&&recent.some(m=>m.npc===npcId&&m.text)){
+      const lastNpcMsg=recent.filter(m=>m.npc===npcId).slice(-1)[0];
+      if(lastNpcMsg&&text.includes(lastNpcMsg.text.slice(0,4))) return {chime:true,reason:"话题延续"};
+    }
+    /* 当前关卡接洽人优先发言 */
+    if(quest&&quest.npc===npcId) return {chime:true,reason:"关卡接洽人"};
+    return {chime:false,reason:"无强相关性"};
+  },
+
+  /* ---------- 角色关系上下文：注入到sysPrompt中 ----------
+     返回当前NPC与其他NPC的关系描述，用于对话风格差异化 */
+  relationshipContext(npcId){
+    const REL={
+      yunheng:{to_qingxuan:"与青玄是同门，你视其为前辈，敬重但不拘谨",to_smq:"与司马青衫有数面之缘，欣赏其豪爽",to_xuanji:"与璇玑有灵魂绑定的感应，视其为可靠的同伴",to_player:"对玩家怀有含蓄的爱慕之情，但不会主动表白，只是话语间自然流露关心"},
+      qingxuan:{to_yunheng:"视云蘅为后辈同门，关心其圣女之力恢复",to_smq:"与司马青衫是论道至交，常以文会友",to_player:"作为文脉导游前辈，对玩家有师友之谊，但绝非师生"},
+      smq:{to_qingxuan:"与青玄先生是至交，常以剑论道",to_yunheng:"对云蘅有几分护持之心，像兄长般",to_player:"视玩家为可造之才，以剑客的方式相待"},
+      tiemian:{to_qingxuan:"与青玄共掌文脉阁，是并肩的同道",to_moxiaogu:"对墨小骨的机关术有几分欣赏，虽不形于色",to_player:"对玩家严格但公正，执法无私，但非不近人情"},
+      liuruyan:{to_smq:"与司马青衫有旧交，偶有往来",to_yunheng:"对云蘅的圣女候选身份存几分敬意",to_player:"以行会导游的圆滑方式接待玩家，热情但有分寸"},
+      moxiaogu:{to_tiemian:"常与铁面搭手，对其严格有些敬畏",to_xuanji:"与璇玑有机关与星盘的合作",to_player:"对玩家充满好奇，以活泼的方式互动"},
+      xuanji:{to_yunheng:"与云蘅有感应，关心其圣女之力",to_moxiaogu:"与墨小骨有机关与星盘的合作",to_player:"与玩家灵魂绑定，能感应其记忆与情绪，说话直接但不失温和"}
+    };
+    const r=REL[npcId]; if(!r) return "";
+    return Object.entries(r).map(([k,v])=>v).join("；");
   }
 };
+
+/* 辅助函数：获取NPC显示名（模块内引用） */
+function dName2(npcId){
+  if(!CTX||!CTX.NPC) return npcId;
+  const n=CTX.NPC[npcId]; if(!n) return npcId;
+  return (window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,n.name):n.name;
+}
 
 window.WDChat=WDChat;
 })();
