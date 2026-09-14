@@ -488,9 +488,59 @@ const driver=`
     openQuest('D01S1'); // 多页任务翻页也应安全
     stopTypewriter();
   });
-  run('TW_SPEED 在合理范围（120-150字/分）',()=>{
+  run('TW_SPEED 在合理范围（提速后 250-350字/分）',()=>{
     const cpm=Math.round(60000/TW_SPEED);
-    if(cpm<100||cpm>200)throw new Error('打字速度异常：'+cpm+'字/分（TW_SPEED='+TW_SPEED+'ms）');
+    if(cpm<200||cpm>450)throw new Error('打字速度异常：'+cpm+'字/分（TW_SPEED='+TW_SPEED+'ms）');
+  });
+  run('sysPrompt 含激励而非教育语气基调',()=>{
+    reset();
+    const s=WDChat.sysPrompt('qingxuan',false);
+    if(!s.includes('激励而非教育')) throw new Error('sysPrompt 缺「激励而非教育」基调');
+    if(!s.includes('请求式口吻')) throw new Error('sysPrompt 缺请求式口吻约束');
+    if(!s.includes('命令口吻与祈使句')) throw new Error('sysPrompt 缺命令口吻禁令');
+    if(!s.includes('多夸赞')) throw new Error('sysPrompt 缺夸赞鼓励要求');
+    /* 角色自主性：性格与故事展开 */
+    if(!s.includes('角色自主性')) throw new Error('sysPrompt 缺角色自主性约束');
+    if(!s.includes('生死存亡')) throw new Error('sysPrompt 缺关心世界生死存亡约束');
+    if(!s.includes('在乎玩家的感受')) throw new Error('sysPrompt 缺在乎玩家感受约束');
+  });
+  run('typewriterExpand 逐段展开无 clicks 分支',()=>{
+    reset();
+    /* typewriterExpand 源码不应再含 clicks 分支判定，改为每次点击展开当前段 */
+    const src=typewriterExpand.toString();
+    if(src.includes('clicks===0')||src.includes('twState.clicks')) throw new Error('typewriterExpand 仍含 clicks 旧逻辑');
+    if(!src.includes('twState.idx')) throw new Error('typewriterExpand 未操作 idx');
+  });
+  run('genPersona 注入 WDCfg.npcPersona 硬约束',()=>{
+    reset();
+    /* 设定用户自定义人设描述，genPersona 源码须读取 WDCfg.npcPersona 作为硬约束 */
+    WDCfg.setNpcPersona('qingxuan','活泼可爱、爱讲笑话');
+    const src=genPersona.toString();
+    if(!src.includes('WDCfg.npcPersona')) throw new Error('genPersona 未读取 WDCfg.npcPersona');
+    if(!src.includes('硬约束')) throw new Error('genPersona 未标注为硬约束');
+    if(!src.includes('活泼可爱')) throw new Error('genPersona 硬约束示例词缺失');  /* 确保硬约束说明含矛盾词禁令示例 */
+    /* sysPrompt 也须注入自定义人设 */
+    const s=WDChat.sysPrompt('qingxuan',false);
+    if(!s.includes('活泼可爱、爱讲笑话')) throw new Error('sysPrompt 未注入自定义人设');
+  });
+  run('openPersonaPanel 人设卡片直接编辑模式',()=>{
+    reset();
+    /* openPersonaPanel 源码须含可编辑 textarea 与 data-save 按钮 */
+    const src=openPersonaPanel.toString();
+    if(!src.includes('data-fld')) throw new Error('人设卡片缺可编辑字段 data-fld');
+    if(!src.includes('data-save')) throw new Error('人设卡片缺保存编辑按钮');
+    if(!src.includes('saveEdit')) throw new Error('人设卡片缺 saveEdit 保存函数');
+    if(!src.includes('identity')) throw new Error('人设卡片缺 identity 编辑字段');
+    if(!src.includes('personality')) throw new Error('人设卡片缺 personality 编辑字段');
+    if(!src.includes('style')) throw new Error('人设卡片缺 style 编辑字段');
+    if(!src.includes('relations')) throw new Error('人设卡片缺 relations 编辑字段');
+    /* personality 保存时拆为数组 */
+    if(!src.includes("split(")) throw new Error('saveEdit 未做 personality 拆分数组');
+  });
+  run('genPersona personality 归一化为数组',()=>{
+    reset();
+    const src=genPersona.toString();
+    if(!src.includes('Array.isArray(card.personality)')) throw new Error('genPersona 未归一化 personality 为数组');
   });
   /* 异步收尾：respond 未配置 AI 时应同步降级为本地话术（永不 reject） */
   (async()=>{

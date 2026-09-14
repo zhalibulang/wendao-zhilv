@@ -1030,11 +1030,12 @@ function heartNew(){
 }
 
 /* ==================== 书页打字机效果 ====================
-   初始逐字显示（~150字/分），首次点击展开当前段落，再次点击展开整页。
+   初始逐字显示（~300字/分，提速1倍）；每次点击展开当前正在打字的一个完整文本段，
+   随后继续下一段的打字机效果，直至所有预设文本段均完成展开。
    - 标签（<span><em>等）即时输出，仅文字逐字显示，保证 HTML 结构完整
    - 点击委托绑定在 pageHost 上，typewriter 重建 innerHTML 后术语仍可点 */
 let twTimer=null, twState=null;
-const TW_SPEED=400; /* ms/char ≈ 150字/分（偏快的平均打字速度） */
+const TW_SPEED=200; /* ms/char ≈ 300字/分（偏快的平均打字速度，提速1倍） */
 function stopTypewriter(){
   if(twTimer){ clearTimeout(twTimer); twTimer=null; }
   if(twState&&twState.items){ twState.items.forEach(it=>{ if(it.el) it.el.classList.remove('tw-active'); }); }
@@ -1061,7 +1062,7 @@ function startTypewriter(host){
     el.classList.add('tw-active');
     return {el,html,tokens,pos:0};
   });
-  twState={items,idx:0,built:'',clicks:0,done:false};
+  twState={items,idx:0,built:'',done:false};
   twStep();
 }
 function twStep(){
@@ -1093,22 +1094,20 @@ function twStep(){
 function typewriterExpand(){
   if(!twState||twState.done) return;
   if(twTimer){ clearTimeout(twTimer); twTimer=null; }
-  if(twState.clicks===0){
-    /* 首次点击：立即展开当前段落，继续打下一段 */
-    twState.clicks=1;
-    const it=twState.items[twState.idx];
-    if(it){ it.el.innerHTML=it.html; it.el.classList.remove('tw-active'); it.pos=it.tokens.length; }
-    twState.idx++; twState.built='';
-    SFX.tap();
-    twTimer=setTimeout(twStep,200);
-  } else {
-    /* 再次点击：展开整页全部内容 */
-    twState.clicks=2;
-    twState.items.forEach(it=>{ it.el.innerHTML=it.html; it.el.classList.remove('tw-active'); });
+  /* 每次点击：立即展开当前正在打字的这一段（填充完整内容），随后继续下一段的打字机效果。
+     若当前段已打完（idx 已指向下一段），则跳过展开直接继续打下一段；直至所有段完成。 */
+  const it=twState.items[twState.idx];
+  if(it){ it.el.innerHTML=it.html; it.el.classList.remove('tw-active'); it.pos=it.tokens.length; }
+  twState.idx++; twState.built='';
+  SFX.tap();
+  if(twState.idx>=twState.items.length){
+    /* 所有预设文本段均完成展开 */
     twState.done=true;
-    SFX.tap();
     const host=document.querySelector('#pageHost');
     if(host) twBindGlossary(host);
+  } else {
+    /* 200ms 后开始下一段的打字机效果 */
+    twTimer=setTimeout(twStep,200);
   }
 }
 /* 术语点击绑定（独立函数，typewriter 完成后可重新调用） */
@@ -1301,7 +1300,7 @@ function openQuest(qid){
     if(pv) pv.onpointerdown=()=>{ pageIdx--; drawPage(); };
     if(nx) nx.onpointerdown=()=>{ pageIdx++; drawPage(); };
     const rec=$("#recBtn"); if(rec) bindOralKit(pageHost);
-    /* 书页打字机效果：逐字显示，首次点击展开当前段落，再次点击展开整页 */
+    /* 书页打字机效果：逐字显示，每次点击展开一段直至全部完成 */
     startTypewriter(pageHost);
     /* 点击委托：术语(.gl)点击 + 书页区域点击展开打字机（不干扰按钮/朗读套件） */
     pageHost.onpointerdown=e=>{
@@ -2094,7 +2093,7 @@ function renderCfg(){
   </div>
 
   <div class="cfgpane" data-pane="npc">
-    <div class="note">自定义 NPC 名字与人设基准。名字留空则用原名；人设描述作为 AI 生成对话的参考依据，让 NPC 更贴近你的预期。</div>
+    <div class="note">自定义 NPC 名字与人设基准。名字留空则用原名；人设描述作为 AI 生成对话的参考依据，让 NPC 更贴近你的预期。修改人设描述后，建议到「存档 → 生成 NPC 人设」重新生成结构化卡片以完全匹配。</div>
     <div id="npcList"></div>
   </div>
 
@@ -2407,24 +2406,34 @@ const NPC_ROLE={
 };
 /* 已淘汰的旧世界观概念（人设/任务生成中严禁出现） */
 const OBSOLETE_TERMS=["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者"];
-/* 生成 NPC 人设卡片（可带修改意见重生成） */
+/* 生成 NPC 人设卡片（可带修改意见重生成）。用户在配置中心输入的人设描述作为硬约束，
+   AI 须完全匹配该描述，禁止生成矛盾特质（如用户写"活泼可爱"则不得出现"沉默寡言"）。 */
 async function genPersona(npcId, feedback){
   const npc=D.npcs.find(n=>n.id===npcId)||NPC[npcId];
   const persona=st.personas[npcId];
+  /* 用户在配置中心输入的人设描述基准（WDCfg.npcPersonas）——作为第一参考硬约束 */
+  const customPersona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
   const sys="你是游戏角色设定师。基于给定的游戏世界背景与NPC基础信息，产出严谨的角色人设卡片。只输出JSON。";
   const user="游戏背景信息：\n"+JSON.stringify(buildWorldBrief(),null,1)
     +"\n\n要设定的NPC："+JSON.stringify({id:npcId,姓名:dName(npcId),称号:dTitle(npcId),职能:NPC_ROLE[npcId]||"",背景:npc.intro})
+    +(customPersona?("\n\n【用户设定的角色基准·硬约束】"+customPersona
+      +"——你必须完全匹配此描述生成人设：personality/style/identity 字段须与此基准一致，"
+      +"严禁出现与用户设定相矛盾的特质（如用户写「活泼可爱」则不得出现「沉默寡言/冷淡/内敛」等反义描述）。"
+      +"若用户设定了具体性格词，personality 数组必须包含该词或其近义表达。"):"")
     +(persona?("\n\n当前已有人设（供参考，若含旧概念须改写）："+JSON.stringify(persona.card)):"")
     +(feedback?("\n\n用户的修改意见（必须采纳）："+feedback):"")
     +"\n\n【世界观硬约束】本游戏世界观是「自在世界跌入导游异次元，遗忘之雾入侵，玩家通关导游试炼以拯救世界并重返家园」。"
     +"严禁出现以下已淘汰的旧概念："+OBSOLETE_TERMS.join("、")+"。"
     +"人设须贴合导游异次元的传奇导游设定，性格鲜明、可信。"
-    +"\n\n请输出JSON，字段：name(姓名)、identity(身份背景，30-50字，须体现其导游职能)、personality(性格特征，3-4个短语)、style(对话风格描述)、relations(与其他角色关系数组，每项{name,rel})。";
+    +"\n\n请输出JSON，字段：name(姓名)、identity(身份背景，30-50字，须体现其导游职能)、personality(性格特征，3-4个短语，必须与用户设定基准一致)、style(对话风格描述，必须与用户设定基准一致)、relations(与其他角色关系数组，每项{name,rel})。";
   const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], true);
   let card;
   try{ card=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) card=JSON.parse(m[0]); else throw e; }
   card.id=npcId; card.name=card.name||dName(npcId);
+  /* 保证 personality 为数组，便于后续统一处理与直接编辑 */
+  if(typeof card.personality==="string") card.personality=card.personality.split(/[、,，;；\s]+/).filter(Boolean);
+  if(!Array.isArray(card.personality)) card.personality=[];
   return card;
 }
 /* 生成任务说明：游戏隐喻叙事 + 背景故事 + 知识拓展（替代旧版独立任务描述模块） */
@@ -2644,7 +2653,7 @@ function renderSave(){
 
 /* ==================== NPC 人设卡片：生成 → 确认/修改重生成 ==================== */
 function openPersonaPanel(){
-  const ov=panel(`<h2>NPC 人设卡片</h2><div class="mt">由 DeepSeek 据游戏背景信息生成 · 确认后作为该 NPC 对话行为基础</div>
+  const ov=panel(`<h2>NPC 人设卡片</h2><div class="mt">AI 生成或直接编辑 · 确认后作为该 NPC 对话行为基础。配置中心的「人设描述」为生成硬约束，此处的结构化卡片为对话最终依据。</div>
     <div id="npcList"></div>`);
   const host=$("#npcList",ov);
   function cardHtml(n){
@@ -2660,32 +2669,59 @@ function openPersonaPanel(){
     </div>
     <div class="kitbar" style="margin-top:6px"><button class="btn sm" data-grow="${n.id}" type="button">🌙 推演角色成长</button></div>
     <div id="gr_${n.id}" class="small" style="font-size:12px;color:var(--gold)"></div>`;
+    /* 直接编辑模式：各字段为可编辑输入框，保存即写入 st.personas[id].card 并标记确认。
+       personality 以「、」分隔的字符串编辑，保存时拆为数组；relations 以「姓名:关系；」形式编辑。 */
+    const editHtml=c?`<div style="font-size:13px;line-height:1.7">
+      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">身份</label><textarea data-fld="identity" data-id="${n.id}" maxlength="120" rows="2" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(c.identity||"")}</textarea></div>
+      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">性格</label><textarea data-fld="personality" data-id="${n.id}" maxlength="80" rows="2" placeholder="以、分隔，如：活泼可爱、热心、急躁" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(Array.isArray(c.personality)?c.personality.join("、"):c.personality)}</textarea></div>
+      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">对话风格</label><textarea data-fld="style" data-id="${n.id}" maxlength="120" rows="2" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(c.style||"")}</textarea></div>
+      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">关系</label><textarea data-fld="relations" data-id="${n.id}" maxlength="200" rows="2" placeholder="格式：姓名:关系；姓名:关系" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc((c.relations||[]).map(r=>(r.name||"")+":"+(r.rel||"")).join("；"))}</textarea></div>
+    </div>`:`<div class="npcnote">${esc(n.intro)}</div>`;
     return `<div class="book" id="pc_${n.id}">
       <div class="bp"><img src="${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(n.id):""}" alt="" style="width:24px;height:24px;image-rendering:pixelated;vertical-align:-6px;margin-right:6px"><span class="pid">${esc(dName(n.id))}</span><em>${esc(dTitle(n.id))}</em> ${status}</div>
-      ${c?`<div style="font-size:13px;line-height:1.7">
-        <div><b style="color:var(--neon)">身份：</b>${esc(c.identity||"")}</div>
-        <div><b style="color:var(--neon)">性格：</b>${esc(Array.isArray(c.personality)?c.personality.join("、"):c.personality)}</div>
-        <div><b style="color:var(--neon)">对话风格：</b>${esc(c.style||"")}</div>
-        ${c.relations&&c.relations.length?`<div><b style="color:var(--neon)">关系：</b>${c.relations.map(r=>esc((r.name||"")+"·"+(r.rel||""))).join("；")}</div>`:""}
-      </div>`:`<div class="npcnote">${esc(n.intro)}</div>`}
+      ${editHtml}
       ${growHtml}
       <div class="kitbar" style="margin-top:8px">
         <button class="btn sm primary" data-gen="${n.id}" type="button">${c?"重新生成":"生成人设"}</button>
-        ${c&&!p.confirmed?`<button class="btn sm" data-ok="${n.id}" type="button">✓ 确认采用</button>
-          <button class="btn sm ghost" data-edit="${n.id}" type="button">✎ 提修改意见</button>`:""}
-        ${c&&p.confirmed?`<button class="btn sm ghost" data-edit="${n.id}" type="button">✎ 调整重生成</button>
+        ${c?`<button class="btn sm" data-save="${n.id}" type="button">💾 保存编辑</button>`:""}
+        ${c&&!p.confirmed?`<button class="btn sm" data-ok="${n.id}" type="button">✓ 确认采用</button>`:""}
+        ${c?`<button class="btn sm ghost" data-edit="${n.id}" type="button">✎ 提修改意见重生成</button>
           <button class="btn sm ghost" data-clear="${n.id}" type="button">恢复内置</button>`:""}
       </div>
       <div id="fb_${n.id}" class="small" style="font-size:12px;color:var(--gold);margin-top:6px"></div>
     </div>`;
   }
   function draw(){ host.innerHTML=D.npcs.map(cardHtml).join(""); bind(); }
+  /* 保存直接编辑：读取 textarea 值写回 st.personas[id].card，并标记 confirmed=true（用户已确认覆写） */
+  function saveEdit(id){
+    const card=st.personas[id]&&st.personas[id].card;
+    if(!card){ return; }
+    const root=$("#pc_"+id,host); if(!root) return;
+    root.querySelectorAll("textarea[data-fld]").forEach(ta=>{
+      const fld=ta.dataset.fld, v=ta.value.trim();
+      if(fld==="personality"){
+        card.personality=v?v.split(/[、,，;；\s]+/).filter(Boolean):[];
+      } else if(fld==="relations"){
+        card.relations=v?v.split(/[；;]/).map(p=>{
+          const idx=p.indexOf(":"); const colon=idx<0?p.indexOf("："):idx;
+          if(colon<0) return {name:p.trim(),rel:""};
+          return {name:p.slice(0,colon).trim(),rel:p.slice(colon+1).trim()};
+        }).filter(r=>r.name):[];
+      } else {
+        card[fld]=v;
+      }
+    });
+    st.personas[id].confirmed=true; st.personas[id].at=new Date().toISOString();
+    save(); SFX.ok();
+    const m=$("#fb_"+id,host); if(m){ m.textContent="已保存编辑 · 对话即刻依此人设"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2400); }
+  }
   function bind(){
     host.querySelectorAll("[data-gen],[data-ok]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
       const id=b.dataset.gen||b.dataset.ok;
       if(b.dataset.ok){ st.personas[id].confirmed=true; save(); SFX.ok(); toast("已确认，该 NPC 将依此人设对话"); draw(); return; }
       genFlow(id,"");
     });
+    host.querySelectorAll("[data-save]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); saveEdit(b.dataset.save); });
     host.querySelectorAll("[data-edit]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
       const id=b.dataset.edit;
       const fb=prompt("请输入对该人设的修改意见（如：让他更严厉些 / 增加与玄机夫人的师徒线）：");
