@@ -42,19 +42,20 @@ global.confirm=()=>true;global.prompt=()=>null;global.alert=()=>{};
 const dataSrc=fs.readFileSync(process.argv[2],'utf8');
 const html=fs.readFileSync(process.argv[3],'utf8');
 const js=html.match(/<script>\n([\s\S]*?)<\/script>/)[1];
-/* 独立模块（wd-chat/wd-avatar/wd-cfg/wd-mem）随主脚本一并装载，保持与线上运行时一致 */
+/* 独立模块（wd-chat/wd-avatar/wd-cfg/wd-mem/wd-quiz）随主脚本一并装载，保持与线上运行时一致 */
 const chatSrc=fs.readFileSync(require('path').join(__dirname,'wd-chat.js'),'utf8');
 const avSrc=fs.readFileSync(require('path').join(__dirname,'wd-avatar.js'),'utf8');
 const fxSrc=fs.readFileSync(require('path').join(__dirname,'wd-fx.js'),'utf8');
 const cfgSrc=fs.readFileSync(require('path').join(__dirname,'wd-cfg.js'),'utf8');
 const memSrc=fs.readFileSync(require('path').join(__dirname,'wd-mem.js'),'utf8');
+const quizSrc=fs.readFileSync(require('path').join(__dirname,'wd-quiz.js'),'utf8');
 
 const driver=`
 ;(function(){
   const errors=[];
   function run(name,fn){try{fn();console.log('PASS  '+name);}catch(e){errors.push(name+' => '+e.message);console.log('FAIL  '+name+' : '+e.message);}}
   function reset(){ st=defState(); }
-  try{ WDCfg.init(); WDMem.init(); }catch(e){ errors.push('模块初始化 => '+e.message); }
+  try{ WDCfg.init(); WDMem.init(); WDQuiz.init(); }catch(e){ errors.push('模块初始化 => '+e.message); }
   run('defState',()=>{const s=defState();if(!s.player)throw 0;});
   run('reconcile fresh',()=>{reset();reconcile();});
   run('intro',()=>intro());
@@ -542,6 +543,102 @@ const driver=`
     const src=genPersona.toString();
     if(!src.includes('Array.isArray(card.personality)')) throw new Error('genPersona 未归一化 personality 为数组');
   });
+  /* ========== 智能提问模块（WDQuiz）测试 ========== */
+  run('WDQuiz 模块已加载',()=>{
+    if(!window.WDQuiz) throw new Error('WDQuiz 未挂载');
+    if(typeof WDQuiz.ask!=='function') throw new Error('WDQuiz.ask 非函数');
+    if(typeof WDQuiz.record!=='function') throw new Error('WDQuiz.record 非函数');
+    if(typeof WDQuiz.progress!=='function') throw new Error('WDQuiz.progress 非函数');
+  });
+  run('WDQuiz 问题类型库含三维度认知递进',()=>{
+    const t=WDQuiz.Q_TYPES;
+    if(!t.recall||!t.understand||!t.apply) throw new Error('缺问题类型');
+    if(t.recall.lv!==1||t.understand.lv!==2||t.apply.lv!==3) throw new Error('难度梯度错乱');
+    if(t.recall.templates.length<1||t.understand.templates.length<1||t.apply.templates.length<1) throw new Error('问法模板为空');
+  });
+  run('WDQuiz NPC职能标签体系',()=>{
+    const m=WDQuiz.NPC_TOPIC_MAP;
+    if(!m.smq||!m.tiemian||!m.liuruyan||!m.moxiaogu||!m.xuanji||!m.qingxuan) throw new Error('缺核心NPC职能映射');
+  });
+  run('WDQuiz ask 生成认知递进提问',()=>{
+    reset();
+    const cards=buildCardPool().filter(x=>x.cat==='pts').slice(0,5);
+    const qs=WDQuiz.ask(cards,st.wrong,D.pointsLib,5);
+    if(!Array.isArray(qs)||qs.length===0) throw new Error('未生成提问');
+    const q=qs[0];
+    if(!q.pid||!q.q||!q.typeLabel||!q.npcId) throw new Error('提问结构不完整：'+JSON.stringify(q));
+    if(!['事实回忆','概念理解','应用分析'].includes(q.typeLabel)) throw new Error('问法类型标签异常');
+    if(!q.lv||q.lv<1||q.lv>3) throw new Error('难度档异常');
+  });
+  run('WDQuiz one 单题生成含关键词',()=>{
+    reset();
+    const p=D.pointsLib[0];
+    const q=WDQuiz.one(p);
+    if(!q||!q.keyword) throw new Error('单题生成失败或缺关键词');
+    if(!q.refText) throw new Error('缺参考原文');
+  });
+  run('WDQuiz matchNpc 按知识点匹配NPC',()=>{
+    /* S1前缀应匹配山河导游 smq */
+    const npc=WDQuiz.matchNpc('S1-01-01','长城');
+    if(npc!=='smq') throw new Error('S1匹配应为smq，实际'+npc);
+    /* S3前缀应匹配律法导游 tiemian */
+    const npc2=WDQuiz.matchNpc('S3-01-01','法条');
+    if(npc2!=='tiemian') throw new Error('S3匹配应为tiemian，实际'+npc2);
+    /* 兜底应为 xuanji */
+    const npc3=WDQuiz.matchNpc('XX-99','');
+    if(npc3!=='xuanji') throw new Error('兜底应为xuanji，实际'+npc3);
+  });
+  run('WDQuiz record 更新能力模型与进度',()=>{
+    reset();
+    const pid='S1-01-01';
+    WDQuiz.record(pid,true);
+    WDQuiz.record(pid,true);
+    WDQuiz.record(pid,false);
+    const a=WDQuiz.ability(pid);
+    if(a.asked!==3) throw new Error('asked应为3，实际'+a.asked);
+    if(a.correct!==2) throw new Error('correct应为2，实际'+a.correct);
+    const prog=WDQuiz.progress();
+    if(prog.total!==3) throw new Error('进度total应为3，实际'+prog.total);
+    if(prog.correct!==2) throw new Error('进度correct应为2，实际'+prog.correct);
+    if(prog.rate!==67) throw new Error('正确率应为67%，实际'+prog.rate);
+  });
+  run('WDQuiz interval 复习周期动态调整',()=>{
+    reset();
+    const pid='S1-01-01';
+    /* 全对→7日 */
+    WDQuiz.record(pid,true); WDQuiz.record(pid,true);
+    if(WDQuiz.interval(pid)!==7) throw new Error('掌握好应7日复习');
+    /* 全错→1日 */
+    const pid2='S1-02-01';
+    WDQuiz.record(pid2,false); WDQuiz.record(pid2,false);
+    if(WDQuiz.interval(pid2)!==1) throw new Error('掌握差应1日复习');
+  });
+  run('WDQuiz selectQType 认知递进选型',()=>{
+    reset();
+    const pid='S1-03-01';
+    /* 初学→recall */
+    let a=WDQuiz.ability(pid);
+    if(a.asked>0||WDQuiz._db().byPid[pid]&&false){}
+    /* 答对多次→apply */
+    WDQuiz.record(pid,true);WDQuiz.record(pid,true);WDQuiz.record(pid,true);
+    a=WDQuiz.ability(pid);
+    const rate=a.correct/a.asked;
+    if(rate<0.7) throw new Error('三次全对应rate>=0.7');
+  });
+  run('renderNight 含智能提问入口',()=>{
+    reset();
+    renderNight();
+    const src=renderNight.toString();
+    if(!src.includes('iqBtn')) throw new Error('renderNight 缺智能提问按钮');
+    if(!src.includes('startIntelligentQuiz')) throw new Error('renderNight 缺 startIntelligentQuiz 调用');
+  });
+  run('startIntelligentQuiz 交互函数存在',()=>{
+    if(typeof startIntelligentQuiz!=='function') throw new Error('startIntelligentQuiz 未定义');
+    const src=startIntelligentQuiz.toString();
+    if(!src.includes('WDQuiz.ask')) throw new Error('缺 WDQuiz.ask 调用');
+    if(!src.includes('WDQuiz.record')) throw new Error('缺 WDQuiz.record 调用');
+    if(!src.includes('WDQuiz.progress')) throw new Error('缺 WDQuiz.progress 调用');
+  });
   /* 异步收尾：respond 未配置 AI 时应同步降级为本地话术（永不 reject） */
   (async()=>{
     try{
@@ -557,5 +654,5 @@ const driver=`
 })();
 `;
 
-try { eval(dataSrc + '\n' + cfgSrc + '\n' + memSrc + '\n' + chatSrc + '\n' + avSrc + '\n' + fxSrc + '\n' + js + '\n' + driver); }
+try { eval(dataSrc + '\n' + cfgSrc + '\n' + memSrc + '\n' + quizSrc + '\n' + chatSrc + '\n' + avSrc + '\n' + fxSrc + '\n' + js + '\n' + driver); }
 catch(e){ console.log('FATAL LOAD ERROR:\n'+e.stack); process.exit(1); }

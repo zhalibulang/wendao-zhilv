@@ -449,6 +449,7 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 <script src="game-data.js"></script>
 <script src="wd-cfg.js"></script>
 <script src="wd-mem.js"></script>
+<script src="wd-quiz.js"></script>
 <script src="wd-chat.js"></script>
 <script src="wd-avatar.js"></script>
 <script src="wd-fx.js"></script>
@@ -1864,8 +1865,17 @@ function renderNight(){
     });
   });
   const consolidated=Object.values(st.cards||{}).filter(r=>r&&r.iv>=2).length;
-  const ov=panel(`<h2>巡夜 · 记忆卡匣</h2><div class="mt">到期复习 ${due.length} 张 · 待来日 ${later.length} 张 · 预习 ${pre.length} 张 · 已巩固 ${consolidated} 张（间隔 1→3→7→15 日，由你的自评决定）</div><div id="fcHost"></div>`);
+  const prog=window.WDQuiz?WDQuiz.progress():null;
+  const progHtml=prog?` · 智能提问：答${prog.total}题，正确率${prog.rate}%，连对${prog.streak}题`:"";
+  const ov=panel(`<h2>巡夜 · 记忆卡匣</h2><div class="mt">到期复习 ${due.length} 张 · 待来日 ${later.length} 张 · 预习 ${pre.length} 张 · 已巩固 ${consolidated} 张${progHtml}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      ${window.WDQuiz?`<button class="btn sm primary" id="iqBtn" type="button">✦ 智能提问</button><span style="color:var(--ink2);font-size:12.5px">NPC 依你的记忆内容主动出题，认知递进</span>`:""}
+    </div>
+    <div id="fcHost"></div>`);
   const host=$("#fcHost",ov);
+  /* 智能提问入口：基于记忆卡匣+错题生成认知递进式提问，NPC 依职能匹配出题 */
+  const iqBtn=$("#iqBtn",ov);
+  if(iqBtn) iqBtn.onpointerdown=()=>{ SFX.tap(); startIntelligentQuiz(due,pre,later,host); };
   const deck=[...due.map(it=>({it,mode:"due"})), ...pre.map(it=>({it,mode:"pre"}))];
   let i=0, showRev=false;
   function draw(){
@@ -1901,6 +1911,95 @@ function renderNight(){
     const gd=$("#fGood",host); if(gd) gd.onpointerdown=()=>{ SFX.tap(); const r=st.cards[it.id]||{iv:1}; const nv=Math.min(15,r.iv*2); st.cards[it.id]={due:new Date(Date.now()+nv*864e5).toISOString().slice(0,10),iv:nv}; i++; showRev=false; save(); draw(); };
   }
   draw();
+}
+/* ==================== 智能提问交互（NPC 依记忆内容主动出题，认知递进）==================== */
+function startIntelligentQuiz(due,pre,later,host){
+  if(!window.WDQuiz){ toast("智能提问模块未加载"); return; }
+  /* 合并所有可用考点卡作为题源 */
+  const allCards=[...(due||[]),...(pre||[]),...(later||[])];
+  if(!allCards.length){ host.innerHTML=`<div class="missing" style="text-align:center;padding:30px">卡匣尚空——完成修行类任务后，考点卡会在此安家。</div>`; return; }
+  /* 生成5道认知递进式提问（混合记忆卡匣+错题） */
+  const questions=WDQuiz.ask(allCards,st.wrong,D.pointsLib,5);
+  if(!questions.length){ host.innerHTML=`<div class="missing" style="text-align:center;padding:30px">暂无可提问的考点。</div>`; return; }
+  let qi=0, okN=0;
+  function drawQ(){
+    if(qi>=questions.length){
+      const prog=WDQuiz.progress();
+      host.innerHTML=`<div class="note" style="border-left-color:var(--gold)">
+        <div style="font-size:14px;margin-bottom:6px">智能提问终了：答对 ${okN}/${questions.length}</div>
+        <div style="font-size:12px;color:var(--ink2)">累计答题 ${prog.total} · 正确率 ${prog.rate}% · 连对 ${prog.streak}（最高 ${prog.bestStreak}）</div>
+        <div style="font-size:12px;color:var(--ink2);margin-top:4px">已掌握 ${prog.mastered} 个考点 · 学习中 ${prog.learning} 个</div>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn sm" id="iqBack" type="button">← 返回卡匣</button>
+        <button class="btn sm primary" id="iqAgain" type="button">再来一轮</button>
+      </div>`;
+      $("#iqBack",host).onpointerdown=()=>{ SFX.tap(); host.innerHTML=""; renderNight(); };
+      $("#iqAgain",host).onpointerdown=()=>{ SFX.tap(); startIntelligentQuiz(due,pre,later,host); };
+      return;
+    }
+    const q=questions[qi];
+    const npcName=dName(q.npcId), npcTitle=dTitle(q.npcId);
+    const avatarURL=(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(q.npcId):"";
+    const lvLabel=["基础","进阶","挑战"][q.lv-1]||q.lv;
+    const lvColor=q.lv===1?"var(--ok)":(q.lv===2?"var(--gold)":"var(--danger)");
+    host.innerHTML=`<div class="iqcard">
+      <div class="iqhead">
+        ${avatarURL?`<img src="${avatarURL}" alt="" style="width:32px;height:32px;image-rendering:pixelated;border-radius:4px">`:""}
+        <div class="iqnpc">${esc(npcName)}${npcTitle?" · "+esc(npcTitle):""}</div>
+        <span class="iqlv" style="color:${lvColor}">${esc(q.typeLabel)} · ${lvLabel}</span>
+      </div>
+      <div class="iqq">${esc(q.q)}</div>
+      <div class="iqhint" style="color:var(--dim);font-size:11px;margin-top:4px">考点 ${esc(q.pid)} · 关键词：${esc(q.keyword)}</div>
+      <textarea id="iqAns" rows="3" placeholder="用你的话作答……（可不答，直接跳过查看参考）" style="width:100%;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:8px;border-radius:4px;margin-top:8px"></textarea>
+      <div class="kitbar" style="margin-top:8px">
+        <button class="btn sm primary" id="iqSubmit" type="button">作答</button>
+        <button class="btn sm" id="iqKnow" type="button">✓ 会了</button>
+        <button class="btn sm ghost" id="iqSkip" type="button">不会，看参考</button>
+      </div>
+      <div id="iqFb" class="small" style="margin-top:8px;font-size:12px;line-height:1.7"></div>
+    </div>`;
+    const fb=$("#iqFb",host);
+    let answered=false;
+    $("#iqSubmit",host).onpointerdown=()=>{ SFX.tap();
+      if(answered) return; answered=true;
+      const ans=$("#iqAns",host).value.trim();
+      if(!ans){ fb.innerHTML=`<div style="color:var(--gold)">没写也没关系——下面是参考答案，看一眼也算温习。</div>`; showRef(false); return; }
+      /* 自评反馈：展示参考答案供玩家自评 */
+      fb.innerHTML=`<div style="color:var(--cyber)"><b>你的回答：</b>${esc(ans)}</div>
+        <div style="color:var(--ink2);margin-top:4px">对照参考自评——你觉得答得对吗？</div>
+        <div style="margin-top:6px;display:flex;gap:6px">
+          <button class="btn sm primary" id="iqRight" type="button">答对了</button>
+          <button class="btn sm ghost" id="iqWrong" type="button">答偏了</button>
+        </div>`;
+      $("#iqRight",host).onpointerdown=()=>{ SFX.tap(); SFX.ok(); okN++; WDQuiz.record(q.pid,true); if(window.WDMem)WDMem.right(q.npcId,q.topic); showRef(true,true); };
+      $("#iqWrong",host).onpointerdown=()=>{ SFX.tap(); SFX.no(); WDQuiz.record(q.pid,false); if(window.WDMem)WDMem.wrong(q.npcId,q.topic,q.lv); showRef(true,false); };
+    };
+    $("#iqKnow",host).onpointerdown=()=>{ SFX.tap();
+      if(answered) return; answered=true;
+      okN++; WDQuiz.record(q.pid,true);
+      if(window.WDMem)WDMem.right(q.npcId,q.topic);
+      showRef(true,true);
+    };
+    $("#iqSkip",host).onpointerdown=()=>{ SFX.tap();
+      if(answered) return; answered=true;
+      WDQuiz.record(q.pid,false);
+      if(window.WDMem)WDMem.wrong(q.npcId,q.topic,q.lv);
+      showRef(false,false);
+    };
+    function showRef(selfAssessed,correct){
+      const interval=WDQuiz.interval(q.pid);
+      const nextReview=interval===1?"明日":(interval===3?"3日后":"7日后");
+      const msg=correct?'<span style="color:var(--ok)">很好——这个考点将在'+nextReview+'复习。</span>':'<span style="color:var(--gold)">没关系，多见几次就熟了——明日再来。</span>';
+      fb.innerHTML=`${selfAssessed?'':''}<div style="border-left:3px solid var(--neon);padding:6px 8px;margin-top:6px;background:rgba(0,229,255,.04);border-radius:0 4px 4px 0">
+        <b style="color:var(--neon);font-size:11px">参考答案</b><br><span style="font-size:12.5px;color:var(--fg2)">${esc(q.refText)}</span>
+      </div>
+      <div style="margin-top:6px;font-size:12px">${msg}</div>
+      <div style="margin-top:8px"><button class="btn sm primary" id="iqNext" type="button">下一题 →</button></div>`;
+      $("#iqNext",host).onpointerdown=()=>{ SFX.tap(); qi++; drawQ(); };
+    }
+  }
+  drawQ();
 }
 function wTopic(x){ return (x.pid&&x.pid.includes("-")?x.pid.split("-").slice(0,2).join("-"):(x.pid||x.qid))||"杂"; }
 /* 兜底题库：AI 失败且本任务静态题为空时，同幕复用题池，保证温故试炼永不 0/0 空转 */
