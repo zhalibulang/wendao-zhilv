@@ -1865,7 +1865,7 @@ function renderNight(){
     });
   });
   const consolidated=Object.values(st.cards||{}).filter(r=>r&&r.iv>=2).length;
-  const prog=window.WDQuiz?WDQuiz.progress():null;
+  const prog=(window.WDQuiz&&WDQuiz._db())?WDQuiz.progress():null;
   const progHtml=prog?` · 智能提问：答${prog.total}题，正确率${prog.rate}%，连对${prog.streak}题`:"";
   const ov=panel(`<h2>巡夜 · 记忆卡匣</h2><div class="mt">到期复习 ${due.length} 张 · 待来日 ${later.length} 张 · 预习 ${pre.length} 张 · 已巩固 ${consolidated} 张${progHtml}</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
@@ -1914,7 +1914,7 @@ function renderNight(){
 }
 /* ==================== 智能提问交互（NPC 依记忆内容主动出题，认知递进）==================== */
 function startIntelligentQuiz(due,pre,later,host){
-  if(!window.WDQuiz){ toast("智能提问模块未加载"); return; }
+  if(!window.WDQuiz||!WDQuiz._db()){ toast("智能提问模块未就绪"); return; }
   /* 合并所有可用考点卡作为题源 */
   const allCards=[...(due||[]),...(pre||[]),...(later||[])];
   if(!allCards.length){ host.innerHTML=`<div class="missing" style="text-align:center;padding:30px">卡匣尚空——完成修行类任务后，考点卡会在此安家。</div>`; return; }
@@ -2944,6 +2944,7 @@ function boot(){
   // 配置中心/记忆模块须先初始化——reconcile() 的心气上限依赖 WDCfg.ready()
   if(window.WDCfg) WDCfg.init();
   if(window.WDMem) WDMem.init();
+  if(window.WDQuiz) WDQuiz.init();
   WDChat.init({D,NPC,getSt:()=>st,save,dsChat,dsReady,level,actTopic:npcActTopic,quest:firstActiveQuest});
   const has=load();
   if(!has){ st=defState(); save(); intro(); }
