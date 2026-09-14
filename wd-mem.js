@@ -152,6 +152,14 @@ const WDMem={
     return {rejected:db.rejected, lastBak:db.lastBak, bytesKB:Math.round(bytes/102.4)/10, npcCount:Object.keys(db.byNpc).length};
   },
   backupNow(){ db.lastBak=""; rotateBackup(); },
+  /* v29（重置修复）：全量重置——取消 pending flush，内存态归零，清主键与备份链（供 #rst 调用，消除防抖竞态） */
+  resetAll(){
+    if(flushTimer){ clearTimeout(flushTimer); flushTimer=0; }
+    db=defaults(); activeNpc=null;
+    try{ localStorage.removeItem(KEY); }catch(e){}
+    for(let i=4;i>=0;i--){ try{ localStorage.removeItem(BAK+i); }catch(e){} }
+    flushNow();
+  },
   export(){ return JSON.stringify(db,null,1); },
   import(text){
     let o; try{ o=JSON.parse(text); }catch(e){ throw new Error("E_MEM_JSON"); }

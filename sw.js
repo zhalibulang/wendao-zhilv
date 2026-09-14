@@ -8,6 +8,7 @@ const CORE = [
   "./wd-chat.js",
   "./wd-avatar.js",
   "./wd-fx.js",
+  "./npc-registry.js",
   "./wd-cfg.js",
   "./wd-mem.js",
   "./wd-quiz.js",

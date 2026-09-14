@@ -272,6 +272,12 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 .libwarn{color:var(--gold);font-size:11px;margin-left:4px}
 .dayinfo{text-align:center;color:var(--dim);font-size:13px;margin-bottom:8px}
 .missing{text-align:center;padding:30px;color:var(--dim)}
+.aidot{font-size:11px;letter-spacing:.04em;cursor:help;padding:0 4px}
+.aidot.ok{color:var(--ok)}
+.aidot.down{color:var(--gold)}
+.aidot.err{color:var(--danger)}
+.aidot.off{color:var(--dim)}
+.energyhint{margin:4px 0;padding:6px 10px;border:1px dashed var(--border-lit);color:var(--gold);font-size:12px;line-height:1.5}
 .statbar{position:sticky;top:0;z-index:6;display:flex;gap:10px;align-items:center;margin:0 0 10px;padding:6px 10px;font-size:13px;
   background:var(--bg2);border:2px solid var(--border-lit);box-shadow:2px 2px 0 #000;flex-wrap:wrap}
 .statbar b{color:var(--gold)}
@@ -447,6 +453,7 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 <div id="game"></div>
 <div class="toasts" id="toasts"></div>
 <script src="game-data.js"></script>
+<script src="npc-registry.js"></script>
 <script src="wd-cfg.js"></script>
 <script src="wd-mem.js"></script>
 <script src="wd-quiz.js"></script>
@@ -502,19 +509,21 @@ const QMAP = Object.fromEntries(D.quests.map(q=>[q.id,q]));
 /* ---------- NPC 职能重构：全程引导者「云蘅」+ 全角色×四章互动矩阵 ----------
    所有 NPC 自序章起即由云蘅引见现身（不再按幕锁于雾中），
    但各章互动话题仍随当前幕推进；任务解锁门禁不受影响。 */
+/* v29.1（实测修复）：NPC 主映射基础数据以注册表为准 */
+if(window.WDRegistry){
+  Object.keys(WDRegistry.all()).forEach(rid=>{
+    const r=WDRegistry.get(rid), t=NPC[rid]||(D.npcs.find(n=>n.id===rid));
+    if(t&&r){ t.name=r.name; t.title=r.title; t.intro=r.intro; }
+  });
+}
 if(!NPC.yunheng){
-  const GUIDE={id:"yunheng",name:"云蘅",title:"圣女候选",intro:"导游次元的圣女候选，担任玩家主要引导人。在神圣导游就职仪式中，因遗忘之雾侵袭及玩家意外降临导致仪式中断，与玩家形成绑定关系。性格活泼可爱，对玩家怀有爱慕之情。随着玩家完成就职仪式各阶段，云蘅逐步恢复被封印的圣女之力，重新驾驭导游圣器以驱逐遗忘之雾。"};
+  /* v2（R2.1）：云蘅基础数据从角色注册表派生（注册表缺失时回退内置） */
+  const g=(window.WDRegistry&&WDRegistry.get("yunheng"))||{id:"yunheng",name:"云蘅",title:"圣女候选",intro:"导游次元的圣女候选，担任玩家主要引导人。在神圣导游就职仪式中，因遗忘之雾侵袭及玩家意外降临导致仪式中断，与玩家形成绑定关系。性格活泼可爱，对玩家怀有爱慕之情。随着玩家完成就职仪式各阶段，云蘅逐步恢复被封印的圣女之力，重新驾驭导游圣器以驱逐遗忘之雾。"};
+  const GUIDE={id:g.id,name:g.name,title:g.title,intro:g.intro};
   D.npcs.unshift(GUIDE); NPC.yunheng=GUIDE;
 }
-const NPC_MATRIX={
-  yunheng:{act1:"你来了——圣女之力才醒了一缕，但有你同行，我不怕。先去山河游学，激活第一枚封印吧。",act2:"律法塔在前方，铁面候你多时。圣女之力又醒了一寸——你感觉到了吗？",act3:"行会风云起，柳首座在纱幕后等你。咱们的绑定越来越稳了，真让人安心。",act4:"遗迹探秘，璇玑的星盘已就位。圣女之力恢复过半，雾在退了——再坚持。",act5:"金榜台已近——最后一段雾路，我送你到台下。等我完全恢复圣女之力，就用圣器把雾全驱散。"},
-  qingxuan:{act1:"山河游学，先理文脉——把考点当封印，一枚枚激活。",act2:"塔律文脉：法条幽深，我替你先理一寸脉络。",act3:"文脉识人心：带团如理脉，先理清游客要看的景。",act4:"脉映星图：北京风物是这道文脉最后一程。"},
-  smq:{act1:"山河志第一页——三千年的城，从蓟城讲到大都。",act2:"剑指塔律：文物法规如剑谱，一式不可错。",act3:"行会演武：带团节奏如剑招，快慢全在蓄与发。",act4:"遗迹访古：木构斗拱，是我剑下最后的对手。"},
-  tiemian:{act1:"新丁先立规矩：考规如塔基，逾矩者塔门不启。",act2:"一百零八道法条如剑阵，错一道便放遗忘怪出关。",act3:"行会合同与投诉，是塔外的妖——同样归我管。",act4:"遗迹保护条例的封印也在塔上，携卷而来。"},
-  liuruyan:{act1:"纱中幻景：讲解词先在纱后排演千遍，再对人启齿。",act2:"塔下经营：旅行社条例是行商的纱，薄而不透。",act3:"行会风云正是我主场——千团穿行遗忘之雾，未失一人。",act4:"纱覆遗迹：应急处理，先护人，再护纱，后护物。"},
-  moxiaogu:{act1:"机关匣已就位！四百余枚知识符印等你来点数！",act2:"新铸律法锁三十把——法规题在这里排队咬人！",act3:"行会账目题最绕，我的算签都不够用了！",act4:"遗迹星符对谜——古建题妖最狡猾！"},
-  xuanji:{act1:"星盘初启：错题妖尚幼，趁早记下它们的模样。灵魂绑定后，你的记忆我能感应到了。",act2:"星照塔律：你错过的法条妖，会在我盘里发亮。",act3:"实务之错最隐晦，星盘替你一一显形。",act4:"收服错题妖，就在这最后一幕——别留妖过夜。"}
-};
+/* v2（R2.1）：NPC_MATRIX 从角色注册表派生（原硬编码矩阵已迁入 npc-registry.js） */
+const NPC_MATRIX=(window.WDRegistry&&WDRegistry.actMatrix())||{};
 function curActN(){ let n=1; DAYS.forEach(d=>{ if(st&&st.day>=d.day&&d.act){ const v=+d.act.slice(3); if(v>n) n=v; } }); return Math.min(5,Math.max(1,n)); }
 function npcActTopic(id){ const m=NPC_MATRIX[id]; return m&&m["act"+curActN()]; }
 /* v2：任务以 day 字段关联，装载时挂回 day 对象（主线优先排序） */
@@ -529,7 +538,7 @@ function defState(){
     done:{}, fav:Object.fromEntries(D.npcs.map(n=>[n.id,0])),
     ach:{}, notes:{}, wrong:[], cards:{}, seenHearts:{}, shop:[...D.shop],
     edits:{}, _treeExp:{},
-    dsKey:"", personas:{}, aiBrief:{},
+    personas:{}, aiBrief:{},
     dialogue:[],
     npcGrowth:{},
     hp:88, energy:24, quizOk:0, quizAttempts:{}, cutscenes:{}, dailyCtx:{}, clauseLog:[], dialogueInitDay:0, created:new Date().toISOString()};
@@ -553,9 +562,17 @@ function reconcile(){
   /* 世界观重构后：清除含已淘汰旧概念的人设/任务说明缓存，强制用新设定重生成
      同时清除旧 schema 的 aiBrief（缺 scene/necessity/impact/reward 字段），强制用新剧情先行 schema 重生成 */
   (function purgeObsolete(){
-    const obs=["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者"];
+    const obs=OBSOLETE_TERMS; /* v2（WZ-011）：引用唯一黑名单 */
     const hasObs=o=>obs.some(t=>JSON.stringify(o||"").includes(t));
     Object.keys(st.personas).forEach(id=>{ if(hasObs(st.personas[id])) delete st.personas[id]; });
+    /* v29.1（实测修复）：配置中心域残留旧世界观人设/称号——一并清洗 */
+    if(window.WDCfg){
+      const cfgAll=WDCfg.all();
+      ["npcTitles","npcPersonas","npcNames"].forEach(k=>{
+        const bag=cfgAll[k]; if(!bag) return;
+        Object.keys(bag).forEach(id=>{ if(bag[id]&&hasObs(bag[id])){ WDCfg.set(k+"."+id,"","清洗旧世界观残留"); } });
+      });
+    }
     Object.keys(st.aiBrief).forEach(id=>{
       const b=st.aiBrief[id];
       if(hasObs(b)||!b||(typeof b==="object"&&!b.scene&&!b.necessity&&!b.impact&&!b.reward&&b.brief))
@@ -590,7 +607,7 @@ function reconcile(){
       for(const [a,b] of DIALECT_FIX){ if(t.includes(a)) t=t.split(a).join(b); }
       m.text=t; }
   });
-  if(typeof st.dsKey!=="string") st.dsKey="";
+  /* v2：密钥已迁出存档（WZ-017）；旧存档导入时已在导入处剔除 */
   if(!Array.isArray(st.wrong)) st.wrong=[];
   if(!Array.isArray(st.shop)||!st.shop.length) st.shop=[...D.shop];
   if(typeof st.quizOk!=="number") st.quizOk=0;
@@ -636,7 +653,7 @@ const qDone=id=>!!st.done[id];
 function dayProg(d){ let n=0; d.quests.forEach(q=>{if(qDone(q.id))n++;}); return {n,all:d.quests.length}; }
 function totals(){ let a=0,c=0; DAYS.forEach(d=>{const p=dayProg(d); a+=p.all; c+=p.n;}); return {c,a}; }
 function streak(){
-  const ds=[...new Set(Object.values(st.done).map(v=>v.slice(0,10)))].sort(); let s=0;
+  const ds=[...new Set(Object.values(st.done).map(v=>String(v).slice(0,10)))].sort(); let s=0;
   for(let i=ds.length-1;i>=0;i--){ if(i===ds.length-1||Math.round((new Date(ds[i+1])-new Date(ds[i]))/864e5)===1) s++; else break; }
   return s;
 }
@@ -774,15 +791,8 @@ function typing(on,multi){
 }
 /* 自由发言智能路由：无 @提及时，按职能关键词→当前关卡接洽人→引路人云蘅 兜底，
    保证玩家每一句自由发言都至少有一位职能匹配的 NPC 出面回应 */
-const NPC_ROLE_KW={
-  smq:["山河","地形","山","水","长城","十三陵","地貌","剑"],
-  tiemian:["法条","法规","法律","政策","条例","处罚","规定","合同"],
-  liuruyan:["行会","旅行社","接待","沟通","客人","服务","人际","礼仪"],
-  moxiaogu:["遗迹","故宫","天坛","机关","建筑","文物","年表","历史"],
-  xuanji:["错题","星盘","题","考","卦","复习","记忆","背诵","英文","单词"],
-  qingxuan:["主线","剧情","背景","故事","世界观","文脉","符文"],
-  yunheng:["引路","怎么玩","操作","下一步","开始","指引","求助","帮"]
-};
+/* v2（R2.1）：路由关键词从角色注册表派生 */
+const NPC_ROLE_KW=(window.WDRegistry&&WDRegistry.keywordMap())||{};
 function routeNpc(text){
   const raw=String(text||"");
   /* 优先使用 WDChat 的评分式领域判断（核心词+2/边缘词+1/NPC名+3） */
@@ -831,6 +841,30 @@ function npcAnswer(targets,text){
   const all=targets.length>1;
   typing(true,all);
   toast(all?"各位已收到喊话……":"正在与"+dName(targets[0])+"对话……");
+  /* v2（R3.1）：多人场景优先走对话导演（单次调用生成整场，互文），失败回退并行 */
+  const flags=(st.agentFlags=st.agentFlags||{director:true,tools:true,proactive:true});
+  if(all&&flags.director&&window.WDChat&&WDChat.directorRespond){
+    WDChat.directorRespond(targets,text).then(lines=>{
+      if(lines&&lines.length){
+        lines.forEach(l=>{
+          const aqP=firstActiveQuest();
+          const m={role:"npc",npc:l.npc,text:l.text,at:new Date().toISOString(),day:st.day};
+          if(aqP) m.refs=[{qid:aqP.id}];
+          st.dialogue.push(m);
+          if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+        });
+        save(); typing(false); renderChat(); return;
+      }
+      /* 导演失败 → 回退并行模式 */
+      npcAnswerParallel(targets,text,all);
+    }).catch(()=>{ npcAnswerParallel(targets,text,all); });
+    return;
+  }
+  npcAnswerParallel(targets,text,all);
+}
+/* v2：并行模式（原 npcAnswer 逻辑，作为 director 的回退路径） */
+function npcAnswerParallel(targets,text,all){
+  typing(true,all);
   let done=0;
   targets.forEach(id=>{
     aiRespond(id,text,all).then(r=>{
@@ -868,7 +902,9 @@ function yunhengProxy(text){
   if(target==="yunheng"||(dm&&dm.isDefault)){ npcAnswer(["yunheng"],text); return; }
   const nm=dName(target);
   /* 云蘅先以引路人身份接住话，并替玩家引荐职能 NPC */
-  const proxyText="@"+nm+" 这位道友问了「"+String(text).replace(/^@[^\s，。,,\s]+\s*/,"").slice(0,20)+"」——你来说说";
+  /* v2（WZ-030）：引荐语只作云蘅的对象上下文，玩家原话单独传递，避免代理包装碎片被当原话回显 */
+  const playerMsg=String(text).replace(/^@[^\s，。,,\s]+\s*/,"").trim();
+  const proxyText="@"+nm+" 这位道友问了「"+playerMsg.slice(0,20)+"」——你来说说（玩家原话："+playerMsg.slice(0,40)+"）";
   typing(true,true);
   toast("云蘅正在为你引荐"+nm+"……");
   aiRespond("yunheng",proxyText,true).then(r=>{
@@ -984,12 +1020,23 @@ function renderChat(keep){
   const allMsgs=stream.concat(dlgMsgs);
   /* 状态栏（需求4）：Lv/心气/灵力，置于流顶，不遮对话；refreshStat 每秒刷新 */
   const uavSrc=(window.WDCfg&&WDCfg.avatarURL("_player"))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL("_player"):"");
+  /* v2（R1.3b）：AI 健康徽标——绿=正常 / 黄=临时异常 / 红=密钥/额度问题 / 灰=未配置 */
+  const aiDot=(!dsReady())?`<span class="aidot off" title="AI 未配置：使用内置话术。到「存档」页配置密钥可开启 AI 对话。">○AI</span>`
+    :(aiHealth==="error")?`<span class="aidot err" title="AI 异常：密钥无效或额度不足。点击「存档」页查看。">●AI!</span>`
+    :(aiHealth==="down")?`<span class="aidot down" title="AI 暂时不可达（网络/限流），已自动降级本地话术，稍后自动恢复。">◐AI</span>`
+    :`<span class="aidot ok" title="AI 正常。">●AI</span>`;
   const STATBAR=`<div id="statbar" class="statbar" role="status" aria-label="玩家状态">
+    ${aiDot}
     <span class="slv" data-lv>Lv.${level()}</span>
     <span class="sgroup"><i>心气</i><span class="sbar"><b data-hpf style="width:${Math.max(0,Math.min(100,st.hp/maxHP()*100))}%"></b></span><em data-hpt>${Math.round(st.hp)}/${maxHP()}</em></span>
-    <span class="sgroup"><i>灵力</i><span class="sbar en"><b data-enf style="width:${Math.max(0,Math.min(100,st.energy/maxEnergy()*100))}%"></b></span><em data-ent>${Math.round(st.energy)}/${maxEnergy()}</em></span>
+    <span class="sgroup" title="灵力是 AI 对话资源：每次 AI 回复消耗 1 点，每 5 分钟恢复 1 点。灵力耗尽时自动使用本地话术。"><i>灵力</i><span class="sbar en"><b data-enf style="width:${Math.max(0,Math.min(100,st.energy/maxEnergy()*100))}%"></b></span><em data-ent>${Math.round(st.energy)}/${maxEnergy()}</em></span>
   </div>`;
-  let html=STATBAR+allMsgs.map(r=>{
+  /* v2（R1.3c）：灵力不足内联提示条（仅 AI 可用且灵力 <5 时显示） */
+  let html=STATBAR;
+  if(dsReady()&&(st.energy|0)<5){
+    html+=`<div class="energyhint">灵力将尽（${Math.round(st.energy)}/${maxEnergy()}）——每 5 分钟恢复 1 点；灵力耗尽期间 AI 对话自动改用本地话术，不影响修行。</div>`;
+  }
+  html+=allMsgs.map(r=>{
     if(r.t==="sysday") return `<div class="sys daysep">${esc(r.x)}</div>`;
     if(r.t==="sys"){
       /* 已完成任务（需求2c）：折叠为可点链接行——点击展开完整任务卡，再点收起；回看按钮直达弹层 */
@@ -1053,8 +1100,10 @@ function bindChat(){
     b.onpointerdown=e=>{ e.stopPropagation(); SFX.tap(); gotoQuest(b.dataset.ref); };
   });
   // NPC 名称链接 → 点击自动发起与其的对话（玩家口吻开场白 + 标准三段回应）
+  /* v2（WZ-032）：NPC 名点击——pointerdown 主动发起对话；click 兜底（部分环境 pointer 事件被上层吞掉时仍可触发） */
   document.querySelectorAll(".nl[data-npc]").forEach(el=>{
-    el.onpointerdown=e=>{ e.stopPropagation(); talkToNpc(el.dataset.npc); };
+    el.onpointerdown=e=>{ e.stopPropagation(); e.preventDefault(); talkToNpc(el.dataset.npc); };
+    el.onclick=e=>{ e.stopPropagation(); e.preventDefault(); talkToNpc(el.dataset.npc); };
   });
   // 已完成任务折叠头（需求2c）：点击展开/收起完整任务卡
   document.querySelectorAll("[data-foldhead]").forEach(h=>{
@@ -1196,6 +1245,8 @@ function openQuest(qid){
   /* NPC 记忆：任务进入（在途态）+ 修习时长心跳（每 30 秒入账 0.5 分钟，归属当前任务 NPC）。回看模式不记在途 */
   if(window.WDMem&&!readonly){ WDMem.enter(q.npc,q.id); if(questTimer)clearInterval(questTimer);
     questTimer=setInterval(()=>WDMem.tick(0.5),30000); }
+  /* v29（FIX-B/D-6）：主动触发器埋点——进入未完成任务时记录关卡进入时间（供滞留催办规则） */
+  if(!readonly){ st.questEnterAt=new Date().toISOString(); save(); }
   let quizPerfect=(quiz.length===0);   // 本次试炼是否全对（无题任务视为一次通关）
   const ov=document.createElement("div"); ov.className="ov";
   let pageIdx=0;
@@ -1683,6 +1734,8 @@ function openQuest(qid){
 /* ---------- 任务结算（finBtn 抽取为全局函数，便于测试与复用） ---------- */
 function settleQuest(q,quizPerfect,ov){
   st.xp+=q.xp; st.coin+=q.coin; st.done[q.id]=new Date().toISOString();
+  /* v29（FIX-B/D-6）：主动触发器埋点——任务结算即学习行为，刷新学习时间戳（供未复习关怀规则） */
+  st.lastStudyAt=new Date().toISOString();
   /* NPC 记忆：任务完成——通关时长由进入时间戳自动算出，首通且全对记一次性通关 */
   if(window.WDMem){ WDMem.finish(q.npc,q.id,{onePass:quizPerfect}); if(questTimer){clearInterval(questTimer);questTimer=0;} }
   st.fav[q.npc]=(st.fav[q.npc]||0)+1;
@@ -1694,12 +1747,13 @@ function settleQuest(q,quizPerfect,ov){
   refineAction(aid,q);
   // 三节点之②③合并为一条群聊消息（NPC 不连发多条）：认可 + 后续任务预告，refs 携带任务跳转
   const fresh=D.quests.filter(qq=>!qDone(qq.id)&&questUnlocked(qq)&&qq.prev&&qq.prev.includes(q.id));
-  let ackText=(doneLine(q,byDay[q.day])||"很好。")+"「"+q.name+"」已交付（+"+q.xp+"修行 +"+q.coin+"铜钱）。";
+  const cleanName=n=>String(n||"").replace(/^[^·]*·\s*/,"").replace(/\b[A-Z]\d+-\d+\b\s*/g,"").replace(/（[^）]*）/g,"").replace(/（[^）]*$/,"").trim();
+  let ackText=(doneLine(q,byDay[q.day])||"很好。")+"「"+(cleanName(q.name)||q.name)+"」已交付。";
   const refs=[{qid:q.id}];
   const nq=fresh[0]||null;
   if(nq){
     const nd=byDay[nq.day];
-    ackText+=" "+(pubLine(nq,nd)||"新的一程开启了。")+"「"+nq.name+"」已现形，随到随打。";
+    ackText+=" "+(pubLine(nq,nd)||"新的一程开启了。")+"「"+(cleanName(nq.name)||nq.name)+"」已现形，随到随打。";
     refs.push({qid:nq.id});
   }
   st.dialogue.push({role:"npc",npc:q.npc,text:ackText,refs,at:new Date().toISOString(),day:st.day});
@@ -1719,7 +1773,12 @@ function settleQuest(q,quizPerfect,ov){
   SFX.win(); if(ov)ov.remove(); checkAch(); checkLevelUp(); save(); render();
   toast(doneLine(q,byDay[q.day])||"完成");
   /* 剧情过场触发：BOSS 任务完成 → 阶段性仪式；首次完成任务 → 绑定/契约节点 */
-  if(q.id&&q.id.endsWith("BOSS")) triggerCutscene("act"+curActN());
+  /* v29（e2e 发现 BUG-005）：BOSS 过场按「BOSS 所属幕」触发——原实现 curActN() 在 unlocked/maybeUnlockDay 推进 st.day 之后计算，幕号错位一格，且 final（最终就职）节点成死代码永不触发 */
+  if(q.id&&q.id.endsWith("BOSS")){
+    const actStr=(byDay[q.day]&&byDay[q.day].act)||("act"+curActN());
+    if(actStr==="act5"){ triggerCutscene("final"); }
+    else { triggerCutscene(actStr); }
+  }
   else if(q.kind==="main"&&Object.keys(st.done).filter(k=>k.startsWith("D")&&k.endsWith("M")).length===1) triggerCutscene("bind");
   else if(q.kind==="main"&&Object.keys(st.done).filter(k=>k.startsWith("D")&&k.endsWith("M")).length===2) triggerCutscene("pact");
 }
@@ -1770,7 +1829,7 @@ function refineCutscene(id,node){
     +"然后用旁白或云蘅的补充推进一小段剧情，最后以云蘅的请求或期盼结尾。"
     +"≤180字，自然沉浸，不剧透后续节点。";
   const user="本地兜底话术：「"+cs.local+"」\n请润色为更生动的一问一答剧情过场。";
-  dsChat([{role:"system",content:sys},{role:"user",content:user}],true).then(raw=>{
+  dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"}).then(raw=>{
     const txt=(raw||"").trim();
     if(!txt||txt.length<10) return;
     const idx=st.dialogue.findIndex(m=>m&&m.id===id);
@@ -1942,7 +2001,7 @@ function refineYunheng(id,q,nq,perfect){
   const sys="你是游戏『问道之旅·四十五日』的引路人「云蘅」——导游异次元的接引者，不授业只引路，说话简短、有性格、有江湖气。任务NPC结算完毕后，你立即给玩家一段完整的收束回应，依次自然衔接三层（不写序号、不分条、不加标题）：①任务总结——点出刚交付的关卡与收获；②经验分析——一句到位地点出这次打得如何、该补哪里；③下一任务引导——明确下一步做什么、怎么入手。≤150字；禁AI腔（首先/其次/总之），禁教书先生口吻（掌握了/要记住），严禁出现已淘汰概念（提灯、引灯、问道录、仙侠、仙师、封妖塔、掌灯等）。只输出正文，不要引号。";
   const user="刚完成关卡：「"+q.name+"」（"+q.tlabel+"，+"+q.xp+"修行 +"+q.coin+"铜钱"+(perfect?"，试炼全对":"，试炼有错")+"）；当日进度 "+p.n+"/"+p.all+"，全程 "+total+"/"+D.quests.length+"。"
     +(nq?("下一关：「"+nq.name+"」（"+nq.tlabel+"，约"+nq.dur+"分钟），目标："+(nq.goal||"通关")+"。"):"今日任务已清，可引导巡夜温故或上星盘清错题。");
-  dsChat([{role:"system",content:sys},{role:"user",content:user}],false).then(t=>{
+  dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"}).then(t=>{
     t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,220);
     if(!t) return;
     const m=st.dialogue.find(x=>x.id===id); if(!m) return;
@@ -1953,6 +2012,8 @@ function maybeUnlockDay(){
   const d=byDay[st.unlocked];
   if(d){ const p=dayProg(d); if(p.n===p.all&&p.all>0&&st.unlocked<45) st.unlocked++; }
   if(st.day<st.unlocked) st.day=st.unlocked;
+  /* v29（FIX-A/D-9）：进入终幕（第 42 日，act5 首日）时触发 act5 过场——激活预留节点，修复其永不触发 */
+  if(st.day>=42&&!(st.cutscenes&&st.cutscenes["act5"])){ triggerCutscene("act5"); }
 }
 function checkAch(){
   D.achievements.forEach(a=>{
@@ -2497,8 +2558,18 @@ function renderCfg(){
     <button data-tab="aidoc" type="button">AI文档</button>
     <button data-tab="attr" type="button">初始属性</button>
     <button data-tab="data" type="button">数据</button>
+    <button data-tab="agent" type="button">实验特性</button>
   </div>
 
+  <div class="cfgpane" data-pane="agent">
+    <div class="note">Agent 实验特性（R3）：全部可独立开关，关闭即回到经典行为；改动实时生效。</div>
+    <div class="cfgrow" style="margin-top:8px"><button class="btn sm" type="button" data-agentflag="director">对话导演：群聊单次生成（${(c&&c.agentFlags&&c.agentFlags.director!==false)?"ON":"OFF"}）</button></div>
+    <div class="note">多人同时在场时由一次 AI 调用生成整场对话，NPC 之间互相接话（推荐开启；关闭回到逐个独立回复）。</div>
+    <div class="cfgrow" style="margin-top:8px"><button class="btn sm" type="button" data-agentflag="tools">工具调用：NPC 查真实数据（${(c&&c.agentFlags&&c.agentFlags.tools!==false)?"ON":"OFF"}）</button></div>
+    <div class="note">NPC 可查询真实任务链/考点库/你的学习统计后再回答，回复基于真实数据（需要 DeepSeek 密钥）。</div>
+    <div class="cfgrow" style="margin-top:8px"><button class="btn sm" type="button" data-agentflag="proactive">主动传音：NPC 主动关心（${(c&&c.agentFlags&&c.agentFlags.proactive!==false)?"ON":"OFF"}）</button></div>
+    <div class="note">连续两日未复习、错题积压、关卡滞留时，NPC 会主动发消息（本地规则触发，每日最多 3 条）。</div>
+  </div>
   <div class="cfgpane on" data-pane="av">
     <div class="note">JPG / PNG，≤5MB，分辨率不低于 200×200；上传后居中方形裁剪并压缩为 240px 存于本机，离线可用。拍摄照片会抹除 EXIF 定位信息。</div>
     <div class="avgrid" id="avGrid"></div>
@@ -2597,6 +2668,16 @@ function renderCfg(){
   </div>`);
 
   /* ---- Tab 切换 ---- */
+  /* v2（R3.0）：Agent 实验特性开关（存于游戏存档 st.agentFlags，实时生效） */
+  ov.querySelectorAll("[data-agentflag]").forEach(b=>{
+    b.onpointerdown=()=>{
+      const k=b.dataset.agentflag;
+      st.agentFlags=st.agentFlags||{director:true,tools:true,proactive:true};
+      st.agentFlags[k]=!(st.agentFlags[k]!==false); /* 默认 true，点击切换 */
+      save(); SFX.tap();
+      ov.remove(); renderCfg(); /* 重渲染刷新按钮状态 */
+    };
+  });
   ov.querySelectorAll(".cfgtabs button").forEach(b=>{
     b.onpointerdown=()=>{ SFX.tap();
       ov.querySelectorAll(".cfgtabs button").forEach(x=>x.classList.toggle("on",x===b));
@@ -2876,46 +2957,143 @@ function renderShop(){
   });
   $("#shopAdd",ov).onpointerdown=()=>{ st.shop.push("新奖励"); save(); ov.remove(); renderShop(); };
 }
-/* ==================== DeepSeek 集成 ====================
-   可选增强：配置密钥后，NPC 人设/对话与任务说明由 DeepSeek 生成。
-   无密钥 / 离线 / 接口失败时全部自动降级为内置内容，核心离线流程不受影响。
-   密钥仅存本浏览器 localStorage（本地个人 PWA），不上传任何第三方。 */
 const DS_MODEL="deepseek-chat";
-function dsReady(){ return !!(st.dsKey && st.dsKey.trim()); }
-function quizStage(qid){ const n=st.quizAttempts[qid]||0; return n===0?"first":n===1?"second":"multi"; }
-async function dsChat(messages, wantJson){
-  if(!dsReady()) throw new Error("未配置密钥");
-  const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(), 22000);
-  try{
-    const r=await fetch("https://api.deepseek.com/chat/completions",{
-      method:"POST",
-      headers:{"Content-Type":"application/json","Authorization":"Bearer "+st.dsKey.trim()},
-      body:JSON.stringify({model:DS_MODEL,messages,temperature:0.85,
-        ...(wantJson?{response_format:{type:"json_object"}}:{})}),
-      signal:ctrl.signal});
-    if(r.status===401) throw new Error("密钥无效(401)");
-    if(r.status===402||r.status===429) throw new Error("额度不足或限流("+r.status+")");
-    if(!r.ok) throw new Error("接口异常("+r.status+")");
-    const j=await r.json();
-    const c=j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content;
-    if(!c) throw new Error("返回为空");
-    return c.trim();
-  }finally{ clearTimeout(timer); }
+/* v2：密钥独立键（WZ-017）——不再入存档，导出存档不再泄漏密钥 */
+const DS_KEY_STORE="wdzx.dskey";
+function dsKeyGet(){
+  try{ return localStorage.getItem(DS_KEY_STORE)||""; }catch(e){ return ""; }
 }
+function dsKeySet(v){
+  try{ v?localStorage.setItem(DS_KEY_STORE,v):localStorage.removeItem(DS_KEY_STORE); }catch(e){}
+}
+/* AI 健康状态（R1.3b）：ok / off（未配密钥）/ down（网络/限流临时异常）/ error（密钥/额度） */
+let aiHealth="off";
+function dsReady(){ return !!(dsKeyGet() && dsKeyGet().trim()); }
+function quizStage(qid){ const n=st.quizAttempts[qid]||0; return n===0?"first":n===1?"second":"multi"; }
+
+/* v2：参数分档（R1.2a，DeepSeek 官方温度建议校准：对话角色扮演 1.1 起步） */
+const DS_PROFILES={
+  chat:      {temperature:1.1,frequency_penalty:0.4,presence_penalty:0.25,max_tokens:400},
+  director:  {temperature:1.0,frequency_penalty:0.3,presence_penalty:0.2,max_tokens:900},
+  summary:   {temperature:0.5,max_tokens:500},
+  evolve:    {temperature:0.6,max_tokens:1000,response_format:{type:"json_object"}},
+  quiz:      {temperature:0.7,max_tokens:1200,response_format:{type:"json_object"}},
+  persona:   {temperature:0.6,max_tokens:1000,response_format:{type:"json_object"}},
+  questbrief:{temperature:0.7,max_tokens:900,response_format:{type:"json_object"}},
+  polish:    {temperature:0.8,max_tokens:200}
+};
+
+/* v2：callLog（R1.3d）——耗时/缓存命中/重试/错误码，内存环队列 + 截断落盘 */
+let _callLog=[];
+function callLog(entry){
+  entry.t=new Date().toISOString();
+  _callLog.push(entry); if(_callLog.length>80) _callLog=_callLog.slice(-80);
+  try{ localStorage.setItem("wdzx.calllog",JSON.stringify(_callLog.slice(-40))); }catch(e){}
+}
+
+/* v2：重试判定（R1.2c）——仅 429/5xx/网络错误退避重试 1 次；401/402/403 直接异常态 */
+function _retryable(status){ return status===429||status>=500; }
+function _backoffMs(attempt){ return Math.min(8000,600*Math.pow(2,attempt))+Math.random()*400; }
+
+/* dsChat v2（R1.2）：
+   messages 标准多轮；opts 可为 true（旧 json 兼容，映射为 evolve 档）或 {kind,tools,stream}。
+   - kind ∈ chat/director/summary/evolve/quiz/persona/questbrief/polish → 参数分档
+   - opts.tools 传入时启用 function calling（agent loop 由 WDChat.respondWithTools 驱动）
+   - 流式：kind=chat/polish 且未传 tools 且提供 onDelta 回调时 stream:true（含 include_usage）
+   返回：普通文本 / 流式完整文本；带 tools 时返回 {content,toolCalls} */
+async function dsChat(messages, opts, onDelta){
+  if(!dsReady()) throw new Error("未配置密钥");
+  const o=(opts===true)?{kind:"evolve"}:((opts&&typeof opts==="object")?opts:{});
+  const kind=o.kind||"chat";
+  const profile=Object.assign({},DS_PROFILES[kind]||DS_PROFILES.chat);
+  const key=dsKeyGet().trim();
+  const wantTools=!!o.tools;
+  const wantStream=(kind==="chat"||kind==="polish")&&!wantTools&&typeof onDelta==="function";
+  let attempt=0, lastErr=null;
+  while(attempt<=1){ /* 重试 ≤1 次（R1.2c） */
+    const ctrl=new AbortController();
+    const t=setTimeout(()=>ctrl.abort(), wantStream?12000:22000); /* v2：流式首包 12s（R1.2b） */
+    const t0=Date.now();
+    try{
+      const body={model:DS_MODEL,messages,temperature:profile.temperature,
+        max_tokens:profile.max_tokens,
+        ...(profile.frequency_penalty!=null?{frequency_penalty:profile.frequency_penalty}:{}),
+        ...(profile.presence_penalty!=null?{presence_penalty:profile.presence_penalty}:{}),
+        ...(profile.response_format?{response_format:profile.response_format}:{}),
+        ...(wantTools?{tools:o.tools,tool_choice:"auto"}:{}),
+        ...(wantStream?{stream:true,stream_options:{include_usage:true}}:{})};
+      const r=await fetch("https://api.deepseek.com/chat/completions",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},
+        body:JSON.stringify(body),
+        signal:ctrl.signal});
+      clearTimeout(t);
+      if(r.status===401){ aiHealth="error"; callLog({kind,err:401,ms:Date.now()-t0}); throw new Error("密钥无效(401)"); }
+      if(r.status===402||r.status===403){ aiHealth="error"; callLog({kind,err:r.status,ms:Date.now()-t0}); throw new Error("额度不足或禁止("+r.status+")"); }
+      if(_retryable(r.status)){ throw Object.assign(new Error("可重试("+r.status+")"),{status:r.status}); }
+      if(!r.ok){ callLog({kind,err:r.status,ms:Date.now()-t0}); throw new Error("接口异常("+r.status+")"); }
+      aiHealth="ok";
+      /* ===== 流式读取（R1.2b：SSE 逐 delta） ===== */
+      if(wantStream){
+        let full="", usage=null;
+        const reader=r.body.getReader(); const dec=new TextDecoder(); let buf="";
+        while(true){
+          const {done,value}=await reader.read();
+          if(done) break;
+          buf+=dec.decode(value,{stream:true});
+          const lines=buf.split("\n"); buf=lines.pop();
+          for(const line of lines){
+            const s=line.trim();
+            if(!s.startsWith("data:")) continue;
+            const payload=s.slice(5).trim();
+            if(payload==="[DONE]") continue;
+            try{
+              const j=JSON.parse(payload);
+              const d=j.choices&&j.choices[0]&&j.choices[0].delta;
+              if(d&&d.content){ full+=d.content; try{ onDelta(d.content,full); }catch(e){} }
+              if(j.usage) usage=j.usage;
+            }catch(e){}
+          }
+        }
+        callLog({kind,ms:Date.now()-t0,stream:true,cached:usage&&usage.prompt_cache_hit_tokens||0});
+        const c=full.trim();
+        if(!c) throw new Error("返回为空");
+        return c;
+      }
+      /* ===== 非流式 ===== */
+      const j=await r.json();
+      callLog({kind,ms:Date.now()-t0,cached:j.usage&&j.usage.prompt_cache_hit_tokens||0,retry:attempt>0});
+      const msg=j.choices&&j.choices[0]&&j.choices[0].message;
+      if(!msg) throw new Error("返回为空");
+      if(msg.tool_calls&&msg.tool_calls.length){
+        return {content:msg.content||"",toolCalls:msg.tool_calls};
+      }
+      const c=msg.content;
+      if(!c) throw new Error("返回为空");
+      return c.trim();
+    }catch(e){
+      clearTimeout(t);
+      lastErr=e;
+      const isAbort=/abort/i.test(String(e&&e.name||e));
+      if(isAbort||e&&e.status&&_retryable(e.status)){
+        if(attempt<1){ attempt++; await new Promise(rs=>setTimeout(rs,_backoffMs(attempt))); continue; }
+        aiHealth="down"; callLog({kind,err:isAbort?"timeout":"net",ms:Date.now()-t0,retried:1});
+        throw new Error("网络超时或限流，重试后仍失败");
+      }
+      throw e;
+    }
+  }
+  throw lastErr||new Error("未知错误");
+}
+
 /* 结构化游戏背景信息文件（供 DeepSeek 读取世界观/机制/NPC 基础）——正文装配在 wd-chat.js */
 function buildWorldBrief(){ return WDChat.worldBrief(); }
 /* NPC 职能定位（导游异次元世界观，与人设生成/任务说明共用） */
-const NPC_ROLE={
-  yunheng:"引路人——导游异次元的接引者，为误入此界的玩家开启导游试炼之路",
-  qingxuan:"文脉导游——理清四十五日试炼的主线脉络，让散落的导游知识重归文脉",
-  smq:"山河导游——专长北京地理山川、长城、十三陵等山河形胜",
-  tiemian:"律法导游——专长旅游法规、政策条例，错一条法条便放遗忘怪出关",
-  liuruyan:"接待导游——专长旅行社接待、人际沟通与服务礼仪",
-  moxiaogu:"古迹导游——专长故宫、天坛等古迹建筑与历史年表",
-  xuanji:"记忆导游——专长复习方法、错题记忆与英文背诵"
-};
+/* v2（R2.1）：职能定位从角色注册表派生 */
+const NPC_ROLE=(window.WDRegistry&&WDRegistry.roleMap())||{};
 /* 已淘汰的旧世界观概念（人设/任务生成中严禁出现） */
-const OBSOLETE_TERMS=["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者"];
+/* v2（WZ-011）：黑名单唯一来源——角色注册表 */
+const OBSOLETE_TERMS=(window.WDRegistry&&WDRegistry.obsoleteTerms())||[];
 /* 生成 NPC 人设卡片（可带修改意见重生成）。用户在配置中心输入的人设描述作为硬约束，
    AI 须完全匹配该描述，禁止生成矛盾特质（如用户写"活泼可爱"则不得出现"沉默寡言"）。 */
 async function genPersona(npcId, feedback){
@@ -2936,7 +3114,7 @@ async function genPersona(npcId, feedback){
     +"严禁出现以下已淘汰的旧概念："+OBSOLETE_TERMS.join("、")+"。"
     +"人设须贴合导游异次元的传奇导游设定，性格鲜明、可信。"
     +"\n\n请输出JSON，字段：name(姓名)、identity(身份背景，30-50字，须体现其导游职能)、personality(性格特征，3-4个短语，必须与用户设定基准一致)、style(对话风格描述，必须与用户设定基准一致)、relations(与其他角色关系数组，每项{name,rel})。";
-  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], true);
+  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {kind:"persona"});
   let card;
   try{ card=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) card=JSON.parse(m[0]); else throw e; }
@@ -2980,7 +3158,7 @@ async function genQuestBrief(q){
     +(oralInfo?("\n\n涉及英文导游词："+oralInfo):"")
     +"\n\n注意：「关卡定位」由隐喻引擎生成（任务类型→秘境探幽/妖兽战斗/谜题破解/咒文吟诵/攻城之战等元素，稀有度→雾卒/妖将/妖王难度层级），叙事必须围绕它展开，不得偏离。"
     +"\n\n请输出JSON：{scene:string(场景铺垫：环境/事件/NPC活动，剧情先行,≤80字),line:string(NPC承接场景后发布任务的台词,≤80字,自然生动有温度),necessity:string(任务必要性:玩家是唯一具备就职仪式资格的域外之人,此任务是非他不可的修行,≤70字),impact:string(世界影响:完成后如何促进圣女能力复苏与世界拯救,≤70字),reward:string(玩家收益:财富/能力/剧情解锁,与返回原世界目标相关,≤70字),metaphor:string(游戏化比喻,≤30字)}。";
-  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], true);
+  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {kind:"questbrief"});
   let o;
   try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else throw e; }
@@ -3026,7 +3204,7 @@ async function genQuiz(q, stage){
     +"\n\n样题（仅供参考考点和风格，请出不同的题目）：\n"+JSON.stringify(sample)
     +"\n\n出题阶段："+si.label+"（"+si.instr+"）"
     +"\n\n请输出JSON：{\"questions\":["+baseQuiz.length+"道题]}。每题字段：kind(\"judge\"或\"blank\")、q(题干，填空用▁占位)、a(judge为true/false布尔值、blank为字符串答案)、accept(仅blank，字符串数组，须含a本身及别名/简写)、why(解析≤60字)、pid(必须是给定知识点id之一:"+pids.join("/")+")。";
-  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], true);
+  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {kind:"quiz"});
   let o;
   try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else throw e; }
@@ -3066,7 +3244,7 @@ function renderSave(){
   <div class="boardgroup"><h3>DeepSeek 智能引擎</h3>
     <div class="note">配置后可让 NPC 人设、对话与任务说明由 AI 生成。密钥仅存本浏览器，不经过任何第三方；未配置或离线时自动使用内置内容，不影响修行。</div>
     <div class="cardsearch" style="margin-top:8px">
-      <input id="dsKey" type="password" placeholder="粘贴 DeepSeek API Key（sk-…）" value="${esc(st.dsKey||"")}" autocomplete="off">
+      <input id="dsKey" type="password" placeholder="粘贴 DeepSeek API Key（sk-…）" value="${esc(dsKeyGet())}" autocomplete="off">
       <button class="btn sm primary" id="dsSave" type="button">保存</button>
     </div>
     <div class="estatus ${dsReady()?"saved":"dirty"}" id="dsStatus">${dsReady()?"● 已配置 · AI 功能可用":"○ 未配置 · 使用内置内容"}</div>
@@ -3087,10 +3265,10 @@ function renderSave(){
 
   $("#dsSave",ov).onpointerdown=()=>{
     const v=$("#dsKey",ov).value.trim();
-    st.dsKey=v; save(); SFX.tap();
+    dsKeySet(v); SFX.tap();
     const s=$("#dsStatus",ov);
     if(dsReady()){ s.className="estatus saved"; s.textContent="● 已保存 · 正在连通性测试…";
-      dsChat([{role:"user",content:"只回复：ok"}]).then(()=>{ s.textContent="● 已配置并连通 · AI 功能可用"; s.className="estatus saved"; toast("密钥有效"); })
+      dsChat([{role:"user",content:"只回复：ok"}],{kind:"polish"}).then(()=>{ s.textContent="● 已配置并连通 · AI 功能可用"; s.className="estatus saved"; toast("密钥有效"); })
         .catch(e=>{ s.textContent="● 已保存，但调用失败："+e.message+"（仍可离线使用）"; s.className="estatus dirty"; toast("连通测试失败："+e.message); });
     } else { s.className="estatus dirty"; s.textContent="○ 未配置 · 使用内置内容"; toast("已清除密钥"); }
     $("#dsPersona",ov).disabled=!dsReady();
@@ -3111,6 +3289,8 @@ function renderSave(){
       <div class="small" id="briefMsg" style="color:var(--ok)"></div>`);
     $("#briefSave",p).onpointerdown=()=>{ SFX.tap();
       WDCfg.setWorldBrief($("#briefEdit",p).value);
+      /* v2（R2.3）：世界观覆写传播——清 AI 任务说明缓存，序章/过场按需重渲染 */
+      if(st&&st.aiBrief){ st.aiBrief={}; save(); }
       const m=$("#briefMsg",p); m.textContent="已保存 · AI 对话即刻采用"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
     };
     $("#briefDefault",p).onpointerdown=()=>{ SFX.tap();
@@ -3165,14 +3345,28 @@ function renderSave(){
     a.href=URL.createObjectURL(blob); a.download="wendao-ledger.csv"; a.click(); toast("修行录已导出");
   };
   $("#exp",ov).onpointerdown=()=>{
-    const blob=new Blob([JSON.stringify(st,null,1)],{type:"application/json"});
+    /* v2：导出剥离敏感与运行时字段（WZ-017）——密钥已不入档，双保险再剔除一次 */
+    const safe=Object.assign({},st); delete safe.dsKey; delete safe.clauseLog;
+    const blob=new Blob([JSON.stringify(safe,null,1)],{type:"application/json"});
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
     a.download=`wendao-save-${new Date().toISOString().slice(0,10)}.json`; a.click();
   };
   $("#imp",ov).onpointerdown=()=>$("#impF",ov).click();
   $("#impF",ov).onchange=e=>{ const f=e.target.files[0]; if(!f) return;
-    const r=new FileReader(); r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o.player) throw 0; st=o; save(); toast("存档已导入"); ov.remove(); render(); }catch(err){ toast("导入失败：无效存档"); } }; r.readAsText(f); };
-  $("#rst",ov).onpointerdown=()=>{ if(confirm("确定重置？导出后仍可恢复。")){ try{localStorage.removeItem(KEY);}catch(e){} st=defState(); save(); ov.remove(); intro(); } };
+    const r=new FileReader(); r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o.player) throw 0; delete o.dsKey; delete o.clauseLog; st=o; save(); toast("存档已导入"); ov.remove(); render(); }catch(err){ toast("导入失败：无效存档"); } }; r.readAsText(f); };
+  $("#rst",ov).onpointerdown=()=>{ if(confirm("确定重置旅程？将清空进度、NPC 记忆与错题统计（头像/称呼/密钥保留）。此操作不可撤销。")){
+    /* v29（重置失效修复）：清主存档 + 全部旁路存档（NPC 记忆/错题/备份/日志），并 reload 归零各模块内存态 */
+    if(window.WDMem&&WDMem.resetAll) WDMem.resetAll(); /* v29：取消防抖+内存清零，消除写回竞态 */
+    try{ localStorage.removeItem(KEY); }catch(e){}
+    try{ localStorage.removeItem("wdzx.mem.v1"); }catch(e){}
+    for(let i=0;i<5;i++){ try{ localStorage.removeItem("wdzx.mem.bak."+i); }catch(e){} }
+    try{ localStorage.removeItem("wdzx.quiz.v1"); }catch(e){}
+    try{ localStorage.removeItem("wdzx.calllog"); }catch(e){}
+    try{ localStorage.removeItem("wdzx.aihealth"); }catch(e){}
+    st=defState(); /* 内存态重置（reload 前的残余引用保护） */
+    try{ localStorage.removeItem(KEY); }catch(e){} /* 最后清主存档：reload 后 load() 无存档 → 自然回序章 */
+    location.reload(); /* 重载后回到序章，WDMem/WDQuiz 内存态同步归零 */
+  } };
 }
 
 /* ==================== NPC 人设卡片：生成 → 确认/修改重生成 ==================== */
@@ -3278,15 +3472,8 @@ function openPersonaPanel(){
 
 /* ==================== @角色名 AI 互动 ==================== */
 /* 角色别名 → npcId（含全名与常用称呼，均取自 D.npcs 真实名，避免错字） */
-const MENTION_ALIASES={
-  yunheng:["云蘅","引路人","yunheng"],
-  qingxuan:["青玄先生","青玄","qingxuan"],
-  smq:["司马青衫","司马","smq"],
-  tiemian:["铁面先生","铁面","tiemian"],
-  liuruyan:["柳如烟","liuruyan"],
-  moxiaogu:["墨小骨","小骨","moxiaogu"],
-  xuanji:["玄机夫人","玄机","xuanji"]
-};
+/* v2（R2.1）：@提及别名从角色注册表派生 */
+const MENTION_ALIASES=(window.WDRegistry&&WDRegistry.aliasMap())||{};
 function parseMention(text){
   const m=/@([A-Za-z0-9_\u4e00-\u9fa5]{2,8})/.exec(text);
   if(!m) return null;
@@ -3312,7 +3499,9 @@ async function aiRespond(npcId,userText,brief){
     if((st.energy|0)<1){ toast("灵力将尽——以本地话术接引，稍息自复"); return {text:WDChat.fallback(npcId,userText),degraded:true}; }
     st.energy=Math.max(0,st.energy-1); refreshStat(true);
   }
-  const r=await WDChat.respond(npcId,userText,brief);
+  /* v2（R3.2）：tools 开关开启时走 function calling 增强路径，失败内部回退普通 respond */
+  const flags=(st.agentFlags=st.agentFlags||{director:true,tools:true,proactive:true});
+  const r=(flags.tools&&WDChat.respondWithTools)?(await WDChat.respondWithTools(npcId,userText,brief)):(await WDChat.respond(npcId,userText,brief));
   if(window.WDMem) WDMem.meet(npcId);
   refreshStat();
   return r;
@@ -3346,6 +3535,23 @@ function bindNav(){
   document.querySelector('[data-act="save"]').onpointerdown=renderSave;
   document.querySelector('[data-act="cfg"]').onpointerdown=renderCfg;
 }
+/* v2（R2.3）：序章叙事从 worldBrief 派生——用户覆写世界观后序章同步（默认世界观输出与 v1 等价文案） */
+function introNarrative(){
+  /* v29.1（实测回归修复）：默认路径逐字恢复设计文案；仅用户覆写世界观时才派生 */
+  try{
+    const custom=(window.WDCfg&&WDCfg.customWorldBrief)?WDCfg.customWorldBrief():null;
+    if(custom&&custom.trim()){
+      const wb=WDChat.worldBrief();
+      if(typeof wb==="string"&&wb.trim()) return wb.split("\n")[0].slice(0,400);
+      if(wb&&wb.世界观){
+        const w=String(wb.世界观);
+        return "你降临的这个世界正经历着——"+w.slice(0,180)+" 四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力。";
+      }
+      return "你降临的这个世界正经历着一场考验。四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力。";
+    }
+  }catch(e){}
+  return "你意外降临「导游次元」——一个正被遗忘之雾吞噬的娘化世界。所有居民皆为女性，唯独你是男性外来者。这座次元最后的净土是北京。圣女候选云蘅正在此举行神圣导游就职仪式，却在仪式中途遭遗忘之雾侵袭——你的降临打断了仪式，却也让你与云蘅形成了绑定。记忆精灵璇玑也在混乱中与你意外建立灵魂契约。四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力，用导游圣器驱逐遗忘之雾。";
+}
 function intro(){
   st=defState();
   const ov=document.createElement("div"); ov.className="ov";
@@ -3353,9 +3559,7 @@ function intro(){
     <div class="mt" style="letter-spacing:.3em">序 章 · 降临</div>
     <h2 style="font-size:24px;letter-spacing:.2em">问道之旅 · 四十五日</h2>
     <div class="sec" style="text-align:left;font-size:14.5px">
-      <p>你意外降临「导游次元」——一个正被遗忘之雾吞噬的娘化世界。所有居民皆为女性，唯独你是男性外来者。</p>
-      <p>这座次元最后的净土是北京。圣女候选云蘅正在此举行神圣导游就职仪式，却在仪式中途遭遗忘之雾侵袭——你的降临打断了仪式，却也让你与云蘅形成了绑定。记忆精灵璇玑也在混乱中与你意外建立灵魂契约。</p>
-      <p>四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力，用导游圣器驱逐遗忘之雾。</p>
+      <p>${introNarrative()}</p>
       <p>你是误入此界的外来者——<b>${esc(st.player)}</b>。云蘅与几位传奇导游，已候你多时。</p>
       <p class="note" style="border-left-color:var(--hair)">一切修行都在此处完成：读卷、试炼、录音、巡夜、星盘。无需他物。</p>
     </div>
@@ -3636,6 +3840,25 @@ function renderCal(){
   });
 }
 boot();
+/* v2（R3.3）：主动触发器——boot 后 30s 检查一次（本地规则零成本，每日 ≤3 条，可在配置中心关闭） */
+setTimeout(()=>{
+  try{
+    if(window.WDChat&&WDChat.checkProactive){
+      const p=WDChat.checkProactive();
+      if(p&&p.npc&&NPC[p.npc]){
+        const aqP=firstActiveQuest();
+        const m={role:"npc",npc:p.npc,text:p.text,at:new Date().toISOString(),day:st.day,proactive:p.reason};
+        if(aqP) m.refs=[{qid:aqP.id}];
+        st.dialogue.push(m);
+        if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+        save(); if(view==="chat") renderChat(true);
+        toast(dName(p.npc)+"主动传音……","gold");
+      }
+    }
+  }catch(e){}
+},30000);
+/* v2（R1.3b）：AI 健康徽标——对话页顶部状态点；aiHealth 由 dsChat 维护 */
+window.addEventListener("wd:aicheck",()=>{ if(view==="chat") renderChat(true); });
 // 注册 Service Worker 实现 PWA 离线 + 自动更新
 // 关键：新 SW 激活时上报缓存版本，页面对比版本差异后精准重载一次——
 // 否则大陆网络访问 github.io 不稳定时，旧 SW 会永远回落陈旧缓存（iPad 不刷新的根因）
