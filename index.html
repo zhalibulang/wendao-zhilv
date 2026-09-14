@@ -142,6 +142,11 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .book .npcnote{font-size:12.5px;color:var(--dim);border-top:1px dashed var(--border);margin-top:8px;padding-top:6px;font-style:italic}
 .book .anchor{background:var(--bg2);border:1px solid var(--border-lit);padding:8px 10px;margin-top:8px;font-size:13px}
 .book .anchor b{color:var(--neon)}
+/* 打字机效果：当前打字元素高亮 + 末尾闪烁光标 */
+.book .pt.tw-active,.book .npcnote.tw-active,.book .anchor.tw-active{background:rgba(0,229,255,.04);border-radius:2px}
+.tw-active::after{content:'▋';color:var(--neon);animation:twblink .8s steps(2) infinite;margin-left:1px;font-weight:400}
+@keyframes twblink{50%{opacity:0}}
+.tw-done{opacity:1!important;transition:none}
 .book .oralrow{padding:8px 0;border-bottom:1px dashed var(--border);font-size:13.5px}
 .book .oralrow .en{display:block;color:var(--fg);font-size:14px;line-height:1.6}
 .book .oralrow .zh{display:block;color:var(--dim);font-size:12.5px;margin-top:4px}
@@ -1024,6 +1029,108 @@ function heartNew(){
   return false;
 }
 
+/* ==================== 书页打字机效果 ====================
+   初始逐字显示（~150字/分），首次点击展开当前段落，再次点击展开整页。
+   - 标签（<span><em>等）即时输出，仅文字逐字显示，保证 HTML 结构完整
+   - 点击委托绑定在 pageHost 上，typewriter 重建 innerHTML 后术语仍可点 */
+let twTimer=null, twState=null;
+const TW_SPEED=400; /* ms/char ≈ 150字/分（偏快的平均打字速度） */
+function stopTypewriter(){
+  if(twTimer){ clearTimeout(twTimer); twTimer=null; }
+  if(twState&&twState.items){ twState.items.forEach(it=>{ if(it.el) it.el.classList.remove('tw-active'); }); }
+  twState=null;
+}
+function startTypewriter(host){
+  stopTypewriter();
+  if(!host||typeof host.querySelectorAll!=='function') return;
+  const els=host.querySelectorAll('.book .pt, .book .npcnote, .book .anchor');
+  if(!els||!els.length) return;
+  /* 预解析：标签即时输出，文字逐字 */
+  const items=Array.from(els).map(el=>{
+    const html=el.innerHTML;
+    const tokens=[];
+    let i=0;
+    while(i<html.length){
+      if(html[i]==='<'){
+        const end=html.indexOf('>',i);
+        if(end>=0){ tokens.push({t:1,h:html.slice(i,end+1)}); i=end+1; }
+        else{ tokens.push({t:0,c:html[i]}); i++; }
+      } else { tokens.push({t:0,c:html[i]}); i++; }
+    }
+    el.innerHTML='';
+    el.classList.add('tw-active');
+    return {el,html,tokens,pos:0};
+  });
+  twState={items,idx:0,built:'',clicks:0,done:false};
+  twStep();
+}
+function twStep(){
+  if(!twState||twState.done) return;
+  if(twState.idx>=twState.items.length){
+    twState.done=true;
+    /* 全部打完：恢复术语点击绑定 */
+    const host=document.querySelector('#pageHost');
+    if(host) twBindGlossary(host);
+    return;
+  }
+  const it=twState.items[twState.idx];
+  /* 每tick输出一个文字字符（标签即时输出不计等待） */
+  while(it.pos<it.tokens.length){
+    const tk=it.tokens[it.pos];
+    if(tk.t===1){ twState.built+=tk.h; it.pos++; }
+    else { twState.built+=tk.c; it.pos++; break; }
+  }
+  it.el.innerHTML=twState.built;
+  if(it.pos>=it.tokens.length){
+    /* 当前段落打完，移除光标，进入下一段 */
+    it.el.classList.remove('tw-active');
+    twState.idx++; twState.built='';
+    twTimer=setTimeout(twStep,300); /* 段落间短暂停顿 */
+  } else {
+    twTimer=setTimeout(twStep,TW_SPEED);
+  }
+}
+function typewriterExpand(){
+  if(!twState||twState.done) return;
+  if(twTimer){ clearTimeout(twTimer); twTimer=null; }
+  if(twState.clicks===0){
+    /* 首次点击：立即展开当前段落，继续打下一段 */
+    twState.clicks=1;
+    const it=twState.items[twState.idx];
+    if(it){ it.el.innerHTML=it.html; it.el.classList.remove('tw-active'); it.pos=it.tokens.length; }
+    twState.idx++; twState.built='';
+    SFX.tap();
+    twTimer=setTimeout(twStep,200);
+  } else {
+    /* 再次点击：展开整页全部内容 */
+    twState.clicks=2;
+    twState.items.forEach(it=>{ it.el.innerHTML=it.html; it.el.classList.remove('tw-active'); });
+    twState.done=true;
+    SFX.tap();
+    const host=document.querySelector('#pageHost');
+    if(host) twBindGlossary(host);
+  }
+}
+/* 术语点击绑定（独立函数，typewriter 完成后可重新调用） */
+function twBindGlossary(host){
+  if(!host||typeof host.querySelectorAll!=='function') return;
+  host.querySelectorAll('.gl').forEach(sp=>{
+    if(sp._glBound) return; sp._glBound=true;
+    sp.onpointerdown=(e)=>{
+      e.stopPropagation();
+      const g=D.glossary[sp.dataset.g]; if(!g) return;
+      const gc=document.createElement('div'); gc.className='gcard';
+      gc.innerHTML='<div class="gw">'+esc(sp.dataset.g)+'</div>'
+        +'<div class="gs"><b>是什么</b>'+esc(g.what)+'</div>'
+        +'<div class="gs"><b>装到哪</b>'+esc(g.where)+'</div>'
+        +'<div class="gs"><b>为什么</b>'+esc(g.why)+'</div>';
+      document.body.appendChild(gc);
+      setTimeout(()=>{ try{gc.remove();}catch(e){} },6000);
+      gc.onpointerdown=()=>gc.remove();
+    };
+  });
+}
+
 /* ---------- quest modal: 书页 + 试炼 ---------- */
 function openQuest(qid){
   const q=QMAP[qid]; if(!q) return;
@@ -1194,19 +1301,29 @@ function openQuest(qid){
     if(pv) pv.onpointerdown=()=>{ pageIdx--; drawPage(); };
     if(nx) nx.onpointerdown=()=>{ pageIdx++; drawPage(); };
     const rec=$("#recBtn"); if(rec) bindOralKit(pageHost);
-    $("#pageHost").querySelectorAll(".gl").forEach(sp=>{
-      sp.onpointerdown=()=>{
-        const g=D.glossary[sp.dataset.g]; if(!g) return;
-        const gc=document.createElement("div"); gc.className="gcard";
-        gc.innerHTML='<div class="gw">'+esc(sp.dataset.g)+'</div>'
+    /* 书页打字机效果：逐字显示，首次点击展开当前段落，再次点击展开整页 */
+    startTypewriter(pageHost);
+    /* 点击委托：术语(.gl)点击 + 书页区域点击展开打字机（不干扰按钮/朗读套件） */
+    pageHost.onpointerdown=e=>{
+      const gl=e.target.closest('.gl');
+      if(gl){
+        e.stopPropagation();
+        const g=D.glossary[gl.dataset.g]; if(!g) return;
+        const gc=document.createElement('div'); gc.className='gcard';
+        gc.innerHTML='<div class="gw">'+esc(gl.dataset.g)+'</div>'
           +'<div class="gs"><b>是什么</b>'+esc(g.what)+'</div>'
           +'<div class="gs"><b>装到哪</b>'+esc(g.where)+'</div>'
           +'<div class="gs"><b>为什么</b>'+esc(g.why)+'</div>';
         document.body.appendChild(gc);
-        setTimeout(()=>{ try{gc.remove();}catch(e){} }, 6000);
+        setTimeout(()=>{ try{gc.remove();}catch(e){} },6000);
         gc.onpointerdown=()=>gc.remove();
-      };
-    });
+        return;
+      }
+      if(e.target.closest('button, .oralrow, .oralkit, .pager')) return;
+      typewriterExpand();
+    };
+    /* 无打字机内容（如纯朗读页）时直接绑定术语 */
+    twBindGlossary(pageHost);
   }
   /* ---------- 朗读/复述工作台：字号·遮文·录音(暂停/重录)·波形·倍速回放·关键词自评 ---------- */
   function kwExtract(en){
@@ -1452,7 +1569,7 @@ function openQuest(qid){
     }
   }
   drawPage();
-  const closeQuest=()=>{ if(questTimer){clearInterval(questTimer);questTimer=0;} if(window.WDMem)WDMem.setActive(null); ov.remove(); };
+  const closeQuest=()=>{ stopTypewriter(); if(questTimer){clearInterval(questTimer);questTimer=0;} if(window.WDMem)WDMem.setActive(null); ov.remove(); };
   $("#qx",ov).onpointerdown=closeQuest;
   const qx2=$("#qx2",ov); if(qx2) qx2.onpointerdown=closeQuest;
   if(finBtn) finBtn.onpointerdown=()=>{ settleQuest(q,quizPerfect,ov); };

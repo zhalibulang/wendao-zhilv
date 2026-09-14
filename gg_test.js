@@ -468,6 +468,30 @@ const driver=`
     if(!s.includes('「'+aq.name+'」'))throw new Error('sysPrompt未注入当前关卡名');
     if(!s.includes('至少自然点到一次'))throw new Error('缺对话-任务关联硬约束');
   });
+  /* ===== 书页打字机效果 ===== */
+  run('打字机函数定义且安全调用',()=>{
+    reset();
+    if(typeof startTypewriter!=='function')throw new Error('startTypewriter 未定义');
+    if(typeof stopTypewriter!=='function')throw new Error('stopTypewriter 未定义');
+    if(typeof typewriterExpand!=='function')throw new Error('typewriterExpand 未定义');
+    if(typeof twBindGlossary!=='function')throw new Error('twBindGlossary 未定义');
+    stopTypewriter();       // 无活跃状态时应安全
+    typewriterExpand();     // 无活跃状态时应安全
+    startTypewriter(null);  // null host 应安全跳过
+    startTypewriter({});    // 无 .book 子元素应安全跳过
+    stopTypewriter();
+  });
+  run('openQuest 集成打字机不崩',()=>{
+    reset();
+    openQuest('D01M');  // drawPage 内调 startTypewriter，mock 无元素应安全跳过
+    stopTypewriter();
+    openQuest('D01S1'); // 多页任务翻页也应安全
+    stopTypewriter();
+  });
+  run('TW_SPEED 在合理范围（120-150字/分）',()=>{
+    const cpm=Math.round(60000/TW_SPEED);
+    if(cpm<100||cpm>200)throw new Error('打字速度异常：'+cpm+'字/分（TW_SPEED='+TW_SPEED+'ms）');
+  });
   /* 异步收尾：respond 未配置 AI 时应同步降级为本地话术（永不 reject） */
   (async()=>{
     try{
