@@ -383,6 +383,44 @@ const driver=`
     const s=WDChat.sysPrompt('qingxuan',false);
     if(!s.includes('已淘汰概念禁用')) throw new Error('sysPrompt缺旧概念禁令');
   });
+  /* ===== 剧情先行 + 任务说明三要素（v27）===== */
+  run('genQuestBrief prompt含剧情先行硬约束',()=>{
+    reset();
+    const qsrc=genQuestBrief.toString();
+    if(!qsrc.includes('剧情先行硬约束')) throw new Error('任务说明prompt缺剧情先行约束');
+    if(!qsrc.includes('杜绝任务先行、剧情后置')) throw new Error('缺"杜绝任务先行"硬约束');
+    /* 三要素字段须在 schema 中明确要求 */
+    if(!qsrc.includes('necessity')) throw new Error('schema缺necessity字段');
+    if(!qsrc.includes('impact')) throw new Error('schema缺impact字段');
+    if(!qsrc.includes('reward')) throw new Error('schema缺reward字段');
+    if(!qsrc.includes('scene')) throw new Error('schema缺scene字段');
+  });
+  run('genQuestBrief prompt含核心世界观三逻辑',()=>{
+    reset();
+    const qsrc=genQuestBrief.toString();
+    /* 玩家是唯一具备就职仪式资格的域外之人 */
+    if(!qsrc.includes('域外之人')) throw new Error('缺"域外之人"硬约束');
+    if(!qsrc.includes('就职仪式')) throw new Error('缺"就职仪式"硬约束');
+    /* NPC能力复苏=世界拯救必要条件 */
+    if(!qsrc.includes('能力复苏')) throw new Error('缺"能力复苏"硬约束');
+    if(!qsrc.includes('圣女之力恢复')) throw new Error('缺"圣女之力恢复"硬约束');
+    /* 玩家收益与返回原世界目标相关 */
+    if(!qsrc.includes('返回原世界')) throw new Error('缺"返回原世界"硬约束');
+  });
+  run('旧schema aiBrief缓存被清除（强制新schema重生成）',()=>{
+    reset();
+    /* 模拟旧版 schema（仅 line+brief+metaphor，无三要素字段） */
+    st.aiBrief['D01M']={line:'提灯过卡',brief:'旧说明',metaphor:'旧比喻',at:new Date().toISOString()};
+    reconcile();
+    if(st.aiBrief['D01M']) throw new Error('旧schema aiBrief应被清除');
+  });
+  run('新schema aiBrief缓存保留',()=>{
+    reset();
+    /* 新 schema 含三要素字段，不应被清除 */
+    st.aiBrief['D01M']={scene:'雾在涌',line:'这一关交给你',necessity:'非你不可',impact:'圣女复苏',reward:'+25修行',metaphor:'试炼',at:new Date().toISOString()};
+    reconcile();
+    if(!st.aiBrief['D01M']) throw new Error('新schema aiBrief不应被清除');
+  });
   run('旧概念缓存自动清除',()=>{
     reset();
     // 模拟旧版含淘汰概念的人设缓存
