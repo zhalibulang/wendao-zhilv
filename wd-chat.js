@@ -45,12 +45,15 @@ const WDChat={
     if(!CTX||!CTX.D) return "（游戏背景信息尚未加载）";
     const {D}=CTX;
     /* v2：NPC 基础信息只保留当前会话相关者（调用方传入 focusNpcId 时进一步裁剪，WZ-002） */
-    const npcList=D.npcs.map(n=>{
-      const name=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(n.id,n.name):n.name;
-      const title=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(n.id,n.title):(n.title||"");
-      const persona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(n.id):"";
+    /* v29.1（实测修复）：NPC 基础信息以 CTX.NPC（boot 时已按注册表刷新）为准 */
+    const srcNpcs=CTX.NPC||Object.fromEntries(D.npcs.map(n=>[n.id,n]));
+    const npcList=Object.keys(srcNpcs).map(id=>{
+      const n=srcNpcs[id];
+      const name=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(id,n.name):n.name;
+      const title=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(id,n.title):(n.title||"");
+      const persona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(id):"";
       const desc=persona||n.intro||"";
-      return {id:n.id,name,title,desc};
+      return {id,name,title,desc};
     });
     const charList=npcList.map(n=>n.name+"（"+(n.title||"")+"，"+n.desc+"）").join("｜");
     return {
@@ -90,9 +93,9 @@ const WDChat={
     const kw=text.replace(/@[^\s]+/g,"").trim().toLowerCase();
     if(!kw) return "（无特定关键词）";
     const pts=D.pointsLib.filter(p=>p.text&&p.text.toLowerCase().includes(kw)).slice(0,3)
-      .map(p=>p.id+"："+p.text.slice(0,80)).join("\n");
+      .map(p=>p.text.slice(0,80)).join("\n");
     const orals=D.oralLib.filter(o=>(o.en||"").toLowerCase().includes(kw)||(o.zh||"").toLowerCase().includes(kw)).slice(0,2)
-      .map(o=>o.id+"："+(o.zh||o.en||"").slice(0,80)).join("\n");
+      .map(o=>(o.zh||o.en||"").slice(0,80)).join("\n");
     let result="";
     if(pts) result+="考点：\n"+pts+"\n";
     if(orals) result+="导游词：\n"+orals+"\n";
@@ -425,8 +428,8 @@ const WDChat={
   postHistoryRules(npcId){
     const {NPC}=CTX;
     const mine=this.recentReplies(npcId,5);
-    let s="【硬禁则·优先级最高】严禁AI腔（首先/其次/总之/综上/值得注意的是）；严禁教书先生口吻；严禁命令句（你必须/快去）；严禁自曝AI身份。"
-      +"已淘汰旧概念禁用：提灯、引灯、问道录、仙侠、仙师、封妖塔、幻纱行、机关童子、观星者、掌灯、镇塔尊者。"
+    let s="【硬禁则·优先级最高】严禁AI腔（首先/其次/总之/综上/值得注意的是）；严禁教书先生口吻；严禁命令句（你必须/快去）；严禁自曝AI身份；严禁念出任何编号/代号/系统字段名，严禁播报数值——进度与奖励用自然语言描述。"
+      +"已淘汰旧概念禁用："+((window.WDRegistry&&WDRegistry.obsoleteTerms())||["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者","引魂灯"]).join("、")+"。"
       +"若玩家显式自定义了世界观（见世界观文件），以自定义版为准，旧概念禁令对其豁免。";
     /* v2：防重复护收束（WZ-027）：禁复用开头与结尾句式 */
     if(mine.length){
@@ -526,7 +529,7 @@ const WDChat={
     const dctx=this.dailyContext(npcId);
     let ctx=""
       +"\n【当前游戏状态】第"+st.day+"日，已解锁至第"+st.unlocked+"日，修行"+st.xp+"，等级Lv."+CTX.level()
-      +(aq?("\n【当前关卡】"+aq.name+"（"+aq.tlabel+"，约"+aq.dur+"分钟）——目标："+(aq.goal||"通关")+"；建议动作："+this.howTo(aq))
+      +(aq?("\n【当前关卡】眼下正进行「"+aq.tlabel+"」一程——要做的："+(aq.goal||"通关")+"。谈及进度时用自然语言，不念任务编号与数值。")
         :"\n【当前关卡】今日已清（可引导巡夜温故/星盘错题/预告下一幕）");
     /* 当日情境（v2：同日后续为低强度续片） */
     if(dctx){
@@ -664,7 +667,7 @@ const WDChat={
     });
     /* v2：旧概念检查——用户显式覆写世界观时豁免（WZ-028） */
     if(!hasCustomWorld){
-      const obsolete=["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者"];
+      const obsolete=(window.WDRegistry&&WDRegistry.obsoleteTerms())||["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者","引魂灯"];
       obsolete.forEach(p=>{
         if(t.includes(p)) v.push({type:"已淘汰概念",msg:"使用了已淘汰的旧世界观概念",snippet:p,level:"P0"});
       });

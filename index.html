@@ -509,6 +509,13 @@ const QMAP = Object.fromEntries(D.quests.map(q=>[q.id,q]));
 /* ---------- NPC 职能重构：全程引导者「云蘅」+ 全角色×四章互动矩阵 ----------
    所有 NPC 自序章起即由云蘅引见现身（不再按幕锁于雾中），
    但各章互动话题仍随当前幕推进；任务解锁门禁不受影响。 */
+/* v29.1（实测修复）：NPC 主映射基础数据以注册表为准 */
+if(window.WDRegistry){
+  Object.keys(WDRegistry.all()).forEach(rid=>{
+    const r=WDRegistry.get(rid), t=NPC[rid]||(D.npcs.find(n=>n.id===rid));
+    if(t&&r){ t.name=r.name; t.title=r.title; t.intro=r.intro; }
+  });
+}
 if(!NPC.yunheng){
   /* v2（R2.1）：云蘅基础数据从角色注册表派生（注册表缺失时回退内置） */
   const g=(window.WDRegistry&&WDRegistry.get("yunheng"))||{id:"yunheng",name:"云蘅",title:"圣女候选",intro:"导游次元的圣女候选，担任玩家主要引导人。在神圣导游就职仪式中，因遗忘之雾侵袭及玩家意外降临导致仪式中断，与玩家形成绑定关系。性格活泼可爱，对玩家怀有爱慕之情。随着玩家完成就职仪式各阶段，云蘅逐步恢复被封印的圣女之力，重新驾驭导游圣器以驱逐遗忘之雾。"};
@@ -557,6 +564,14 @@ function reconcile(){
     const obs=OBSOLETE_TERMS; /* v2（WZ-011）：引用唯一黑名单 */
     const hasObs=o=>obs.some(t=>JSON.stringify(o||"").includes(t));
     Object.keys(st.personas).forEach(id=>{ if(hasObs(st.personas[id])) delete st.personas[id]; });
+    /* v29.1（实测修复）：配置中心域残留旧世界观人设/称号——一并清洗 */
+    if(window.WDCfg){
+      const cfgAll=WDCfg.all();
+      ["npcTitles","npcPersonas","npcNames"].forEach(k=>{
+        const bag=cfgAll[k]; if(!bag) return;
+        Object.keys(bag).forEach(id=>{ if(bag[id]&&hasObs(bag[id])){ WDCfg.set(k+"."+id,"","清洗旧世界观残留"); } });
+      });
+    }
     Object.keys(st.aiBrief).forEach(id=>{
       const b=st.aiBrief[id];
       if(hasObs(b)||!b||(typeof b==="object"&&!b.scene&&!b.necessity&&!b.impact&&!b.reward&&b.brief))
@@ -1695,12 +1710,13 @@ function settleQuest(q,quizPerfect,ov){
   refineAction(aid,q);
   // 三节点之②③合并为一条群聊消息（NPC 不连发多条）：认可 + 后续任务预告，refs 携带任务跳转
   const fresh=D.quests.filter(qq=>!qDone(qq.id)&&questUnlocked(qq)&&qq.prev&&qq.prev.includes(q.id));
-  let ackText=(doneLine(q,byDay[q.day])||"很好。")+"「"+q.name+"」已交付（+"+q.xp+"修行 +"+q.coin+"铜钱）。";
+  const cleanName=n=>String(n||"").replace(/^[^·]*·\s*/,"").replace(/\b[A-Z]\d+-\d+\b\s*/g,"").replace(/（[^）]*）/g,"").replace(/（[^）]*$/,"").trim();
+  let ackText=(doneLine(q,byDay[q.day])||"很好。")+"「"+(cleanName(q.name)||q.name)+"」已交付。";
   const refs=[{qid:q.id}];
   const nq=fresh[0]||null;
   if(nq){
     const nd=byDay[nq.day];
-    ackText+=" "+(pubLine(nq,nd)||"新的一程开启了。")+"「"+nq.name+"」已现形，随到随打。";
+    ackText+=" "+(pubLine(nq,nd)||"新的一程开启了。")+"「"+(cleanName(nq.name)||nq.name)+"」已现形，随到随打。";
     refs.push({qid:nq.id});
   }
   st.dialogue.push({role:"npc",npc:q.npc,text:ackText,refs,at:new Date().toISOString(),day:st.day});
@@ -3343,15 +3359,20 @@ function bindNav(){
 }
 /* v2（R2.3）：序章叙事从 worldBrief 派生——用户覆写世界观后序章同步（默认世界观输出与 v1 等价文案） */
 function introNarrative(){
+  /* v29.1（实测回归修复）：默认路径逐字恢复设计文案；仅用户覆写世界观时才派生 */
   try{
-    const wb=WDChat.worldBrief();
-    if(typeof wb==="string"&&wb.trim()) return wb.split("\n")[0].slice(0,400);
-    if(wb&&wb.世界观){
-      const w=String(wb.世界观);
-      return "你意外降临的这个世界正在被这样的力量侵蚀——"+w.slice(0,160)+" 四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力。";
+    const custom=(window.WDCfg&&WDCfg.customWorldBrief)?WDCfg.customWorldBrief():null;
+    if(custom&&custom.trim()){
+      const wb=WDChat.worldBrief();
+      if(typeof wb==="string"&&wb.trim()) return wb.split("\n")[0].slice(0,400);
+      if(wb&&wb.世界观){
+        const w=String(wb.世界观);
+        return "你降临的这个世界正经历着——"+w.slice(0,180)+" 四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力。";
+      }
+      return "你降临的这个世界正经历着一场考验。四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力。";
     }
   }catch(e){}
-  return "你意外降临「导游次元」——一个正被遗忘之雾吞噬的娘化世界。所有居民皆为女性，唯独你是男性外来者。这座次元最后的净土是北京。四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力，用导游圣器驱逐遗忘之雾。";
+  return "你意外降临「导游次元」——一个正被遗忘之雾吞噬的娘化世界。所有居民皆为女性，唯独你是男性外来者。这座次元最后的净土是北京。圣女候选云蘅正在此举行神圣导游就职仪式，却在仪式中途遭遗忘之雾侵袭——你的降临打断了仪式，却也让你与云蘅形成了绑定。记忆精灵璇玑也在混乱中与你意外建立灵魂契约。四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力，用导游圣器驱逐遗忘之雾。";
 }
 function intro(){
   st=defState();
