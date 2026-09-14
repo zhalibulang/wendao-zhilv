@@ -789,19 +789,14 @@ function typing(on,multi){
   TYPING=on?{multi:!!multi}:null;
   if($("#stream")) renderChat(true);
 }
-/* 自由发言智能路由：无 @提及时，按职能关键词→当前关卡接洽人→引路人云蘅 兜底，
-   保证玩家每一句自由发言都至少有一位职能匹配的 NPC 出面回应 */
-/* v2（R2.1）：路由关键词从角色注册表派生 */
+/* 自由发言智能路由：直呼其名/别名 → WDChat 评分式领域判断 → 云蘅兜底，
+   保证玩家每一句自由发言都至少有一位合适的 NPC 出面回应 */
+/* v2（R2.1）：路由关键词从角色注册表派生；v3：评分逻辑收敛到 WDChat.judgeDomain */
 const NPC_ROLE_KW=(window.WDRegistry&&WDRegistry.keywordMap())||{};
 function routeNpc(text){
   const raw=String(text||"");
-  /* 优先使用 WDChat 的评分式领域判断（核心词+2/边缘词+1/NPC名+3） */
-  if(window.WDChat&&WDChat.judgeDomain){
-    const dm=WDChat.judgeDomain(raw);
-    if(!dm.isDefault) return dm.npcId;
-    /* 未明确指向特定NPC职责领域 → 默认由云蘅回应 */
-    return "yunheng";
-  }
+  /* 主路径：WDChat 评分式领域判断（职能词+2，直呼名字+3，低于阈值→云蘅） */
+  if(window.WDChat&&WDChat.judgeDomain) return WDChat.judgeDomain(raw);
   /* 降级路径（WDChat未挂载时）：直接呼叫NPC名 → 关键词 → 云蘅兜底 */
   if(window.WDCfg){
     for(const id of Object.keys(NPC)){
@@ -893,39 +888,11 @@ function sendChat(){
   else if(mentioned) npcAnswer([mentioned],v);
   else yunhengProxy(v);
 }
-/* 云蘅代@机制：未指定 NPC 时，云蘅先接话引荐，再由职能 NPC 回应 */
+/* 云蘅代@机制：未指定 NPC 时按领域评分直接路由（云蘅是默认引路人，不再每条都代为引荐） */
 function yunhengProxy(text){
-  /* 使用评分式领域判断：未明确指向时默认由云蘅直接回应 */
-  const dm=(window.WDChat&&WDChat.judgeDomain)?WDChat.judgeDomain(text):null;
-  const target=dm?dm.npcId:routeNpc(text);
-  /* 未明确指向特定NPC职责领域 → 云蘅直接回应 */
-  if(target==="yunheng"||(dm&&dm.isDefault)){ npcAnswer(["yunheng"],text); return; }
-  const nm=dName(target);
-  /* 云蘅先以引路人身份接住话，并替玩家引荐职能 NPC */
-  /* v2（WZ-030）：引荐语只作云蘅的对象上下文，玩家原话单独传递，避免代理包装碎片被当原话回显 */
-  const playerMsg=String(text).replace(/^@[^\s，。,,\s]+\s*/,"").trim();
-  const proxyText="@"+nm+" 这位道友问了「"+playerMsg.slice(0,20)+"」——你来说说（玩家原话："+playerMsg.slice(0,40)+"）";
-  typing(true,true);
-  toast("云蘅正在为你引荐"+nm+"……");
-  aiRespond("yunheng",proxyText,true).then(r=>{
-    const aqP=firstActiveQuest();
-    const m={role:"npc",npc:"yunheng",text:r.text,at:new Date().toISOString(),day:st.day};
-    if(!r.refs&&aqP) m.refs=[{qid:aqP.id}];
-    st.dialogue.push(m);
-    if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-    save(); renderChat(true);
-    /* 紧接着职能 NPC 回应玩家原话 */
-    aiRespond(target,text,true).then(r2=>{
-      const aqP2=firstActiveQuest();
-      const m2={role:"npc",npc:target,text:r2.text,at:new Date().toISOString(),day:st.day};
-      if(!r2.refs&&aqP2) m2.refs=[{qid:aqP2.id}];
-      st.dialogue.push(m2);
-      if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-      save(); typing(false); renderChat();
-      /* NPC发言时机智能：检查是否有其他NPC应插话 */
-      maybeNpcChimeIn(text,target);
-    }).catch(()=>{ typing(false); renderChat(); });
-  }).catch(()=>{ typing(false); renderChat(); });
+  const target=(window.WDChat&&WDChat.judgeDomain)?WDChat.judgeDomain(text):routeNpc(text);
+  /* 领域明确 → 该 NPC 直接以本人身份接话；其余情况云蘅出面。不搞双重应答。 */
+  npcAnswer([target],text);
 }
 /* NPC插话智能判断：基于发言时机逻辑，决定是否有其他NPC自然插话 */
 function maybeNpcChimeIn(text,primarySpeaker){

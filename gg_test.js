@@ -44,6 +44,7 @@ const html=fs.readFileSync(process.argv[3],'utf8');
 const js=html.match(/<script>\n([\s\S]*?)<\/script>/)[1];
 /* 独立模块（wd-chat/wd-avatar/wd-cfg/wd-mem/wd-quiz）随主脚本一并装载，保持与线上运行时一致 */
 const chatSrc=fs.readFileSync(require('path').join(__dirname,'wd-chat.js'),'utf8');
+const registrySrc=fs.readFileSync(require('path').join(__dirname,'npc-registry.js'),'utf8');
 const avSrc=fs.readFileSync(require('path').join(__dirname,'wd-avatar.js'),'utf8');
 const fxSrc=fs.readFileSync(require('path').join(__dirname,'wd-fx.js'),'utf8');
 const cfgSrc=fs.readFileSync(require('path').join(__dirname,'wd-cfg.js'),'utf8');
@@ -158,28 +159,31 @@ const driver=`
     if(!st.npcGrowth||st.npcGrowth.smq.story.length!==2)throw new Error('故事线未落存档');
     if(WDChat.historyOf('smq',5).length!==0)throw new Error('历史互动应为空');
   });
-  run('WDChat 降级三段式（情境+剧情+任务）',()=>{
-    reset(); const t=WDChat.fallback('xuanji','颐和园长廊有多长');
-    if(!t)throw new Error('降级话术为空');
-    if(!(/(去|先|这就|通关|巡夜|星盘)/.test(t)))throw new Error('降级话术缺少任务/下一步指引');
-    if(!t.includes('星'))throw new Error('降级话术不符合玄机夫人人设');
-    const t2=WDChat.fallback('moxiaogu','完全不相干词组zzz');
-    if(!t2||t2===t)throw new Error('不同NPC降级话术应区分');
+  run('WDChat 降级话术v3：提问短答/人格区分/疲惫不鸡汤',()=>{
+    reset();
+    const t=WDChat.fallback('xuanji','颐和园长廊到底有多长？');
+    if(!t||t.length>90)throw new Error('提问降级应短促，实际：'+t);
+    const tm=WDChat.fallback('moxiaogu','颐和园长廊到底有多长？');
+    if(!tm||tm===t)throw new Error('不同NPC同问应答不同');
+    /* 疲惫输入：接住情绪即可，禁止心理咨询腔与尾随任务 */
+    const tired=WDChat.fallback('tiemian','我今天真的不想刷了，好累');
+    if(/压力|加油|相信你|一定可以|你已经很棒/.test(tired))throw new Error('疲惫回应不应鸡汤：'+tired);
+    if(tired.length>40)throw new Error('疲惫回应应极短：'+tired);
   });
-  run('WDChat sysPrompt 行为边界+自主权+三段+防重复',()=>{
+  run('WDChat sysPrompt 行为约束v3（活人/短句/三腔/工具箱/voice卡）',()=>{
     reset();
     const s=WDChat.sysPrompt('qingxuan',false);
-    ['行为边界','自主权限','四项职能','回复结构','情境','剧情','任务'].forEach(k=>{
+    ['行为边界','活人优先','长度·密度','三种腔','工具箱','语言人格卡'].forEach(k=>{
       if(!s.includes(k))throw new Error('sysPrompt 缺失约束段：'+k);
     });
-    if(!/≤220字/.test(s))throw new Error('单次回复字数上限约束缺失');
+    if(!/≤90字/.test(s))throw new Error('单次回复字数约束缺失');
   });
-  run('WDChat 防重复：近期原话注入硬约束',()=>{
+  run('WDChat 防重复：近期原话注入postHistory硬约束',()=>{
     reset();
     st.dialogue.push({role:'npc',npc:'qingxuan',text:'云头上传来一声轻笑，你今日这关破得漂亮'});
-    const s=WDChat.sysPrompt('qingxuan',false);
-    if(!s.includes('防重复'))throw new Error('防重复段缺失');
-    if(!s.includes('云头上传来一声轻笑'))throw new Error('近期原话未注入');
+    const r=WDChat.postHistoryRules('qingxuan');
+    if(!r.includes('防重复'))throw new Error('防重复段缺失');
+    if(!r.includes('云头上传来一声轻笑'))throw new Error('近期原话未注入');
     if(WDChat.recentReplies('qingxuan',5).length!==1)throw new Error('recentReplies 取值异常');
   });
   run('WDChat deRepeat 撞开头自动改口',()=>{
@@ -231,7 +235,7 @@ const driver=`
     reset();
     const ctx1=WDChat.buildContext('yunheng','你好',null);
     if(!ctx1.includes('当日情境'))throw new Error('首次互动应注入当日情境');
-    if(!ctx1.includes('首次交流'))throw new Error('情境寒暄引导缺失');
+    if(!ctx1.includes('自然开场'))throw new Error('情境寒暄引导缺失');
     /* 第二次调用：当日情境不再注入 */
     const ctx2=WDChat.buildContext('yunheng','再聊',null);
     if(ctx2.includes('当日情境'))throw new Error('非首次互动不应再注入情境');
@@ -379,9 +383,9 @@ const driver=`
     const qsrc=genQuestBrief.toString();
     if(!qsrc.includes('严禁使用已淘汰的旧概念')) throw new Error('任务说明prompt缺旧概念禁令');
     if(!qsrc.includes('导游异次元')) throw new Error('任务说明prompt缺新世界观锚点');
-    // wd-chat sysPrompt 须含旧概念禁令
-    const s=WDChat.sysPrompt('qingxuan',false);
-    if(!s.includes('已淘汰概念禁用')) throw new Error('sysPrompt缺旧概念禁令');
+    // wd-chat 旧概念禁令位于 user 尾消息（postHistoryRules，v2 架构）
+    const r=WDChat.postHistoryRules('qingxuan');
+    if(!r.includes('已淘汰旧概念禁用')) throw new Error('postHistoryRules缺旧概念禁令');
   });
   /* ===== 剧情先行 + 任务说明三要素（v27）===== */
   run('genQuestBrief prompt含剧情先行硬约束',()=>{
@@ -467,7 +471,8 @@ const driver=`
     if(!doc.includes('云蘅'))throw new Error('默认文档缺NPC名');
     if(!doc.includes('行为边界'))throw new Error('默认文档缺行为边界');
     if(!doc.includes('娘化次元'))throw new Error('默认文档缺娘化约束');
-    if(!doc.includes('≤220字'))throw new Error('默认文档缺字数限制');
+    if(!doc.includes('≤90字'))throw new Error('默认文档缺短句字数约束');
+    if(!doc.includes('心理医生腔'))throw new Error('默认文档缺三腔禁令');
   });
   run('条款检查：AI腔检测',()=>{
     reset();
@@ -498,17 +503,15 @@ const driver=`
     const chk=WDChat.clauseCheck('雾在涌，但有你同行我不惧。这一关过得利落，圣女之力又醒一寸。',null);
     if(!chk.pass)throw new Error('合规回复应通过检查');
   });
-  run('条款检查：关卡关联检测',()=>{
-    reset(); st.unlocked=1;
-    WDCfg.setWorldBrief('');
-    const q=D.quests.find(x=>x.id==='D01M');
-    /* 保存原始 quest 函数，修改后恢复，避免影响后续测试 */
-    const origQuest=WDChat._ctx?WDChat._ctx.quest:null;
-    if(WDChat._ctx) WDChat._ctx.quest=()=>q;
-    const chk=WDChat.clauseCheck('你好呀','qingxuan');
-    if(chk.pass)throw new Error('在途关卡时未提及关卡名应报关卡脱节');
-    if(!chk.violations.some(v=>v.type==='关卡脱节'))throw new Error('应检测到关卡脱节');
-    if(WDChat._ctx) WDChat._ctx.quest=origQuest;
+  run('条款检查：客服腔/心理医生腔/卖萌口癖检测',()=>{
+    reset();
+    const chk=WDChat.clauseCheck('当然可以，我可以帮你。别给自己太大压力，相信你一定可以！诶嘿',null);
+    const types=chk.violations.map(v=>v.type);
+    if(!types.includes('客服腔'))throw new Error('应检测到客服腔：'+types.join(','));
+    if(!types.includes('心理医生腔'))throw new Error('应检测到心理医生腔：'+types.join(','));
+    if(!types.includes('表面卖萌/网梗'))throw new Error('应检测到卖萌口癖：'+types.join(','));
+    /* sanitize 替换表应能消化客服腔 */
+    if(WDChat.sanitize('当然可以')!=='嗯')throw new Error('sanitize未替换客服应答');
   });
   run('NPC人设同步：worldBrief角色设定动态使用用户自定义人设',()=>{
     reset();
@@ -669,14 +672,14 @@ const driver=`
     if(!h.includes('data-ref="'+aq.id+'"'))throw new Error('chip 未指向在途任务');
     if(h.split('↪ 当前任务').length-1!==1)throw new Error('仅最新一条应自动关联');
   });
-  run('sysPrompt 要求回复点出当前关卡名',()=>{
+  run('sysPrompt 软注入当前关卡（不再硬性点名）',()=>{
     reset(); st.unlocked=1;
     WDCfg.setWorldBrief(''); WDCfg.setAiDocument('');
     const aq=firstActiveQuest();
     if(!aq)throw new Error('无在途关卡');
     const s=WDChat.sysPrompt('qingxuan',false);
-    if(!s.includes('「'+aq.name+'」'))throw new Error('sysPrompt未注入当前关卡名');
-    if(!s.includes('至少自然点到一次'))throw new Error('缺对话-任务关联硬约束');
+    if(!s.includes('「'+aq.name+'」'))throw new Error('情境段应含当前关卡名');
+    if(s.includes('至少自然点到一次'))throw new Error('关卡点名应已降为软偏好');
   });
   /* ===== 书页打字机效果 ===== */
   run('打字机函数定义且安全调用',()=>{
@@ -702,17 +705,14 @@ const driver=`
     const cpm=Math.round(60000/TW_SPEED);
     if(cpm<200||cpm>450)throw new Error('打字速度异常：'+cpm+'字/分（TW_SPEED='+TW_SPEED+'ms）');
   });
-  run('sysPrompt 含激励而非教育语气基调',()=>{
+  run('sysPrompt 日式RPG活人语感约束v3',()=>{
     reset();
     const s=WDChat.sysPrompt('qingxuan',false);
-    if(!s.includes('激励而非教育')) throw new Error('sysPrompt 缺「激励而非教育」基调');
-    if(!s.includes('请求式口吻')) throw new Error('sysPrompt 缺请求式口吻约束');
-    if(!s.includes('命令口吻与祈使句')) throw new Error('sysPrompt 缺命令口吻禁令');
-    if(!s.includes('多夸赞')) throw new Error('sysPrompt 缺夸赞鼓励要求');
-    /* 角色自主性：性格与故事展开 */
-    if(!s.includes('角色自主性')) throw new Error('sysPrompt 缺角色自主性约束');
-    if(!s.includes('生死存亡')) throw new Error('sysPrompt 缺关心世界生死存亡约束');
-    if(!s.includes('在乎玩家的感受')) throw new Error('sysPrompt 缺在乎玩家感受约束');
+    ['活人优先','日式RPG','三种腔','心理医生腔','工具箱','群聊修养'].forEach(k=>{
+      if(!s.includes(k)) throw new Error('sysPrompt 缺约束：'+k);
+    });
+    if(s.includes('多夸赞')) throw new Error('不应再机械要求夸赞鼓励');
+    if(s.includes('激励而非教育')) throw new Error('旧教育基调约束应已移除');
   });
   run('typewriterExpand 逐段展开无 clicks 分支',()=>{
     reset();
@@ -912,77 +912,67 @@ const driver=`
   });
   run('judgeDomain：法条关键词强匹配铁面',()=>{
     reset();
-    const dm=WDChat.judgeDomain('法条规定了什么');
-    if(dm.npcId!=='tiemian') throw new Error('法条应路由到铁面，实际'+dm.npcId);
-    if(dm.isDefault) throw new Error('强匹配不应是默认');
-    if(dm.score<2) throw new Error('核心词score应>=2');
+    if(WDChat.judgeDomain('法条规定了什么')!=='tiemian') throw new Error('法条应路由到铁面');
   });
   run('judgeDomain：山河关键词强匹配司马青衫',()=>{
     reset();
-    const dm=WDChat.judgeDomain('长城的地理特征');
-    if(dm.npcId!=='smq') throw new Error('山河应路由到司马青衫');
-    if(dm.isDefault) throw new Error('强匹配不应是默认');
+    if(WDChat.judgeDomain('长城的地理特征')!=='smq') throw new Error('山河应路由到司马青衫');
   });
   run('judgeDomain：无明确指向默认云蘅',()=>{
     reset();
-    const dm=WDChat.judgeDomain('今天天气怎么样');
-    if(dm.npcId!=='yunheng') throw new Error('无明确指向应默认云蘅');
-    if(!dm.isDefault) throw new Error('应标记为默认');
+    if(WDChat.judgeDomain('今天天气怎么样')!=='yunheng') throw new Error('无明确指向应默认云蘅');
   });
   run('judgeDomain：NPC名直接点名强匹配',()=>{
     reset();
     WDCfg.setNpcName('tiemian','铁老');
-    const dm=WDChat.judgeDomain('铁老你说说');
-    if(dm.npcId!=='tiemian') throw new Error('点名应强匹配到铁面');
-    if(dm.score<3) throw new Error('NPC名匹配score应>=3');
+    if(WDChat.judgeDomain('铁老你说说')!=='tiemian') throw new Error('点名应强匹配到铁面');
   });
-  run('shouldChimeIn：同speaker不插话',()=>{
+  /* ===== v30：voice 语言人格档案 + 群聊导演 ===== */
+  run('WDRegistry voice语言人格档案全员完整',()=>{
+    ['yunheng','qingxuan','smq','tiemian','liuruyan','moxiaogu','xuanji'].forEach(id=>{
+      const v=WDRegistry.voiceOf(id);
+      if(!v||!v.cadence||!Array.isArray(v.moves)||v.moves.length<3)throw new Error(id+' voice节奏/手法不完整');
+      if(!Array.isArray(v.samples)||v.samples.length<3)throw new Error(id+' voice示例不足');
+      if(!Array.isArray(v.avoid)||!v.avoid.length)throw new Error(id+' voice禁忌缺失');
+      if(!v.toOthers||Object.keys(v.toOthers).length<2)throw new Error(id+' 角色关系缺失');
+    });
+  });
+  run('voice卡注入systemPrefix：节奏/示例/关系',()=>{
     reset();
-    const r=WDChat.shouldChimeIn('qingxuan',{text:'测试',speaker:'qingxuan'});
-    if(r.chime) throw new Error('同speaker不应插话');
+    const s=WDChat.systemPrefix('smq',false);
+    if(!s.includes('语言人格卡'))throw new Error('systemPrefix缺语言人格卡');
+    if(!s.includes('与在场众人的关系'))throw new Error('systemPrefix缺角色关系');
+    if(!s.includes('语感示例'))throw new Error('systemPrefix缺语感示例');
   });
-  run('shouldChimeIn：职责领域强相关时插话',()=>{
+  run('voice卡：自定义人设时仍保留节奏辨识度',()=>{
     reset();
-    const r=WDChat.shouldChimeIn('tiemian',{text:'法条规定了什么',speaker:'yunheng'});
-    if(!r.chime) throw new Error('法条相关时铁面应插话');
-    if(!r.reason.includes('职责领域')) throw new Error('插话理由应含职责领域');
+    WDCfg.setNpcPersona('moxiaogu','沉默寡言的机关师');
+    const s=WDChat.systemPrefix('moxiaogu',false);
+    if(!s.includes('语言人格卡'))throw new Error('自定义人设不应顶替voice卡');
+    if(!s.includes('以自定义为准'))throw new Error('应声明冲突优先级');
+    WDCfg.setNpcPersona('moxiaogu','');
   });
-  run('shouldChimeIn：被直接点名时插话',()=>{
+  run('voice 人格差异化：铁面与司马的禁忌互斥',()=>{
+    const tm=WDRegistry.voiceOf('tiemian'), sm=WDRegistry.voiceOf('smq');
+    if(tm.cadence===sm.cadence)throw new Error('两角色节奏不应相同');
+    if(JSON.stringify(tm.samples)===JSON.stringify(sm.samples))throw new Error('两角色示例不应相同');
+  });
+  run('fallback：重复同一问题露出不耐烦',()=>{
     reset();
-    WDCfg.setNpcName('smq','司马');
-    const r=WDChat.shouldChimeIn('smq',{text:'司马你来说',speaker:'yunheng'});
-    if(!r.chime) throw new Error('被点名时应插话');
+    st.dialogue.push({role:'player',text:'律法塔到底该怎么打才好',at:new Date().toISOString(),day:1});
+    const t=WDChat.fallback('tiemian','律法塔到底该怎么打才好');
+    if(!/第二遍|卷宗|重复/.test(t))throw new Error('重复提问应有不耐烦反应：'+t);
   });
-  run('shouldChimeIn：关卡接洽人优先发言',()=>{
-    reset(); st.unlocked=1;
-    const aq=firstActiveQuest();
-    if(!aq) throw new Error('应有在途任务');
-    const r=WDChat.shouldChimeIn(aq.npc,{text:'随便聊聊',speaker:'yunheng',quest:aq});
-    if(!r.chime) throw new Error('关卡接洽人应优先发言');
-  });
-  run('shouldChimeIn：无相关性不插话',()=>{
+  run('fallback：报捷反应不统一鸡汤',()=>{
     reset();
-    const r=WDChat.shouldChimeIn('xuanji',{text:'今天天气怎么样',speaker:'yunheng'});
-    if(r.chime) throw new Error('无相关性时不应插话');
+    const ids=['yunheng','tiemian','moxiaogu','xuanji'];
+    const outs=ids.map(id=>WDChat.fallback(id,'我终于打过这个妖王了，太爽了'));
+    if(new Set(outs).size!==outs.length)throw new Error('各NPC报捷反应必须不同');
+    outs.forEach(t=>{ if(/加油|你一定可以|相信自己/.test(t))throw new Error('报捷不应打鸡血：'+t); });
   });
-  run('relationshipContext：云蘅含爱慕之情',()=>{
+  run('directorRespond：函数已挂载（无AI时由异步收尾验证降级）',()=>{
     reset();
-    const r=WDChat.relationshipContext('yunheng');
-    if(!r.includes('爱慕')) throw new Error('云蘅关系应含爱慕之情');
-    if(!r.includes('同门')) throw new Error('云蘅关系应含同门关系');
-  });
-  run('relationshipContext：各NPC关系非空',()=>{
-    reset();
-    for(const id of ['yunheng','qingxuan','smq','tiemian','liuruyan','moxiaogu','xuanji']){
-      const r=WDChat.relationshipContext(id);
-      if(!r) throw new Error(id+'关系描述为空');
-    }
-  });
-  run('sysPrompt 注入角色关系上下文',()=>{
-    reset();
-    const s=WDChat.sysPrompt('qingxuan',false);
-    if(!s.includes('角色关系')) throw new Error('sysPrompt缺角色关系段');
-    if(!s.includes('同门')) throw new Error('sysPrompt角色关系应含同门');
+    if(typeof WDChat.directorRespond!=='function')throw new Error('群聊导演未定义');
   });
   run('routeNpc 使用judgeDomain评分路由',()=>{
     reset();
@@ -1002,6 +992,14 @@ const driver=`
       if(r.degraded!==true)throw new Error('未标记 degraded');
       console.log('PASS  WDChat respond未配置AI自动降级');
     }catch(e){ errors.push('WDChat respond未配置AI自动降级 => '+e.message); console.log('FAIL  WDChat respond未配置AI自动降级 : '+e.message); }
+    try{
+      reset();
+      const r1=await WDChat.directorRespond(['yunheng','tiemian'],'测试');
+      if(r1!==null)throw new Error('无AI时应返回null');
+      const r2=await WDChat.directorRespond(['yunheng'],'测试');
+      if(r2!==null)throw new Error('少于2人应返回null');
+      console.log('PASS  WDChat directorRespond无AI安全降级');
+    }catch(e){ errors.push('WDChat directorRespond降级 => '+e.message); console.log('FAIL  WDChat directorRespond降级 : '+e.message); }
     console.log('\\n===== RESULT =====');
     if(errors.length){console.log('FAILURES '+errors.length);errors.forEach(e=>console.log(' - '+e));process.exit(1);}
     else { console.log('ALL TESTS PASSED'); process.exit(0); }
@@ -1009,5 +1007,5 @@ const driver=`
 })();
 `;
 
-try { eval(dataSrc + '\n' + cfgSrc + '\n' + memSrc + '\n' + quizSrc + '\n' + chatSrc + '\n' + avSrc + '\n' + fxSrc + '\n' + js + '\n' + driver); }
+try { eval(dataSrc + '\n' + registrySrc + '\n' + cfgSrc + '\n' + memSrc + '\n' + quizSrc + '\n' + chatSrc + '\n' + avSrc + '\n' + fxSrc + '\n' + js + '\n' + driver); }
 catch(e){ console.log('FATAL LOAD ERROR:\n'+e.stack); process.exit(1); }
