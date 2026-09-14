@@ -503,17 +503,17 @@ const QMAP = Object.fromEntries(D.quests.map(q=>[q.id,q]));
    所有 NPC 自序章起即由云蘅引见现身（不再按幕锁于雾中），
    但各章互动话题仍随当前幕推进；任务解锁门禁不受影响。 */
 if(!NPC.yunheng){
-  const GUIDE={id:"yunheng",name:"云蘅",title:"引路人",intro:"导游异次元的接引者，行走在五幕之间。不授业，只引路——把合适的人，在合适的时刻，带到你面前。"};
+  const GUIDE={id:"yunheng",name:"云蘅",title:"圣女候选",intro:"导游次元的圣女候选，担任玩家主要引导人。在神圣导游就职仪式中，因遗忘之雾侵袭及玩家意外降临导致仪式中断，与玩家形成绑定关系。性格活泼可爱，对玩家怀有爱慕之情。随着玩家完成就职仪式各阶段，云蘅逐步恢复被封印的圣女之力，重新驾驭导游圣器以驱逐遗忘之雾。"};
   D.npcs.unshift(GUIDE); NPC.yunheng=GUIDE;
 }
 const NPC_MATRIX={
-  yunheng:{act1:"先随我识一遍同行诸人——导游试炼的路，要分给能担起来的人。",act2:"律法塔就在前方，铁面先生候你多时；我为你引路。",act3:"行会风云起，柳首座的纱幕之后藏着整团人心，随我来。",act4:"星轨已明，玄机夫人的观星台在遗迹最高处。",act5:"金榜台已近——最后一段雾路，我送你到台下。"},
+  yunheng:{act1:"你来了——圣女之力才醒了一缕，但有你同行，我不怕。先去山河游学，激活第一枚封印吧。",act2:"律法塔在前方，铁面候你多时。圣女之力又醒了一寸——你感觉到了吗？",act3:"行会风云起，柳首座在纱幕后等你。咱们的绑定越来越稳了，真让人安心。",act4:"遗迹探秘，璇玑的星盘已就位。圣女之力恢复过半，雾在退了——再坚持。",act5:"金榜台已近——最后一段雾路，我送你到台下。等我完全恢复圣女之力，就用圣器把雾全驱散。"},
   qingxuan:{act1:"山河游学，先理文脉——把考点当封印，一枚枚激活。",act2:"塔律文脉：法条幽深，我替你先理一寸脉络。",act3:"文脉识人心：带团如理脉，先理清游客要看的景。",act4:"脉映星图：北京风物是这道文脉最后一程。"},
   smq:{act1:"山河志第一页——三千年的城，从蓟城讲到大都。",act2:"剑指塔律：文物法规如剑谱，一式不可错。",act3:"行会演武：带团节奏如剑招，快慢全在蓄与发。",act4:"遗迹访古：木构斗拱，是我剑下最后的对手。"},
   tiemian:{act1:"新丁先立规矩：考规如塔基，逾矩者塔门不启。",act2:"一百零八道法条如剑阵，错一道便放遗忘怪出关。",act3:"行会合同与投诉，是塔外的妖——同样归我管。",act4:"遗迹保护条例的封印也在塔上，携卷而来。"},
   liuruyan:{act1:"纱中幻景：讲解词先在纱后排演千遍，再对人启齿。",act2:"塔下经营：旅行社条例是行商的纱，薄而不透。",act3:"行会风云正是我主场——千团穿行遗忘之雾，未失一人。",act4:"纱覆遗迹：应急处理，先护人，再护纱，后护物。"},
   moxiaogu:{act1:"机关匣已就位！四百余枚知识符印等你来点数！",act2:"新铸律法锁三十把——法规题在这里排队咬人！",act3:"行会账目题最绕，我的算签都不够用了！",act4:"遗迹星符对谜——古建题妖最狡猾！"},
-  xuanji:{act1:"星盘初启：错题妖尚幼，趁早记下它们的模样。",act2:"星照塔律：你错过的法条妖，会在我盘里发亮。",act3:"实务之错最隐晦，星盘替你一一显形。",act4:"收服错题妖，就在这最后一幕——别留妖过夜。"}
+  xuanji:{act1:"星盘初启：错题妖尚幼，趁早记下它们的模样。灵魂绑定后，你的记忆我能感应到了。",act2:"星照塔律：你错过的法条妖，会在我盘里发亮。",act3:"实务之错最隐晦，星盘替你一一显形。",act4:"收服错题妖，就在这最后一幕——别留妖过夜。"}
 };
 function curActN(){ let n=1; DAYS.forEach(d=>{ if(st&&st.day>=d.day&&d.act){ const v=+d.act.slice(3); if(v>n) n=v; } }); return Math.min(5,Math.max(1,n)); }
 function npcActTopic(id){ const m=NPC_MATRIX[id]; return m&&m["act"+curActN()]; }
@@ -532,7 +532,7 @@ function defState(){
     dsKey:"", personas:{}, aiBrief:{},
     dialogue:[],
     npcGrowth:{},
-    hp:88, energy:24, quizOk:0, quizAttempts:{}, created:new Date().toISOString()};
+    hp:88, energy:24, quizOk:0, quizAttempts:{}, cutscenes:{}, dailyCtx:{}, created:new Date().toISOString()};
 }
 let st=null, view="chat", questTimer=0;
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){} }
@@ -546,6 +546,8 @@ function reconcile(){
   st.cards=st.cards||{}; st.seenHearts=st.seenHearts||{};
   st.edits=st.edits||{}; st._treeExp=st._treeExp||{};
   st.personas=st.personas||{}; st.aiBrief=st.aiBrief||{};
+  st.cutscenes=st.cutscenes||{};
+  st.dailyCtx=st.dailyCtx||{};
   /* 世界观重构后：清除含已淘汰旧概念的人设/任务说明缓存，强制用新设定重生成 */
   (function purgeObsolete(){
     const obs=["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者"];
@@ -1612,6 +1614,67 @@ function settleQuest(q,quizPerfect,ov){
   WDFx.questDone(q.xp,q.coin);
   SFX.win(); if(ov)ov.remove(); checkAch(); checkLevelUp(); save(); render();
   toast(doneLine(q,byDay[q.day])||"完成");
+  /* 剧情过场触发：BOSS 任务完成 → 阶段性仪式；首次完成任务 → 绑定/契约节点 */
+  if(q.id&&q.id.endsWith("BOSS")) triggerCutscene("act"+curActN());
+  else if(q.kind==="main"&&Object.keys(st.done).filter(k=>k.startsWith("D")&&k.endsWith("M")).length===1) triggerCutscene("bind");
+  else if(q.kind==="main"&&Object.keys(st.done).filter(k=>k.startsWith("D")&&k.endsWith("M")).length===2) triggerCutscene("pact");
+}
+/* ==================== 剧情过场机制（云蘅与玩家一问一答）====================
+   关键节点：arrive(降临) bind(绑定) pact(契约) act1-5(阶段性仪式) final(最终就职)
+   过场由 AI 根据背景和故事线虚构，简短沉浸，自然融入对话流。
+   本地兜底话术同步落流，AI 在线时异步润色就地替换。 */
+const CUTSCENE_NODES={
+  arrive:{label:"降临",local:"你……你是谁？怎么会突然出现在圣仪阵中？——等等，我感觉到了，你和我……绑定在一起了？"},
+  bind:{label:"绑定",local:"果然，你我之间的绑定是真实的。你身上有异界的气息，却意外契合圣仪——你愿不愿意留下来，帮我完成就职仪式？"},
+  pact:{label:"灵魂契约",local:"璇玑说她能感应到你的记忆了？灵魂契约一旦结成，她的星盘就能照见你学到的一切——这倒是天大的助力。你说，咱们三个这样算不算一伙了？"},
+  act1:{label:"第一幕·山河仪式",local:"山河游学这一程走下来，我感觉到圣女之力醒了一缕——是你帮我激活的封印。雾在退一点点了，你感觉到了吗？"},
+  act2:{label:"第二幕·律法仪式",local:"律法塔的封印被你斩开了，圣女之力又醒了一寸。铁面说很久没人能把那一百零八道法条全数重激活——你真是……让我刮目相看。"},
+  act3:{label:"第三幕·行会仪式",local:"行会风云这一战打下来，柳首座说你的接待心法已入化境。我这边圣女之力恢复过半了，圣器开始有微光——再坚持一下，雾就快散了。"},
+  act4:{label:"第四幕·遗迹仪式",local:"遗迹探秘最后一枚封印激活，璇玑说错题妖已所剩无几。圣女之力恢复七成，圣器光华大盛——金榜台就在前方，最后一程了。"},
+  act5:{label:"终幕·金榜台",local:"你真的做到了——四十五日，五幕试炼，全部通关。圣女之力此刻完全恢复了，我能驾驭圣器了……雾，正在散。这座城的光，是你唤回来的。"},
+  final:{label:"最终就职",local:"从今天起，你就是这座次元最后一位神圣导游。而我——圣女云蘅，终于能再次握住圣器，守住这座城。这一路……谢谢你愿意留下来陪我。"}
+};
+function triggerCutscene(node){
+  if(!node) return;
+  const cs=CUTSCENE_NODES[node];
+  if(!cs) return;
+  /* 防止同一节点重复触发 */
+  st.cutscenes=st.cutscenes||{};
+  if(st.cutscenes[node]) return;
+  st.cutscenes[node]=new Date().toISOString();
+  save();
+  /* 云蘅发起剧情过场，本地兜底话术落流 */
+  const msg={id:"cs_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),role:"npc",npc:"yunheng",
+    text:cs.local,cutscene:node,at:new Date().toISOString(),day:st.day};
+  st.dialogue.push(msg);
+  if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+  record("剧情过场",cs.label);
+  /* AI 在线时异步润色为一问一答形式（不耗灵力，同云蘅结算润色模式） */
+  refineCutscene(msg.id,node);
+  /* 自动切到对话视图，让玩家看到过场 */
+  if(typeof view!=="undefined"&&view!=="chat") switchView("chat");
+  else if(view==="chat") renderChat(true);
+  toast("剧情过场 · "+cs.label,"gold");
+}
+/* 剧情过场 AI 润色：就地替换本地兜底为更生动的一问一答 */
+function refineCutscene(id,node){
+  if(!window.WDChat||!WDChat.sysPrompt||!dsReady()) return;
+  const cs=CUTSCENE_NODES[node]; if(!cs) return;
+  const sys=WDChat.sysPrompt("yunheng",false)
+    +"\n\n【剧情过场任务】这是「"+cs.label+"」节点的剧情过场。请把本地兜底话术润色为更生动的一问一答形式："
+    +"云蘅先问玩家一个问题或说一段话（含世界观与角色性格，体现爱慕与忧切），"
+    +"然后用旁白或云蘅的补充推进一小段剧情，最后以云蘅的请求或期盼结尾。"
+    +"≤180字，自然沉浸，不剧透后续节点。";
+  const user="本地兜底话术：「"+cs.local+"」\n请润色为更生动的一问一答剧情过场。";
+  dsChat([{role:"system",content:sys},{role:"user",content:user}],true).then(raw=>{
+    const txt=(raw||"").trim();
+    if(!txt||txt.length<10) return;
+    const idx=st.dialogue.findIndex(m=>m&&m.id===id);
+    if(idx<0) return;
+    st.dialogue[idx].text=txt;
+    save();
+    if(view==="chat") renderChat(true);
+  }).catch(()=>{});
 }
 /* 云蘅结算本地模板（降级兜底 + AI 润色前的即时版本）：三段式——总结/经验/引导 */
 function yunhengSettleLocal(q,nq,perfect){
@@ -2960,18 +3023,19 @@ function intro(){
   st=defState();
   const ov=document.createElement("div"); ov.className="ov";
   ov.innerHTML=`<div class="dlg" style="max-width:540px;text-align:center">
-    <div class="mt" style="letter-spacing:.3em">序 章</div>
+    <div class="mt" style="letter-spacing:.3em">序 章 · 降临</div>
     <h2 style="font-size:24px;letter-spacing:.2em">问道之旅 · 四十五日</h2>
     <div class="sec" style="text-align:left;font-size:14.5px">
-      <p>你所在的自在世界意外跌入「导游异次元」。遗忘之雾正在吞噬一切，唯有通关导游试炼，才能驱散迷雾、重返家园。</p>
-      <p>四十五日之内，通过五幕试炼、踏上金榜台的人，能唤回这座城的光。</p>
-      <p>你是误入此界的外来者——<b>${esc(st.player)}</b>。迷雾笼罩的城门前，青玄先生与几位传奇导游，已候你多时。</p>
+      <p>你意外降临「导游次元」——一个正被遗忘之雾吞噬的娘化世界。所有居民皆为女性，唯独你是男性外来者。</p>
+      <p>这座次元最后的净土是北京。圣女候选云蘅正在此举行神圣导游就职仪式，却在仪式中途遭遗忘之雾侵袭——你的降临打断了仪式，却也让你与云蘅形成了绑定。记忆精灵璇玑也在混乱中与你意外建立灵魂契约。</p>
+      <p>四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力，用导游圣器驱逐遗忘之雾。</p>
+      <p>你是误入此界的外来者——<b>${esc(st.player)}</b>。云蘅与几位传奇导游，已候你多时。</p>
       <p class="note" style="border-left-color:var(--hair)">一切修行都在此处完成：读卷、试炼、录音、巡夜、星盘。无需他物。</p>
     </div>
-    <div class="foot" style="justify-content:center"><button class="btn primary" id="begin">踏入导游试炼，启程</button></div>
+    <div class="foot" style="justify-content:center"><button class="btn primary" id="begin">降临导游次元，启程</button></div>
   </div>`;
   document.body.appendChild(ov);
-  $("#begin",ov).onpointerdown=()=>{ ov.remove(); save(); render(); };
+  $("#begin",ov).onpointerdown=()=>{ ov.remove(); save(); render(); triggerCutscene("arrive"); };
 }
 function record(ev, x){ st.log=st.log||[]; st.log.push({at:new Date().toISOString(), ev, x}); }
 function boot(){

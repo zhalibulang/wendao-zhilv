@@ -201,6 +201,62 @@ const driver=`
     const ctx=WDChat.buildContext('yunheng','这关怎么过',null);
     if(!ctx.includes('当前关卡'))throw new Error('上下文缺当前关卡段');
   });
+  /* ===== 情境生成机制（每日首次互动）===== */
+  run('WDChat 每日情境生成：结构完整性',()=>{
+    reset();
+    const dc=WDChat.generateDailyContext('yunheng');
+    if(!dc||!dc.weather||!dc.weatherDesc||!dc.activity||!dc.envEvent)
+      throw new Error('情境结构不完整：'+JSON.stringify(dc));
+    if(typeof dc.powerProgress!=='number'||dc.powerProgress<0||dc.powerProgress>100)
+      throw new Error('圣女力量恢复进度异常：'+dc.powerProgress);
+  });
+  run('WDChat 情境确定性：同日同NPC结果一致',()=>{
+    reset(); st.day=5;
+    const a=WDChat.generateDailyContext('tiemian');
+    const b=WDChat.generateDailyContext('tiemian');
+    if(a.weather!==b.weather||a.activity!==b.activity)
+      throw new Error('同日同NPC情境应确定性一致');
+  });
+  run('WDChat 情境多样性：不同NPC/日次有差异',()=>{
+    reset(); st.day=1;
+    const ya=WDChat.generateDailyContext('yunheng');
+    const yb=WDChat.generateDailyContext('xuanji');
+    if(ya.weather===yb.weather&&ya.activity===yb.activity)
+      throw new Error('不同NPC情境应存在差异');
+    st.day=10;
+    const yc=WDChat.generateDailyContext('yunheng');
+    if(yc.day!==10)throw new Error('情境日次未反映');
+  });
+  run('WDChat 每日首次互动：情境注入buildContext',()=>{
+    reset();
+    const ctx1=WDChat.buildContext('yunheng','你好',null);
+    if(!ctx1.includes('当日情境'))throw new Error('首次互动应注入当日情境');
+    if(!ctx1.includes('首次交流'))throw new Error('情境寒暄引导缺失');
+    /* 第二次调用：当日情境不再注入 */
+    const ctx2=WDChat.buildContext('yunheng','再聊',null);
+    if(ctx2.includes('当日情境'))throw new Error('非首次互动不应再注入情境');
+  });
+  run('WDChat 情境降级话术：首次含天气/活动',()=>{
+    reset();
+    const t=WDChat.fallback('yunheng','你好呀');
+    if(!t)throw new Error('降级话术为空');
+    /* 云蘅降级话术不应含已淘汰旧概念（引灯/掌灯/灯影等） */
+    if(/引灯|掌灯|灯影/.test(t))throw new Error('降级话术残留旧概念：'+t);
+  });
+  run('WDChat 情境按NPC活动池区分',()=>{
+    reset();
+    const y=WDChat.generateDailyContext('yunheng');
+    const s=WDChat.generateDailyContext('smq');
+    /* 不同NPC的活动状态应来自各自专属池 */
+    if(y.activity===s.activity)throw new Error('不同NPC活动状态应区分');
+    /* 云蘅活动应提及圣女/圣器/圣殿等关键词 */
+    if(!/圣女|圣器|圣殿|圣仪|就职|金榜/.test(y.activity))
+      throw new Error('云蘅活动未体现圣女候选设定：'+y.activity);
+    /* 璇玑活动应提及星盘/记忆/灵魂绑定等关键词 */
+    const x=WDChat.generateDailyContext('xuanji');
+    if(!/星盘|记忆|灵魂|卦象|错题/.test(x.activity))
+      throw new Error('璇玑活动未体现记忆精灵设定：'+x.activity);
+  });
   /* ===== 自由发言路由 + NPC 名链接（需求四/五）===== */
   run('自由发言智能路由：职能关键词命中',()=>{
     reset(); st.unlocked=1;
@@ -298,7 +354,7 @@ const driver=`
     reset();
     const wb=WDChat.worldBrief();
     if(typeof wb!=='object')throw new Error('默认世界观应为结构对象');
-    if(!wb.世界观.includes('导游异次元'))throw new Error('新世界观未生效');
+    if(!wb.世界观.includes('导游次元'))throw new Error('新世界观未生效');
     if(!wb.隐喻系统.includes('遗忘怪'))throw new Error('新隐喻系统未生效');
     if(!Array.isArray(wb.NPC基础信息)||!wb.NPC基础信息[0].id)throw new Error('NPC 信息须保留 ID');
     // 自定义名/称号应进入背景信息，ID 保持系统值
@@ -409,8 +465,11 @@ const driver=`
     reset(); st.unlocked=1;
     const q=D.quests.find(x=>x.id==='D01M');
     settleQuest(q,false,null);
-    const yh=st.dialogue.filter(m=>m.role==='npc'&&m.npc==='yunheng').pop();
-    if(!/磕绊|星盘/.test(yh.text))throw new Error('有错时应提示复盘/星盘');
+    /* triggerCutscene("bind") 会在结算消息后追加一条云蘅剧情过场，
+       故检查所有云蘅消息中是否存在含「磕绊/星盘」的结算条目 */
+    const yhMsgs=st.dialogue.filter(m=>m.role==='npc'&&m.npc==='yunheng');
+    if(!yhMsgs.length)throw new Error('云蘅结算消息未落流');
+    if(!yhMsgs.some(m=>/磕绊|星盘/.test(m.text||"")))throw new Error('有错时应提示复盘/星盘');
   });
   run('对话流置底当前任务卡（无打字态时位于末尾）',()=>{
     reset(); st.unlocked=1;
