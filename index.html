@@ -3205,6 +3205,16 @@ async function genQuestBrief(q){
   if(!o.necessity&&o.brief) o.necessity=String(o.brief).slice(0,100);
   o.v=2;   /* v33 轻小说 schema：旧 prompt 生成的缓存一律失效重生成 */
   o.at=new Date().toISOString();
+  /* v43：导演合理性筛查——审核世界观/事理逻辑/情境/人物弧光，fail-open */
+  try{
+    if(window.WDChat&&WDChat.directorAudit){
+      const audit=await WDChat.directorAudit(o,{npcId:q.npc,quest:q,kind:"questbrief"});
+      if(!audit.pass&&audit.revised){
+        o=audit.revised;
+        if(o&&typeof o==="object"){ o.v=2; o.at=new Date().toISOString(); }
+      }
+    }
+  }catch(e){ /* 审核失败不阻断 */ }
   return o;
 }
 /* AI 出题：模仿真实考题，按复习阶段产生细微变化；失败时由调用方降级为静态题 */

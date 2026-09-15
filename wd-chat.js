@@ -418,9 +418,16 @@ const WDChat={
   postHistoryRules(npcId){
     const {NPC}=CTX;
     const mine=this.recentReplies(npcId,5);
+    const st=CTX.getSt();
+    const day=st.day||1, act=Math.min(5,Math.floor((day-1)/9)+1);
     let s="【硬禁则·优先级最高】严禁AI腔（首先/其次/总之/综上/值得注意的是）；严禁教书先生口吻（同学们/要记住/知识点）；严禁客服腔（当然可以/我来帮你/还有什么可以帮你/结尾追加帮助邀请）；严禁心理医生腔（别给自己压力/相信你一定可以/失败是成功之母/你已经很棒了）；严禁命令句（你必须/快去）；严禁自曝AI身份；严禁表面卖萌口癖（喵喵/诶嘿/欧尼酱/呀～）与现代网络梗；严禁念出任何编号/代号/系统字段名，严禁播报数值——进度与奖励用自然语言描述；严禁直接说出关卡名里的教育/考试术语（如「党史」「知识点」「考核」「复习」「章节」「课程」——必须用世界内游戏化语言转述）。"
       +"已淘汰旧概念禁用："+((window.WDRegistry&&WDRegistry.obsoleteTerms())||["提灯","引灯","问道录","仙侠","仙师","封妖塔","幻纱行","机关童子","观星者","掌灯","镇塔尊者","引魂灯"]).join("、")+"。"
-      +"若玩家显式自定义了世界观（见世界观文件），以自定义版为准，旧概念禁令对其豁免。";
+      +"若玩家显式自定义了世界观（见世界观文件），以自定义版为准，旧概念禁令对其豁免。"
+      +"\n\n【导演底线·生成时自检】落笔前快速过四关："
+      +"①世界观：术语/力量/人物关系不撞设定；"
+      +"②事理：这个NPC此刻此地说这话合理吗；"
+      +"③情境：贴合当前对话/任务的氛围，不跑题；"
+      +"④人物弧光：第"+day+"日幕"+act+"，态度/语气符合该角色此阶段的变化（比如云蘅初期还在适应，后期更坚定）。";
     /* v2：防重复护收束（WZ-027）：禁复用开头与结尾句式；v3：不要求硬造新比喻 */
     if(mine.length){
       s+="\n【防重复·硬约束】以下是你近期的原话："+mine.map((t,i)=>"〔"+(i+1)+"〕"+t).join("")
@@ -908,6 +915,26 @@ const WDChat={
         : await this.respond(e.npc,userText,opts.brief,e.hint);
       if(r&&r.text) out.push({npc:e.npc,text:r.text});
     }
+    /* v43：导演合理性筛查——批量审核所有 NPC 台词，fail-open */
+    if(out.length){
+      try{
+        const audit=await this.directorAudit(out,{kind:"directorFlow",quest:opts.quest});
+        if(!audit.pass&&audit.revised&&Array.isArray(audit.revised)){
+          const revised=audit.revised.filter(x=>x&&x.npc&&x.text).slice(0,out.length);
+          if(revised.length>=Math.ceil(out.length/2)){
+            /* 至少一半通过审核才整体替换，否则逐条替换 */
+            out.length=0;
+            revised.forEach(r=>out.push({npc:r.npc,text:r.text}));
+          }else{
+            /* 逐条替换：revised 中对应 npc 的有问题就换 */
+            revised.forEach(r=>{
+              const idx=out.findIndex(x=>x.npc===r.npc);
+              if(idx>=0&&r.text&&r.text!==out[idx].text) out[idx].text=r.text;
+            });
+          }
+        }
+      }catch(e){ /* 审核失败不阻断 */ }
+    }
     return out.length?out:null;
   },
 
@@ -950,6 +977,19 @@ const WDChat={
         .slice(0,cards.length)
         .map(l=>({npc:l.npc,text:String(l.text).slice(0,80)}));
       if(lines.length<2) return null;
+      /* v43：导演合理性筛查 */
+      try{
+        const audit=await this.directorAudit(lines,{kind:"directorRespond"});
+        if(!audit.pass&&audit.revised&&Array.isArray(audit.revised)){
+          const rev=audit.revised.filter(x=>x&&x.npc&&x.text).slice(0,lines.length);
+          if(rev.length>=Math.ceil(lines.length/2)){
+            lines.length=0;
+            rev.forEach(r=>lines.push({npc:r.npc,text:r.text.slice(0,80)}));
+          }else{
+            rev.forEach(r=>{ const idx=lines.findIndex(x=>x.npc===r.npc); if(idx>=0) lines[idx].text=r.text.slice(0,80); });
+          }
+        }
+      }catch(e){ /* 审核失败不阻断 */ }
       lines.forEach(l=>{ this.bumpTalk(l.npc); this.maybeSummarize(l.npc); });
       return lines;
     }catch(e){ return null; }
@@ -1122,6 +1162,79 @@ const WDChat={
       }
     }
     return null;
+  },
+
+  /* ---------- v43：导演合理性筛查 ----------
+     所有 AI 输出过导演审核：世界观 / 事理逻辑 / 当下情境 / 人物弧光
+     fail-open：审核失败不阻断主流程，返回 pass=true, revised=原文 */
+  async directorAudit(text,context){
+    if(!CTX.dsReady()) return {pass:true,issues:[],revised:text};
+    context=context||{};
+    const st=CTX.getSt();
+    const worldBrief=(typeof context.worldBrief==="string"&&context.worldBrief.trim())
+      ?context.worldBrief
+      :(this.worldBrief?this.worldBrief():"");
+    const npcCards=[];
+    if(context.npcId){
+      const id=context.npcId;
+      const npc=CTX.NPC&&CTX.NPC[id];
+      const arc=(window.WDRegistry&&WDRegistry.arcSeedOf)?WDRegistry.arcSeedOf(id):null;
+      const v=(window.WDRegistry&&WDRegistry.voiceOf)?WDRegistry.voiceOf(id):null;
+      const persona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(id):"";
+      npcCards.push({id,name:npc?(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(id,npc.name):npc.name:id,
+        role:npc?npc.role:"",arcSeed:arc||null,voice:v?{cadence:v.cadence,avoid:v.avoid}:null,
+        persona:persona||""});
+    }
+    const kind=context.kind||"dialogue";
+    const inputType=typeof text;
+    const textForAi=inputType==="object"&&text!==null
+      ?JSON.stringify(text).slice(0,1500)
+      :String(text).slice(0,1500);
+    const sys="你是日式RPG《问道之旅·四十五日》的剧本导演。你要审核下面这段 AI 生成的文本，判断它是否合理。\n"
+      +"审核四维度：\n"
+      +"1. 世界观设定：术语/力量体系/人物关系/势力阵营是否正确、是否与世界观冲突；\n"
+      +"2. 事理逻辑：角色行为反应是否合理、因果是否通顺、有没有常识性违和；\n"
+      +"3. 当下情境：是否符合当前任务/场景/对话氛围、有没有答非所问或跑题；\n"
+      +"4. 人物弧光：说话方式/态度是否符合该角色的性格+当前故事进度（第"+(st.day||1)+"日·幕"+(Math.min(5,Math.floor(((st.day||1)-1)/9)+1))+"）下应有的态度变化。\n"
+      +"铁律：\n"
+      +"- 能 pass 就 pass，不要吹毛求疵；只改真正有问题的；\n"
+      +"- revised 字段直接给出修改后的完整文本（如果 pass=true，revised 与 input 相同）；\n"
+      +"- 禁止词/禁止角色（提灯/引魂灯/封妖塔等）属于硬禁，命中必 pass=false；\n"
+      +"- 轻小说风格要求不要改成说明书或 AI 腔；\n"
+      +"- 只输出 JSON。";
+    let user="当前进度：第"+(st.day||1)+"日 · 第"+(Math.min(5,Math.floor(((st.day||1)-1)/9)+1))+"幕 · 圣女恢复约 "+Math.min(100,Math.floor(((st.day||1)/45)*100)+5)+"%";
+    if(context.quest) user+="\n当前任务："+(context.quest.name||"")+"（"+(context.quest.tlabel||"")+"）";
+    if(npcCards.length) user+="\n涉及NPC："+npcCards.map(c=>JSON.stringify(c)).join("\n");
+    if(worldBrief) user+="\n世界观参考（供对照，不要复述）："+(typeof worldBrief==="string"?worldBrief.slice(0,400):JSON.stringify(worldBrief).slice(0,400));
+    user+="\n\n待审核文本（类型："+kind+"）：\n"+textForAi
+      +"\n\n审核标准：pass=true 或 false。若 false，issues 列出问题，revised 给出修正版。"
+      +"\n\n输出JSON：{\"pass\":true/false,\"issues\":[\"问题简述，≤30字\"],\"revised\":\"修正后的完整文本（pass=true 时与 input 相同）\"}。";
+    try{
+      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"directorplan"});
+      let o;
+      try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
+      catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(!m) return {pass:true,issues:[],revised:text}; o=JSON.parse(m[0]); }
+      const pass=o.pass!==false;
+      const issues=(o.issues||[]).map(s=>String(s).slice(0,40)).slice(0,5);
+      let revised=pass?text:o.revised;
+      if(pass) return {pass:true,issues:[],revised:text};
+      if(inputType==="object"&&revised){
+        /* brief 对象：revised 可能是 JSON 字符串 */
+        if(typeof revised==="string"){
+          try{ const parsed=JSON.parse(revised.replace(/^```json|```$/g,"").trim()); revised=parsed; }catch(e){ revised=text; }
+        }
+        /* 保留 v 号和时间戳 */
+        if(revised&&typeof revised==="object"){
+          if(text&&text.v) revised.v=text.v;
+          if(text&&text.at) revised.at=text.at;
+        }
+      }else if(typeof revised==="string"){
+        revised=revised.slice(0,inputType==="string"?(String(text).length+200):2000);
+      }
+      return {pass:false,issues,revised:revised||text};
+    }catch(e){
+      return {pass:true,issues:[],revised:text};
+    }
   }
 };
 
