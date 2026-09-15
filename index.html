@@ -1156,7 +1156,18 @@ function heartNew(){
    - 标签（<span><em>等）即时输出，仅文字逐字显示，保证 HTML 结构完整
    - 点击委托绑定在 pageHost 上，typewriter 重建 innerHTML 后术语仍可点 */
 let twTimer=null, twState=null;
-const TW_SPEED=200; /* ms/char ≈ 300字/分（偏快的平均打字速度，提速1倍） */
+/* 打字机速度：默认 200ms/字，最大加速至 40ms/字（5倍），持久化到 localStorage */
+const TW_SPEED_DEFAULT=200, TW_SPEED_MIN=40, TW_SPEED_MAX=400;
+function twSpeed(){
+  try{
+    const v=parseInt(localStorage.getItem('twSpeed'),10);
+    if(!isNaN(v)&&v>=TW_SPEED_MIN&&v<=TW_SPEED_MAX) return v;
+  }catch(e){}
+  return TW_SPEED_DEFAULT;
+}
+function twSetSpeed(ms){
+  try{ localStorage.setItem('twSpeed',String(ms)); }catch(e){}
+}
 function stopTypewriter(){
   if(twTimer){ clearTimeout(twTimer); twTimer=null; }
   if(twState&&twState.items){ twState.items.forEach(it=>{ if(it.el) it.el.classList.remove('tw-active'); }); }
@@ -1209,7 +1220,7 @@ function twStep(){
     twState.idx++; twState.built='';
     twTimer=setTimeout(twStep,300); /* 段落间短暂停顿 */
   } else {
-    twTimer=setTimeout(twStep,TW_SPEED);
+    twTimer=setTimeout(twStep,twSpeed());
   }
 }
 function typewriterExpand(){
@@ -1372,7 +1383,11 @@ function openQuest(qid){
   </div>`;
   document.body.appendChild(ov);
   ov.onpointerdown=e=>{ if(e.target===ov) ov.remove(); };  // 点击遮罩背景关闭
-  // NPC 任务说明（统一模块）：AI 生成游戏隐喻叙事；v35 移除本地兜底池，AI 失败则提示重连
+  /* pageHost 需在 IIFE 前声明，因为 loadAiBrief IIFE 里的 briefDone 要引用 */
+  const pageHost=$("#pageHost",ov), pageNav=$("#pageNav",ov);
+  let twReady=false;
+  function briefDone(){ twReady=true; startTypewriter(pageHost); }
+  /* NPC 任务说明（统一模块）：AI 生成游戏隐喻叙事；v35 移除本地兜底池，AI 失败则提示重连 */
   (function loadAiBrief(){
     const host=$("#aiBriefHost",ov); if(!host) return;
     function failUi(msg){
@@ -1409,16 +1424,15 @@ function openQuest(qid){
       </div>`;
     }
     function tryGen(){
-      if(!dsReady()){ failUi("未配置 API 密钥"); return; }
+      if(!dsReady()){ failUi("未配置 API 密钥"); briefDone(); return; }
       const cached=st.aiBrief[q.id];
-      if(cached&&cached.v===2){ render(cached); return; }
+      if(cached&&cached.v===2){ render(cached); briefDone(); return; }
       host.innerHTML=`<div class="note" style="font-size:12px;color:var(--dim)">✦ ${esc(dName(npc.id))} 正在斟酌开场…</div>`;
-      genQuestBrief(q).then(o=>{ st.aiBrief[q.id]=o; save(); if(ov.isConnected) render(o); })
-        .catch(e=>{ if(ov.isConnected) failUi(e&&e.message?e.message:"生成失败"); });
+      genQuestBrief(q).then(o=>{ st.aiBrief[q.id]=o; save(); if(ov.isConnected){ render(o); briefDone(); } })
+        .catch(e=>{ if(ov.isConnected){ failUi(e&&e.message?e.message:"生成失败"); briefDone(); } });
     }
     tryGen();
   })();
-  const pageHost=$("#pageHost",ov), pageNav=$("#pageNav",ov);
   function drawPage(){
     pageHost.innerHTML=renderPage();
     pageNav.innerHTML=pages.length>1?`
@@ -1429,8 +1443,8 @@ function openQuest(qid){
     if(pv) pv.onpointerdown=()=>{ pageIdx--; drawPage(); };
     if(nx) nx.onpointerdown=()=>{ pageIdx++; drawPage(); };
     const rec=$("#recBtn"); if(rec) bindOralKit(pageHost);
-    /* 书页打字机效果：逐字显示，每次点击展开一段直至全部完成 */
-    startTypewriter(pageHost);
+    /* 书页打字机：先不启动，等 AI 生成的 NPC 对话/任务描述显示完再启动 */
+    if(twReady){ startTypewriter(pageHost); }
     /* 点击委托：术语(.gl)点击 + 书页区域点击展开打字机（不干扰按钮/朗读套件） */
     pageHost.onpointerdown=e=>{
       const gl=e.target.closest('.gl');
@@ -1716,45 +1730,51 @@ async function settleQuest(q,quizPerfect,ov){
   // 玩家行动自动入流：先落模板战报，AI 在线时异步润色（群聊里玩家先报，NPC 再接）
   const aid=pushAction("我交割了「"+qdn(q)+"」（+"+q.xp+"修行 +"+q.coin+"铜钱）。");
   refineAction(aid,q);
-  /* v36：任务完成反应——由导演统一编排 NPC 群聊反应。
-     流程：推玩家战报 → await directorFlow（AI 决定谁开口、什么类型、什么方向）→ 逐个 NPC 生成台词 → 落流。
-     directorFlow 失败时，fallback 到简短 doneLine 本地文本（不写"已交付"工具话）。 */
   const refs=[{qid:q.id}];
   const fresh=D.quests.filter(qq=>!qDone(qq.id)&&questUnlocked(qq)&&qq.prev&&qq.prev.includes(q.id));
   const nq=fresh[0]||null;
   if(nq) refs.push({qid:nq.id});
-  let questLines=null;
-  if(window.WDChat&&WDChat.directorFlow&&dsReady()){
-    try{
-      questLines=await WDChat.directorFlow("我刚把「"+qdn(q)+"」做完了。",{targets:[q.npc],kind:"questreact",quest:q,tools:(st.agentFlags||{}).tools});
-    }catch(e){ /* 导演失败 → fallback */ questLines=null; }
-  }
-  if(questLines&&questLines.length){
-    questLines.forEach(l=>{
-      st.dialogue.push({role:"npc",npc:l.npc,text:l.text,refs,at:new Date().toISOString(),day:st.day});
-    });
-  } else {
-    /* AI 不可用 → 本地简短兜底（doneLine/pubLine 已被 v35 AI 化，但 questLines 未命中时返回占位） */
-    const fallback=WDChat.fallbackQuestReaction?qdn(q)+"已完成。":qdn(q)+"已交割。";
-    st.dialogue.push({role:"npc",npc:q.npc,text:fallback,refs,at:new Date().toISOString(),day:st.day});
-  }
-  if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-  /* 引路人云蘅结算接棒（需求1）：任务NPC结算回复之后立即给出——任务总结+经验分析+下一任务引导。
-     本地模板同步落流（<200ms），AI 在线时异步润色就地替换（不耗灵力，同战报润色模式） */
+  /* —— 第一阶段（同步，<200ms）：落本地兜底 + 云蘅模板 + 关弹窗 + 播特效 + 渲染 ——
+     让用户立即看到"完成"反馈，不被 AI 调用阻塞。 */
+  const fallbackText=qdn(q)+"已完成。";
+  st.dialogue.push({role:"npc",npc:q.npc,text:fallbackText,refs,at:new Date().toISOString(),day:st.day});
   const ymsg={id:"yh_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),role:"npc",npc:"yunheng",
     text:yunhengSettleLocal(q,nq,quizPerfect),refs:[{qid:q.id}].concat(nq?[{qid:nq.id}]:[]),
     at:new Date().toISOString(),day:st.day};
   st.dialogue.push(ymsg);
   if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-  refineYunheng(ymsg.id,q,nq,quizPerfect);
-  // NPC 个人故事线：随任务里程碑自然续写
-  WDChat.storyAppend(q.npc,"与玩家并肩，见证了「"+qdn(q)+"」的交付");
-  // 交付特效：完成印章 + 修行/铜钱飘字 + 金粒子
   WDFx.questDone(q.xp,q.coin);
-  SFX.win(); if(ov)ov.remove(); checkAch(); checkLevelUp(); save(); render();
+  SFX.win();
+  if(ov) ov.remove();
+  checkAch(); checkLevelUp(); save(); render();
   toast(doneLine(q,byDay[q.day])||"完成");
-  /* 剧情过场触发：BOSS 任务完成 → 阶段性仪式；首次完成任务 → 绑定/契约节点 */
-  /* v29（e2e 发现 BUG-005）：BOSS 过场按「BOSS 所属幕」触发——原实现 curActN() 在 unlocked/maybeUnlockDay 推进 st.day 之后计算，幕号错位一格，且 final（最终就职）节点成死代码永不触发 */
+  /* —— 第二阶段（异步，不阻塞 UI）：导演编排 NPC 反应 + 云蘅润色 + 剧情过场 ——
+     用 .then 链式调用，不 await，让第一阶段立即返回。 */
+  if(window.WDChat&&WDChat.directorFlow&&dsReady()){
+    WDChat.directorFlow("我刚把「"+qdn(q)+"」做完了。",{targets:[q.npc],kind:"questreact",quest:q,tools:(st.agentFlags||{}).tools})
+      .then(questLines=>{
+        if(questLines&&questLines.length){
+          /* 替换 fallback 任务NPC文本为 AI 生成 */
+          const ackIdx=st.dialogue.findIndex(m=>m&&m.role==="npc"&&m.npc===q.npc&&(m.text||"").includes("已完成"));
+          if(ackIdx>=0){
+            const taskLine=questLines.find(l=>l.npc===q.npc);
+            if(taskLine){ st.dialogue[ackIdx].text=taskLine.text; }
+          }
+          /* 其他 NPC 插话追加 */
+          questLines.filter(l=>l.npc!==q.npc).forEach(l=>{
+            st.dialogue.push({role:"npc",npc:l.npc,text:l.text,refs,at:new Date().toISOString(),day:st.day});
+          });
+          if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+        }
+        refineYunheng(ymsg.id,q,nq,quizPerfect);
+        if(WDChat.storyAppend) WDChat.storyAppend(q.npc,"与玩家并肩，见证了「"+qdn(q)+"」的交付");
+        save(); renderChat();
+      })
+      .catch(()=>{ refineYunheng(ymsg.id,q,nq,quizPerfect); });
+  } else {
+    refineYunheng(ymsg.id,q,nq,quizPerfect);
+  }
+  /* —— 第三阶段：剧情过场触发 —— */
   if(q.id&&q.id.endsWith("BOSS")){
     const actStr=(byDay[q.day]&&byDay[q.day].act)||("act"+curActN());
     if(actStr==="act5"){ triggerCutscene("final"); }
@@ -2549,6 +2569,16 @@ function renderCfg(){
     <div class="note">NPC 可查询真实任务链/考点库/你的学习统计后再回答，回复基于真实数据（需要 DeepSeek 密钥）。</div>
     <div class="cfgrow" style="margin-top:8px"><button class="btn sm" type="button" data-agentflag="proactive">主动传音：NPC 主动关心（${(st.agentFlags&&st.agentFlags.proactive!==false)?"ON":"OFF"}）</button></div>
     <div class="note">连续两日未复习、错题积压、关卡滞留时，NPC 会主动发消息（本地规则触发，每日最多 3 条）。</div>
+    <div style="border-top:1px dashed var(--ink2);margin-top:14px;padding-top:10px">
+      <div style="font-size:12px;color:var(--cyber);margin-bottom:6px">✦ 体验调节 · 打字机速度</div>
+      <div class="cfgrow" style="align-items:center;gap:10px">
+        <span style="font-size:11px;color:var(--dim);white-space:nowrap">慢</span>
+        <input type="range" id="twSpeedSlider" min="${TW_SPEED_MIN}" max="${TW_SPEED_MAX}" step="10" value="${twSpeed()}" style="flex:1;accent-color:var(--cyber);cursor:pointer">
+        <span style="font-size:11px;color:var(--dim);white-space:nowrap">快</span>
+        <span id="twSpeedLabel" style="font-size:11px;color:var(--gold);min-width:54px;text-align:right">${twSpeed()}ms</span>
+      </div>
+      <div class="note">范围 ${TW_SPEED_MAX}ms～${TW_SPEED_MIN}ms（5倍加速），默认 200ms；即时生效，持久化到本机。</div>
+    </div>
   </div>
   <div class="cfgpane on" data-pane="av">
     <div class="note">JPG / PNG，≤5MB，分辨率不低于 200×200；上传后居中方形裁剪并压缩为 240px 存于本机，离线可用。拍摄照片会抹除 EXIF 定位信息。</div>
@@ -2669,6 +2699,16 @@ function renderCfg(){
       ov.remove(); renderCfg(); /* 重渲染刷新按钮状态 */
     };
   });
+  /* 打字机速度滑轨 */
+  const twSlider=$("#twSpeedSlider",ov), twLabel=$("#twSpeedLabel",ov);
+  if(twSlider&&twLabel){
+    twSlider.oninput=()=>{
+      const v=parseInt(twSlider.value,10);
+      twSetSpeed(v);
+      twLabel.textContent=v+"ms";
+    };
+    twSlider.onpointerdown=()=>SFX.tap();
+  }
   ov.querySelectorAll(".cfgtabs button").forEach(b=>{
     b.onpointerdown=()=>{ SFX.tap();
       ov.querySelectorAll(".cfgtabs button").forEach(x=>x.classList.toggle("on",x===b));

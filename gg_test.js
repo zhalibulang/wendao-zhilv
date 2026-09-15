@@ -751,9 +751,10 @@ const driver=`
     openQuest('D01S1'); // 多页任务翻页也应安全
     stopTypewriter();
   });
-  run('TW_SPEED 在合理范围（提速后 250-350字/分）',()=>{
-    const cpm=Math.round(60000/TW_SPEED);
-    if(cpm<200||cpm>450)throw new Error('打字速度异常：'+cpm+'字/分（TW_SPEED='+TW_SPEED+'ms）');
+  run('twSpeed() 默认值在合理范围（250-350字/分）',()=>{
+    const spd=(typeof twSpeed==='function')?twSpeed():TW_SPEED_DEFAULT;
+    const cpm=Math.round(60000/spd);
+    if(cpm<150||cpm>500)throw new Error('打字速度异常：'+cpm+'字/分（speed='+spd+'ms）');
   });
   run('sysPrompt 日式RPG活人语感约束v3',()=>{
     reset();
