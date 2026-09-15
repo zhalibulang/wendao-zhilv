@@ -1391,7 +1391,7 @@ function openQuest(qid){
     out=out.replace(/(《[^》]{2,12}》)/g,'<b>$1</b>');
     return out;
   }
-  ov.innerHTML=`<div class="dlg" style="max-height:90vh;display:flex;flex-direction:column">
+  ov.innerHTML=`<div class="dlg" style="height:90vh;display:flex;flex-direction:column">
     <button class="close" id="qx">×</button>
     <div class="mt">第 ${q.day} 日 · ${q.tlabel} · ${fmtDur(q.dur)} · 主线${q.kind==="main"?"":"支线"}</div>
     <h2>${esc(q.name)}</h2>
@@ -1467,9 +1467,9 @@ function openQuest(qid){
     });
     if(o.metaphor) lines.push({html:`<div style="text-align:center;color:var(--gold);font-size:12px;font-style:italic;margin:12px 0">「${esc(o.metaphor)}」</div>`});
     dialogTotal=lines.length;
-    stageHost.innerHTML=`<div class="qdial" style="padding:6px">
-      <div style="font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:.12em;text-align:center">关卡 · ${esc(questMetaphorTxt)}</div>
-      <div id="qdialList"></div>
+    stageHost.innerHTML=`<div class="qdial" style="padding:6px;display:flex;flex-direction:column;height:100%">
+      <div style="font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:.12em;text-align:center;flex-shrink:0">关卡 · ${esc(questMetaphorTxt)}</div>
+      <div id="qdialList" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px"></div>
       ${hintHtml()}
     </div>`;
     const list=$("#qdialList",stageHost);
@@ -1491,8 +1491,8 @@ function openQuest(qid){
     const el=list.children[dialogShown];
     if(el){ el.classList.remove("qdial-hidden"); el.classList.add("qdial-pop"); SFX.tap(); }
     dialogShown++;
-    /* 自动滚动到底部 */
-    stageHost.scrollTop=stageHost.scrollHeight;
+    /* 自动滚动到底部（仿微信聊天） */
+    list.scrollTop=list.scrollHeight;
     if(dialogShown<dialogTotal){
       dialogTimer=setTimeout(revealDialogLine,700+Math.random()*350);
     } else {
@@ -1510,7 +1510,7 @@ function openQuest(qid){
         }
       }
       dialogShown=dialogTotal; dialogDone=true;
-      stageHost.scrollTop=stageHost.scrollHeight;
+      if(list) list.scrollTop=list.scrollHeight;
       setHint("▼ 轻触继续 · 领取任务清单");
       return;
     }
