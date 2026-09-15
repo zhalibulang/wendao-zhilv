@@ -1703,7 +1703,7 @@ function openQuest(qid){
   if(finBtn) finBtn.onpointerdown=()=>{ settleQuest(q,quizPerfect,ov); };
 }
 /* ---------- 任务结算（finBtn 抽取为全局函数，便于测试与复用） ---------- */
-function settleQuest(q,quizPerfect,ov){
+async function settleQuest(q,quizPerfect,ov){
   st.xp+=q.xp; st.coin+=q.coin; st.done[q.id]=new Date().toISOString();
   /* v29（FIX-B/D-6）：主动触发器埋点——任务结算即学习行为，刷新学习时间戳（供未复习关怀规则） */
   st.lastStudyAt=new Date().toISOString();
@@ -1716,17 +1716,28 @@ function settleQuest(q,quizPerfect,ov){
   // 玩家行动自动入流：先落模板战报，AI 在线时异步润色（群聊里玩家先报，NPC 再接）
   const aid=pushAction("我交割了「"+qdn(q)+"」（+"+q.xp+"修行 +"+q.coin+"铜钱）。");
   refineAction(aid,q);
-  // 三节点之②③合并为一条群聊消息（NPC 不连发多条）：认可 + 后续任务预告，refs 携带任务跳转
-  const fresh=D.quests.filter(qq=>!qDone(qq.id)&&questUnlocked(qq)&&qq.prev&&qq.prev.includes(q.id));
-  let ackText=(doneLine(q,byDay[q.day])||"很好。")+"「"+qdn(q)+"」已交付。";
+  /* v36：任务完成反应——由导演统一编排 NPC 群聊反应。
+     流程：推玩家战报 → await directorFlow（AI 决定谁开口、什么类型、什么方向）→ 逐个 NPC 生成台词 → 落流。
+     directorFlow 失败时，fallback 到简短 doneLine 本地文本（不写"已交付"工具话）。 */
   const refs=[{qid:q.id}];
+  const fresh=D.quests.filter(qq=>!qDone(qq.id)&&questUnlocked(qq)&&qq.prev&&qq.prev.includes(q.id));
   const nq=fresh[0]||null;
-  if(nq){
-    const nd=byDay[nq.day];
-    ackText+=" "+(pubLine(nq,nd)||"新的一程开启了。")+"「"+qdn(nq)+"」已现形，随到随打。";
-    refs.push({qid:nq.id});
+  if(nq) refs.push({qid:nq.id});
+  let questLines=null;
+  if(window.WDChat&&WDChat.directorFlow&&dsReady()){
+    try{
+      questLines=await WDChat.directorFlow("我刚把「"+qdn(q)+"」做完了。",{targets:[q.npc],kind:"questreact",quest:q,tools:(st.agentFlags||{}).tools});
+    }catch(e){ /* 导演失败 → fallback */ questLines=null; }
   }
-  st.dialogue.push({role:"npc",npc:q.npc,text:ackText,refs,at:new Date().toISOString(),day:st.day});
+  if(questLines&&questLines.length){
+    questLines.forEach(l=>{
+      st.dialogue.push({role:"npc",npc:l.npc,text:l.text,refs,at:new Date().toISOString(),day:st.day});
+    });
+  } else {
+    /* AI 不可用 → 本地简短兜底（doneLine/pubLine 已被 v35 AI 化，但 questLines 未命中时返回占位） */
+    const fallback=WDChat.fallbackQuestReaction?qdn(q)+"已完成。":qdn(q)+"已交割。";
+    st.dialogue.push({role:"npc",npc:q.npc,text:fallback,refs,at:new Date().toISOString(),day:st.day});
+  }
   if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
   /* 引路人云蘅结算接棒（需求1）：任务NPC结算回复之后立即给出——任务总结+经验分析+下一任务引导。
      本地模板同步落流（<200ms），AI 在线时异步润色就地替换（不耗灵力，同战报润色模式） */
@@ -1736,22 +1747,6 @@ function settleQuest(q,quizPerfect,ov){
   st.dialogue.push(ymsg);
   if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
   refineYunheng(ymsg.id,q,nq,quizPerfect);
-  // v36：任务完成反应——导演决定任务NPC+其他可能插话者，AI生成有性格的反应
-  if(window.WDChat&&WDChat.directorFlow&&dsReady()){
-    WDChat.directorFlow("玩家交割了「"+qdn(q)+"」。",{targets:[q.npc],kind:"questreact",quest:q,tools:(st.agentFlags||{}).tools}).then(lines=>{
-      if(!lines||!lines.length) return;
-      const ackIdx=st.dialogue.findIndex(m=>m&&m.role==="npc"&&m.npc===q.npc&&(m.text||"").includes("已交付"));
-      if(ackIdx>=0){
-        const taskLine=lines.find(l=>l.npc===q.npc);
-        if(taskLine) st.dialogue[ackIdx].text=taskLine.text;
-      }
-      lines.filter(l=>l.npc!==q.npc).forEach(l=>{
-        st.dialogue.push({role:"npc",npc:l.npc,text:l.text,refs:[{qid:q.id}],at:new Date().toISOString(),day:st.day});
-      });
-      if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-      save(); renderChat();
-    }).catch(()=>{});
-  }
   // NPC 个人故事线：随任务里程碑自然续写
   WDChat.storyAppend(q.npc,"与玩家并肩，见证了「"+qdn(q)+"」的交付");
   // 交付特效：完成印章 + 修行/铜钱飘字 + 金粒子
@@ -3732,6 +3727,14 @@ function introNarrative(){
         if(!lead) lead=narrativeLead(s);
       }else if(wb&&typeof wb==="object"){
         lead=narrativeFromJson(wb);
+      }
+      /* v36：过滤 NPC 人设污染——如果 lead 里包含大量"X导游，XXXX"模式（NPC 列表描述），
+         那是用户把 NPC 人设混在了世界观里，回退到默认叙事 */
+      if(lead){
+        const npcNoise=(lead.match(/导游/g)||[]).length;
+        if(npcNoise>=3||/文脉导游|山河导游|律法导游|古迹导游|记忆导游|接待导游/.test(lead)&&/成熟|知性|腹黑|活泼|豪爽|温婉|机灵|神秘|妩媚|冷面/.test(lead)){
+          lead="";
+        }
       }
       if(lead) return lead;
     }

@@ -645,11 +645,11 @@ const driver=`
     if(!dayHtml.includes('data-toggle='))throw new Error('日节点缺 data-toggle（折叠失效）');
     if(!dayHtml.includes('data-expanded='))throw new Error('日节点缺展开态');
   });
-  run('云蘅结算回应：任务NPC之后接棒，占位含口播名且不念数值',()=>{
+  run('云蘅结算回应：任务NPC之后接棒，占位含口播名且不念数值',async ()=>{
     reset(); st.unlocked=1;
     const q=D.quests.find(x=>x.id==='D01M');
-    settleQuest(q,true,null);
-    const idxAck=st.dialogue.findIndex(m=>m.role==='npc'&&m.npc===q.npc&&(m.text||'').includes('已交付'));
+    await settleQuest(q,true,null);
+    const idxAck=st.dialogue.findIndex(m=>m.role==='npc'&&m.npc===q.npc);
     const idxYh=st.dialogue.findIndex(m=>m.role==='npc'&&m.npc==='yunheng');
     if(idxAck<0)throw new Error('任务NPC结算回复缺失');
     if(idxYh<0)throw new Error('云蘅结算回应缺失');
@@ -662,10 +662,10 @@ const driver=`
     if(typeof refineYunheng!=='function')throw new Error('refineYunheng AI 路径应存在');
     if(!qDone(q.id)||st.xp<q.xp)throw new Error('结算未生效（done/修行）');
   });
-  run('云蘅结算回应：AI 路径 refineYunheng 存在（有错时由 AI 生成复盘引导）',()=>{
+  run('云蘅结算回应：AI 路径 refineYunheng 存在（有错时由 AI 生成复盘引导）',async ()=>{
     reset(); st.unlocked=1;
     const q=D.quests.find(x=>x.id==='D01M');
-    settleQuest(q,false,null);
+    await settleQuest(q,false,null);
     const yhMsgs=st.dialogue.filter(m=>m.role==='npc'&&m.npc==='yunheng');
     if(!yhMsgs.length)throw new Error('云蘅结算消息未落流');
     /* v35：有错时的复盘引导由 refineYunheng(AI)生成；无 AI 时保留占位。验证函数已挂载。 */

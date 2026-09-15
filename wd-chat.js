@@ -830,14 +830,19 @@ const WDChat={
     const userDoc=(window.WDCfg&&WDCfg.directorDoc)?WDCfg.directorDoc():"";
     let sys=userDoc&&userDoc.trim()
       ?userDoc.trim()
-      :("你是日式RPG《问道之旅·四十五日》的群聊导演。看完玩家这句话与近期对话，决定接下来哪些NPC该开口、按什么顺序、用什么反应类型。"
-        +"反应类型：respond(正常接话) / interject(插话，多为半句或语气词) / react(对他人的反应) / guide(把话题轻拽回正事/任务方向)。"
-        +"通常1-2人开口，极少超过3人。被@的人通常必回应；未被@的人只在她的性格确实会被勾起时插话。"
-        +"hint用≤20字给该NPC这一句的方向，不要替她写台词。");
+      :("你是日式RPG《问道之旅·四十五日》的群聊导演。看完下面的信息，决定接下来哪些NPC该开口、按什么顺序、用什么反应类型。\n"
+        +"【反应类型】respond(正常接话) / interject(插话，多为半句或语气词) / react(对他人的反应) / guide(把话题轻拽回正事，但不许生硬)。\n"
+        +"【活人感·铁律】"
+        +"1）NPC首先是有自己生活的居民，不是任务派发器或报告器——她们可以聊自己正在做的事、想起的事、对眼前场景的感想，不必每次都和任务相关；"
+        +"2）反应必须多样：有人接话、有人吐槽、有人只给一个语气词、有人冷淡、有人听错重点、有人接别人的话茬、有人突然想起别的事；"
+        +"3）禁止让NPC轮流报告进度、轮流说鼓励话、轮流报数值——七个人不能说七个意思相近的句子；"
+        +"4）hint是给NPC这一句的方向（≤20字），不是替她写台词，不要写「请说……」「你要表达……」这种指令；"
+        +"5）通常1-2人开口，极少超过3人。被@的人通常必回应；未被@的人只在她的性格确实会被勾起时插话。\n"
+        +"【任务完成场景特别注意】不要让NPC说「XX已交付」「任务完成」这种报告式台词——那是系统该干的事。NPC的第一反应应该像队友看到同伴刚干完活：也许随口夸一句、也许吐槽选这关太折腾、也许接别人的话茬、也许什么都不说只应一声、也许突然想起自己有别的事要忙。");
     if(kind==="questreact"&&!(userDoc&&userDoc.trim())){
-      sys+="玩家刚交付关卡，任务NPC应给一个有性格的、非「已交付」式模板的反应；其他人若性格上会接才插话。";
+      sys+="任务NPC的反应尤其要活人：刚见证了队友通关，她第一反应不是「已交付」——可能是「嚯，这一关居然真被你啃下来了。」「行吧，算是过了。」「……你手怎么脏的？」这种。";
     }
-    sys+="只输出JSON。";
+    sys+="\n只输出JSON。";
     let user="在场角色与各自说话方式：\n"+cards.map(c=>JSON.stringify(c)).join("\n")
       +"\n\n近期群聊（供互文，不要重复其中说法）：\n"+(scene.map(s=>s.who+"："+s.text).join("\n")||"（无）")
       +"\n\n玩家刚发："+userText
@@ -865,7 +870,12 @@ const WDChat={
   async directorFlow(userText,opts){
     opts=opts||{};
     if(!CTX.dsReady()) return null;
-    const plan=await this.directorPlan(userText,opts);
+    let plan=await this.directorPlan(userText,opts);
+    /* v36：directorPlan 失败但有明确 targets → 自动兜底构造 plan（至少让被@的人开口） */
+    if((!plan||!plan.plan||!plan.plan.length)&&opts.targets&&opts.targets.length){
+      const fallbackPlan=opts.targets.filter(id=>CTX.NPC[id]).map(id=>({npc:id,type:"respond",hint:"这一句要有活人感，别像功能报告。"}));
+      if(fallbackPlan.length) plan={plan:fallbackPlan};
+    }
     if(!plan||!plan.plan||!plan.plan.length) return null;
     const out=[];
     for(const e of plan.plan){
