@@ -322,7 +322,9 @@ const WDChat={
     const recent=this.historyOf(npcId,12);
     if(!recent.length) return null;
     if(!manual&&g.talks<5) return null;
-    const sys="你是游戏『问道之旅·四十五日』的角色导演。基于NPC人设与其和玩家的最近互动，推演这个角色的自然成长：性格的细微变化、语言表达方式的演进、行为模式的适应性调整，并续写个人故事线。变化必须渐进自然不突兀，保留原人设基调，符合导游异次元世界观。严禁AI腔。只输出JSON。";
+    const sys="你是游戏『问道之旅·四十五日』的角色导演。基于NPC人设与其和玩家的最近互动，推演这个角色的自然成长：性格的细微变化、语言表达方式的演进、行为模式的适应性调整，并续写个人故事线。变化必须渐进自然不突兀，保留原人设基调，符合导游异次元世界观。严禁AI腔。"
+      +this.masterRule()
+      +"只输出JSON。";
     const dN=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
     const dT=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(npcId,npc.title):(npc.title||"");
     const user="游戏背景：\n"+JSON.stringify(this.worldBrief())
@@ -436,6 +438,16 @@ const WDChat={
     return s;
   },
 
+  /* ---------- v44：全员语言最高准则（推送给所有 NPC 与导演的统一口吻令） ---------- */
+  masterRule(){
+    return "【全员语言最高准则·所有角色开口与导演改写时必须遵守】"
+      +"①用词优先取同义的二次元/轻小说语汇（试炼、封印、修行、咒文、灵脉、交割，而非考核、复习、失误、结束）；"
+      +"②适当加重语气词比重（呀/呢/哦/啦/嘛/唔），让句子有呼吸感；"
+      +"③少用单字实词收尾——「稳」要说成「稳住呀」「稳一些吧」「稳稳当当的」，「好」要说成「好呀」「好得很呢」，「行」要说成「行呀」「就这么定了呢」；纯语气词应声（嗯、唔、哦？）不受此限；"
+      +"④相邻相连的句段字数要错落，不许前后两句字数雷同——长短交错才有活人说话的节奏；"
+      +"⑤这不是卖萌指令：语气词要自然融进句子，禁止堆叠成「呀哦呢啦」，禁止把动物叫声词、特殊称呼腔等表面萌系口癖当习惯。";
+  },
+
   /* ---------- 系统稳定前缀（v2：缓存友好布局，R1.1）
      结构：世界观事实 + 约束文档 + 角色合并卡（全部稳定内容；动态内容移到 user 尾部） */
   systemPrefix(npcId,brief){
@@ -518,7 +530,8 @@ const WDChat={
       +"反应快于解释、情绪先于逻辑、立场鲜明、允许半句与停顿、可吐槽/反问/卖关子/小得意/嘴硬/疲惫；"
       +"玩家是同行者不是世界中心，你是有人格的居民不是NPC客服。"
       +"禁止靠表面口癖卖萌（喵/呀～/诶嘿/欧尼酱），禁止AI腔与三种腔（老师/客服/心理医生）。"
-      +"性格只体现在「你怎么回眼前这句话」里，不要为证明有性格而表演性格。";
+      +"性格只体现在「你怎么回眼前这句话」里，不要为证明有性格而表演性格。"
+      +"\n"+this.masterRule();
     return s;
   },
 
@@ -859,6 +872,7 @@ const WDChat={
     if(kind==="questreact"&&!(userDoc&&userDoc.trim())){
       sys+="任务NPC的反应尤其要活人：刚见证了队友通关，她第一反应不是「已交付」——可能是「嚯，这一关居然真被你啃下来了。」「行吧，算是过了。」「……你手怎么脏的？」这种。";
     }
+    sys+="\n"+this.masterRule();
     sys+="\n只输出JSON。";
     let user="在场角色与各自说话方式：\n"+cards.map(c=>JSON.stringify(c)).join("\n")
       +"\n\n近期群聊（供互文，不要重复其中说法）：\n"+(scene.map(s=>s.who+"："+s.text).join("\n")||"（无）")
@@ -962,7 +976,8 @@ const WDChat={
         +"3）长度2～50字，越短越好，允许只有一两个字、半句、犹豫改口；玩家说的是现实见闻时，先当八卦接，不许翻译成剧情或任务；"
         +"4）允许角色之间互相接茬、拆台、偷笑、无奈，体现她们彼此的关系；玩家是群里一员，不是宇宙中心；"
         +"5）遵守各自语言人格卡的节奏与禁忌；禁老师腔/客服腔/心理医生腔/AI腔/命令句/表面卖萌口癖；不要为了显得有性格而集体表演性格，平淡应一声也允许；"
-        +"6）只输出JSON。";
+        +"6）"+this.masterRule()
+        +"7）只输出JSON。";
       const user="在场角色与各自说话方式：\n"+cards.map(c=>JSON.stringify(c)).join("\n")
         +"\n\n近期群聊（供互文，不要重复其中说法）：\n"+(scene.map(s=>s.who+"："+s.text).join("\n")||"（无）")
         +"\n\n玩家刚发："+userText
@@ -1201,6 +1216,7 @@ const WDChat={
       +"- revised 字段直接给出修改后的完整文本（如果 pass=true，revised 与 input 相同）；\n"
       +"- 禁止词/禁止角色（提灯/引魂灯/封妖塔等）属于硬禁，命中必 pass=false；\n"
       +"- 轻小说风格要求不要改成说明书或 AI 腔；\n"
+      +"- "+this.masterRule()+"\n"
       +"- 只输出 JSON。";
     let user="当前进度：第"+(st.day||1)+"日 · 第"+(Math.min(5,Math.floor(((st.day||1)-1)/9)+1))+"幕 · 圣女恢复约 "+Math.min(100,Math.floor(((st.day||1)/45)*100)+5)+"%";
     if(context.quest) user+="\n当前任务："+(context.quest.name||"")+"（"+(context.quest.tlabel||"")+"）";

@@ -437,15 +437,114 @@ const driver=`
     reconcile();
     if(st.aiBrief['D01M']) throw new Error('旧schema aiBrief应被清除');
   });
-  run('v2轻小说schema aiBrief缓存保留；旧prompt缓存清除（v33）',()=>{
+  run('v3多段对话schema aiBrief缓存保留；v2/旧prompt缓存清除（v44）',()=>{
     reset();
-    /* v2 轻小说 schema 保留 */
-    st.aiBrief['D01M']={v:2,scene:'雾在涌',line:'这一程交给你',necessity:'只有你能走',impact:'她会醒一分',reward:'道力与盘缠',metaphor:'试炼',at:new Date().toISOString()};
+    /* v3 多段对话 schema 保留 */
+    st.aiBrief['D01M']={v:3,scene:'雾在涌',dialog:[{s:'n',t:'这一程交给你'},{s:'p',t:'嗯，走。'}],necessity:'只有你能走',impact:'她会醒一分',reward:'道力与盘缠',metaphor:'试炼',at:new Date().toISOString()};
+    /* v2 单线对话 schema 必须清除（v44 升级为多段对话） */
+    st.aiBrief['D02M']={v:2,scene:'妖王低吼',line:'开荒去',necessity:'非你不可',impact:'能力复苏',reward:'掉落',at:new Date().toISOString()};
     /* v1 网游腔 schema（有三要素但无 v 标记）必须清除 */
-    st.aiBrief['D02M']={scene:'妖王低吼',line:'开荒去',necessity:'非你不可',impact:'能力复苏',reward:'掉落',at:new Date().toISOString()};
+    st.aiBrief['D03M']={scene:'兽潮又起',line:'刷本去',necessity:'非你不可',impact:'能力复苏',reward:'掉落',at:new Date().toISOString()};
     reconcile();
-    if(!st.aiBrief['D01M']) throw new Error('v2 schema aiBrief 不应被清除');
-    if(st.aiBrief['D02M']) throw new Error('v1 网游腔缓存必须清除重生成');
+    if(!st.aiBrief['D01M']) throw new Error('v3 schema aiBrief 不应被清除');
+    if(st.aiBrief['D02M']) throw new Error('v2 单线对话缓存必须清除重生成');
+    if(st.aiBrief['D03M']) throw new Error('v1 网游腔缓存必须清除重生成');
+  });
+  /* ===== v44：任务页四阶段 + masterRule 最高准则 + 试炼 NPC 回复 ===== */
+  run('WDChat.masterRule 定义且四要素齐全（二次元词汇/语气词/单字词收尾/句长错落）',()=>{
+    reset();
+    if(typeof WDChat.masterRule!=='function') throw new Error('masterRule 未定义');
+    const r=WDChat.masterRule();
+    if(!r||r.length<80) throw new Error('masterRule 内容过短');
+    if(!r.includes('二次元')) throw new Error('缺二次元词汇优先准则');
+    if(!r.includes('语气词')) throw new Error('缺语气词比重准则');
+    if(!r.includes('单字')||!r.includes('稳住呀')) throw new Error('缺单字词收尾准则与示例');
+    if(!r.includes('字数')) throw new Error('缺句长错落准则');
+    /* 防呆：不许把准则写成卖萌指令 */
+    if(r.includes('喵')||r.includes('欧尼酱')) throw new Error('准则自身不得含表面卖萌口癖');
+  });
+  run('masterRule 注入 wd-chat 全部 prompt 点（systemPrefix/导演计划/群聊导演/审核/演进）',()=>{
+    reset();
+    const sp=WDChat.sysPrompt('qingxuan',false);
+    if(!sp.includes('全员语言最高准则')) throw new Error('systemPrefix 缺最高准则');
+    ['directorPlan','directorRespond','directorAudit','evolve'].forEach(fn=>{
+      const src=(WDChat[fn]||function(){}).toString();
+      if(!src.includes('masterRule')) throw new Error(fn+' 未注入 masterRule');
+    });
+  });
+  run('masterRule 注入 index.html 生成点（任务简报/试炼错题回复/云蘅结算/每日引导）',()=>{
+    reset();
+    const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    /* genQuestBrief 与 aiWrongReply 必须直接调用 masterRule */
+    const qb=htmlSrc.match(/async function genQuestBrief[\\s\\S]{0,16000}?\\n\\}/);
+    if(!qb||!qb[0].includes('WDChat.masterRule')) throw new Error('genQuestBrief 缺 masterRule 注入');
+    if(!htmlSrc.includes('WDChat.masterRule?WDChat.masterRule():""')&&htmlSrc.match(/aiWrongReply[\s\S]{0,2000}/)[0].indexOf('masterRule')<0)
+      throw new Error('aiWrongReply 缺 masterRule 注入');
+    /* refineYunheng 与每日引导场景经守卫注入 */
+    const yh=htmlSrc.match(/function refineYunheng[\\s\\S]{0,4000}/);
+    if(!yh||!yh[0].includes('masterRule')) throw new Error('refineYunheng 缺 masterRule 注入');
+    const guide=htmlSrc.match(/所有发言像一群熟人在现场[\\s\\S]{0,400}/);
+    if(!guide||!guide[0].includes('masterRule')) throw new Error('每日引导场景缺 masterRule 注入');
+  });
+  run('任务页四阶段：无导航栏、点击推进链完整（v44）',()=>{
+    reset();
+    const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    if(htmlSrc.includes('stageTab')||htmlSrc.includes('data-stage=')) throw new Error('残留旧导航栏标记');
+    ['renderStageDialog','renderStageBrief','renderStageBook','renderStageQuiz','goStage','advanceStage'].forEach(fn=>{
+      if(!htmlSrc.includes('function '+fn)) throw new Error('缺 '+fn);
+    });
+    /* 推进链：剧情完→任务清单→手记→试炼 */
+    const adv=htmlSrc.match(/function advanceStage[\\s\\S]{0,2000}?\\n  \\}/);
+    if(!adv) throw new Error('advanceStage 源码未捕获');
+    if(!adv[0].includes('goStage(1)')||!adv[0].includes('goStage(2)')||!adv[0].includes('goStage(3)')) throw new Error('推进链不完整');
+    /* 整页点击推进绑定 */
+    if(!htmlSrc.includes('stageHost.onpointerdown')) throw new Error('缺整页点击推进绑定');
+  });
+  run('剧情互动多段对话：genQuestBrief v3 要求 4~9 条 dialog 且打字机逐行显示',()=>{
+    reset();
+    const qsrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8').match(/async function genQuestBrief[\\s\\S]{0,16000}?\\n\\}/)[0];
+    if(!qsrc.includes('dialog')) throw new Error('schema 缺 dialog 多段对话');
+    if(!qsrc.includes('4～9')&&!qsrc.includes('4~9')) throw new Error('未约束对话条数 4~9');
+    if(!qsrc.includes('250～400')&&!qsrc.includes('250~400')) throw new Error('未约束总字数 250~400');
+    if(!qsrc.includes('o.v=3')) throw new Error('未打 v3 schema 标记');
+    /* 剧情互动渲染须走打字机（.dtw 选择器）且完成后可点击推进 */
+    const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    if(!htmlSrc.includes('startTypewriter(stageHost,".qdial .dtw")')) throw new Error('剧情互动未接打字机');
+    if(!htmlSrc.includes('typewriterExpand')) throw new Error('缺点击加速逻辑');
+  });
+  run('试炼题型与题干分离显示 + 错字修复（是非判断/行者手记）',()=>{
+    reset();
+    const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    if(htmlSrc.includes('是非断')) throw new Error('残留错字「是非断」');
+    if(!htmlSrc.includes('是非判断')) throw new Error('题型标签应为「是非判断」');
+    if(!htmlSrc.includes('kindLabel')) throw new Error('题型与题干未分离（缺 kindLabel 徽标）');
+    /* 行者手记错字：正文不得出现「行者手机」 */
+    if(htmlSrc.includes('行者手机')) throw new Error('残留错字「行者手机」');
+    if(!htmlSrc.includes('行者手记')) throw new Error('缺正名「行者手记」');
+    const dataSrc2=fs.readFileSync(require('path').join(__dirname,'game-data.js'),'utf8');
+    if(dataSrc2.includes('行者手机')) throw new Error('game-data.js 残留错字「行者手机」');
+  });
+  run('试炼 NPC 串场词与答后智能回复（口癖池 + AI 讲解）',()=>{
+    reset();
+    const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    if(!htmlSrc.includes('const QUIZ_INTROS=')) throw new Error('缺 NPC 串场词池');
+    if(!htmlSrc.includes('const QUIZ_PRAISE=')) throw new Error('缺答对鼓励池');
+    if(!htmlSrc.includes('function quizReplyBubble')) throw new Error('缺答后回复气泡');
+    if(!htmlSrc.includes('function praiseReply')) throw new Error('缺答对回复选取');
+    if(!htmlSrc.includes('function wrongLocalReply')) throw new Error('缺答错本地回复');
+    if(!htmlSrc.includes('function aiWrongReply')) throw new Error('缺答错 AI 讲解');
+    /* 每题触发串场词：drawQuiz 内须拼 intro */
+    const dq=htmlSrc.match(/function drawQuiz[\\s\\S]{0,9000}?\\n  \\}/);
+    if(!dq||!dq[0].includes('introHtml')) throw new Error('每题未触发 NPC 串场词');
+    /* 答错回复须包含考点错误次数语境且禁 PUA */
+    const wr=htmlSrc.match(/function aiWrongReply[\\s\\S]{0,4000}?\\n  \\}/);
+    if(!wr) throw new Error('aiWrongReply 源码未捕获');
+    if(!wr[0].includes('累计答错次数')) throw new Error('AI 回复缺错误次数语境');
+    if(!wr[0].includes('严禁指责/讽刺/施压/PUA')) throw new Error('AI 回复缺 PUA 禁令');
+    /* 全员口癖池覆盖 7 名 NPC（模板内避免 RegExp 双重转义陷阱，用 indexOf 断言） */
+    const poolsTxt=htmlSrc.slice(htmlSrc.indexOf('const QUIZ_INTROS='),htmlSrc.indexOf('};',htmlSrc.indexOf('const QUIZ_PRAISE=')));
+    const ids=['yunheng','qingxuan','smq','tiemian','liuruyan','moxiaogu','xuanji'];
+    ids.forEach(id=>{ if(!poolsTxt.includes(id+':[')) throw new Error('口癖池缺 '+id); });
   });
   run('旧概念缓存自动清除',()=>{
     reset();

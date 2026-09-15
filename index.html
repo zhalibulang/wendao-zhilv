@@ -487,6 +487,16 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 @keyframes fxlvIn{0%{opacity:0;transform:translate(-50%,-28%) scale(.7)}16%{opacity:1;transform:translate(-50%,-50%) scale(1.07)}28%{transform:translate(-50%,-50%) scale(1)}76%{opacity:1}100%{opacity:0;transform:translate(-50%,-72%) scale(.96)}}
 .fxseal{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%) rotate(-14deg);border:4px solid var(--ok);color:var(--ok);font-size:clamp(30px,9vw,54px);font-weight:700;padding:6px 20px;letter-spacing:.34em;text-shadow:2px 2px 0 #000;box-shadow:0 0 0 2px rgba(127,255,127,.25),4px 4px 0 rgba(0,0,0,.5);background:rgba(20,30,20,.35);animation:fxsealIn 1.65s ease-out forwards}
 @keyframes fxsealIn{0%{opacity:0;transform:translate(-50%,-50%) rotate(-14deg) scale(2.3)}22%{opacity:.96;transform:translate(-50%,-50%) rotate(-14deg) scale(1)}72%{opacity:.96}100%{opacity:0;transform:translate(-50%,-50%) rotate(-14deg) scale(.94)}}
+/* ===== 任务页点击推进提示（v44）===== */
+.stagehint{text-align:center;color:var(--gold);font-size:12px;letter-spacing:.18em;margin:14px 0 4px;animation:hintPulse 1.6s ease-in-out infinite}
+@keyframes hintPulse{0%,100%{opacity:.35}50%{opacity:1}}
+/* 试炼题型标签与题干分离（v44） */
+.qz .kk{display:block;margin-bottom:8px;letter-spacing:.14em}
+/* 试炼 NPC 串场词/答后回复气泡（v44） */
+.qreplwrap{display:flex;gap:8px;align-items:flex-start;margin-top:10px}
+.qreplwrap .qav{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;color:#000;font-weight:bold;flex-shrink:0}
+.qreplwrap .qbub{flex:1;padding:8px 12px;border-radius:0 10px 10px 10px;font-size:12.5px;line-height:1.7}
+.qreplwrap .qbub .qname{font-size:10.5px;margin-bottom:3px;color:var(--gold)}
 </style>
 </head>
 <body>
@@ -616,8 +626,8 @@ function reconcile(){
     }
     Object.keys(st.aiBrief).forEach(id=>{
       const b=st.aiBrief[id];
-      /* v33：非 v2 轻小说 schema 的旧缓存（网游腔 prompt 产物）一律失效重生成 */
-      if(hasObs(b)||!b||(typeof b==="object"&&(!b.scene&&!b.necessity&&!b.impact&&!b.reward&&b.brief))||(typeof b==="object"&&b.v!==2))
+      /* v44：仅保留 v3 多段对话 schema；v2 单线对话及更早的旧缓存一律失效重生成 */
+      if(hasObs(b)||!b||(typeof b==="object"&&(!b.scene&&!b.necessity&&!b.impact&&!b.reward&&b.brief))||(typeof b==="object"&&b.v!==3))
         delete st.aiBrief[id];
     });
   })();
@@ -1173,10 +1183,10 @@ function stopTypewriter(){
   if(twState&&twState.items){ twState.items.forEach(it=>{ if(it.el) it.el.classList.remove('tw-active'); }); }
   twState=null;
 }
-function startTypewriter(host){
+function startTypewriter(host,sel){
   stopTypewriter();
   if(!host||typeof host.querySelectorAll!=='function') return;
-  const els=host.querySelectorAll('.book .pt, .book .npcnote, .book .anchor');
+  const els=host.querySelectorAll(sel||'.book .pt, .book .npcnote, .book .anchor');
   if(!els||!els.length) return;
   /* 预解析：标签即时输出，文字逐字 */
   const items=Array.from(els).map(el=>{
@@ -1194,16 +1204,16 @@ function startTypewriter(host){
     el.classList.add('tw-active');
     return {el,html,tokens,pos:0};
   });
-  twState={items,idx:0,built:'',done:false};
+  twState={items,idx:0,built:'',done:false,host};
   twStep();
 }
 function twStep(){
   if(!twState||twState.done) return;
   if(twState.idx>=twState.items.length){
     twState.done=true;
-    /* 全部打完：恢复术语点击绑定 */
-    const host=document.querySelector('#pageHost');
-    if(host) twBindGlossary(host);
+    /* 全部打完：恢复术语点击绑定 + 通知宿主（如显示"点击继续"） */
+    if(twState.host) twBindGlossary(twState.host);
+    if(twState.onDone) twState.onDone();
     return;
   }
   const it=twState.items[twState.idx];
@@ -1235,8 +1245,8 @@ function typewriterExpand(){
   if(twState.idx>=twState.items.length){
     /* 所有预设文本段均完成展开 */
     twState.done=true;
-    const host=document.querySelector('#pageHost');
-    if(host) twBindGlossary(host);
+    if(twState.host) twBindGlossary(twState.host);
+    if(twState.onDone) twState.onDone();
   } else {
     /* 200ms 后开始下一段的打字机效果 */
     twTimer=setTimeout(twStep,200);
@@ -1261,6 +1271,28 @@ function twBindGlossary(host){
     };
   });
 }
+
+/* ---------- v44：试炼 NPC 串场词与答后回复池（口癖化，符合全员语言最高准则）---------- */
+const QUIZ_INTROS={
+  yunheng:["那么——第一道封印，来了哦。","嗯，听好这一题呀。","雾里的小小考验，接住吧。","静下心来，这道题不急呢。"],
+  qingxuan:["这一题，你只管稳稳作答。","来，试试这一关的小问。","别急，看清了再落笔嘛。","稳一些吧，答案就在你学过的东西里呢。"],
+  smq:["哈哈，接题！答不上也别哭鼻子呀。","来来来，痛快答一题！","这一问我可是很有兴致的哦。","痛快点儿，答案就在嘴边啦！"],
+  tiemian:["……答题。不许蒙。","这一题，答标准了。","专心。答完再说话。","题干读两遍。开始吧。"],
+  liuruyan:["哟，这题有点意思呢。","慢慢想，不着急哦～","答对了，姐姐有赏呀。","看看这题，猜猜姐姐为何选它？"],
+  moxiaogu:["哇，这题我来盯着你答！","加油呀，这题不难的啦！","嘿嘿，看你的表现哦！","打起精神来，马上就过了呢！"],
+  xuanji:["星象显示……此题有解。唔。","……答吧。我看着呢。","星盘微动，题意已明。","……此题吉。落笔吧。"]
+};
+const QUIZ_INTROS_FALLBACK=["这一题，接好了哦。","雾散之前，先过这一问呀。","来，看看这一题呢。"];
+const QUIZ_PRAISE={
+  yunheng:["嗯，稳稳当当的。有你在，雾真的会散呢。","答对了呀。……不愧是你。","好准头。这一道封印，松动了哦。","嗯……和你并肩，真好呀。"],
+  qingxuan:["好，就是这样的，稳住呀。","答得干净利落，很好嘛。","嗯，这分寸拿捏得稳稳的。","不错哦，照这个势头，下一题也不怕呢。"],
+  smq:["哈哈，痛快！就是这个答案呀！","好眼力！不愧是被我看好的人哦。","稳稳拿下，痛快呀！","哈哈，这种程度的问题可拦不住你啦！"],
+  tiemian:["……标准。继续保持。","嗯。这一分，拿得干净。","合格。下一题，同样的准头。","……没错。你的准备，我看在眼里。"],
+  liuruyan:["哟，答对啦～姐姐就说你可以的嘛。","好聪慧呀，这一点都难不倒你呢。","啧啧，这份悟性，行会里都少见哦。","哎呀，答得这样稳，姐姐都要吃味了呢～"],
+  moxiaogu:["哇——答对了！我就说你可以的呀！","太棒啦！嘿嘿，继续继续！","好厉害！这题也没难住你呢！","答对啦答对啦！我要告诉大家一起高兴！"],
+  xuanji:["……星象无误。你答对了。唔，不错。","嗯。与星盘推演一致。","……对的。星象为证。","……嗯。你的积累，星盘都记着呢。"]
+};
+const QUIZ_PRAISE_FALLBACK=["答对了，稳稳当当的！","好，这一问拿下了呀。","不错哦，继续呢。"];
 
 /* ---------- quest modal: 书页 + 试炼 ---------- */
 function openQuest(qid){
@@ -1358,55 +1390,84 @@ function openQuest(qid){
     <button class="close" id="qx">×</button>
     <div class="mt">第 ${q.day} 日 · ${q.tlabel} · ${fmtDur(q.dur)} · 主线${q.kind==="main"?"":"支线"}</div>
     <h2>${esc(q.name)}</h2>
-    <div id="questPager" style="display:flex;gap:6px;margin:4px 0 10px;justify-content:center"></div>
     <div id="stageHost" style="flex:1;min-height:0;overflow-y:auto"></div>
     <div class="foot" style="display:flex;gap:10px;justify-content:flex-end;margin-top:10px;align-items:center">
       <span style="margin-right:auto;color:var(--gold);font-size:13px">${readonly?"<span style='color:var(--ok)'>✓ 已完成 · 回看模式（可复读/录音）</span>":"奖励 +"+q.xp+" 修行 · +"+q.coin+" 铜钱"}</span>
       <button class="btn" id="qx2">${readonly?"关闭":"暂离"}</button>
-      <button class="btn" id="prevStage" style="display:none" type="button">← 上一页</button>
-      <button class="btn primary" id="nextStage" type="button">下一页 →</button>
+      <button class="btn primary" id="finBtn" style="display:none" disabled>通过试炼以完成</button>
     </div>
   </div>`;
   document.body.appendChild(ov);
   ov.onpointerdown=e=>{ if(e.target===ov) ov.remove(); };
-  /* ===== PPT 四阶段架构 =====
-     stageIdx: 0=剧情对话(AI brief scene+line) 1=任务说明(necessity/impact/reward列表)
-               2=行者手机(renderPage 书页+朗读) 3=试炼(quiz)
-     所有阶段共用同一个 stageHost，按 idx 切换渲染。 */
+  /* ===== 点击推进式四阶段（v44）=====
+     无导航栏：整页点击推进。
+     0 剧情互动：对话逐行打字机（点击=加速，与其他打字机一致），全部完成后点击→②
+     1 任务说明：项目列表（完成指标），点击→③
+     2 行者手记：书页打字机，点击=加速/翻页，末页读完点击→④
+     3 试炼：quiz，完成后 footer 出现「通过试炼以完成」 */
   const STAGES=[
-    {id:"dialog",   label:"① 剧情互动", render:renderStageDialog},
-    {id:"brief",    label:"② 任务说明", render:renderStageBrief},
-    {id:"book",     label:"③ 行者手机", render:renderStageBook},
-    {id:"quiz",     label:"④ 试炼通关", render:renderStageQuiz}
+    {id:"dialog", render:renderStageDialog},
+    {id:"brief",  render:renderStageBrief},
+    {id:"book",   render:renderStageBook},
+    {id:"quiz",   render:renderStageQuiz}
   ];
-  let stageIdx=0, aiBriefData=null, aiBriefReady=false;
-  const stageHost=$("#stageHost",ov), pager=$("#questPager",ov);
-  const prevBtn=$("#prevStage",ov), nextBtn=$("#nextStage",ov);
+  let stageIdx=0, aiBriefData=null, aiBriefReady=false, dialogDone=false, bookPageIdx=0, bookDone=false;
+  const stageHost=$("#stageHost",ov);
   const npcName=dName(npc.id), npcTitle=dTitle(npc.id);
   const questMetaphorTxt=questMetaphor(q);
-
-  /* —— 渲染第 1 阶段：剧情对话 —— */
-  function renderStageDialog(){
-    if(!aiBriefReady){
-      stageHost.innerHTML=`<div class="note" style="font-size:12px;color:var(--dim)">✦ 灵脉接驳中…NPC 正在斟酌开场</div>`;
-      return;
-    }
-    const o=aiBriefData;
-    const hasNew=o.scene||o.necessity||o.impact||o.reward;
-    const sceneHtml=o.scene?`<div style="color:var(--dim);font-size:12px;margin-bottom:10px;line-height:1.7;font-style:italic">${esc(o.scene)}</div>`:"";
-    const lineHtml=`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">
+  /* —— 底部"轻触继续"提示 —— */
+  function hintHtml(){ return `<div class="stagehint" id="stageHint" style="display:none">▼ 轻触继续</div>`; }
+  function setHint(txt){
+    const h=$("#stageHint",stageHost); if(!h) return;
+    if(txt){ h.textContent=txt; h.style.display="block"; } else { h.style.display="none"; }
+  }
+  /* —— NPC/玩家 对话气泡（剧情互动与试炼串场共用样式）—— */
+  function dialNpcLine(t){
+    return `<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">
       <div style="width:28px;height:28px;border-radius:50%;background:var(--cyber);display:flex;align-items:center;justify-content:center;font-size:12px;color:#000;font-weight:bold;flex-shrink:0">${esc(npcName[0]||"?")}</div>
       <div style="flex:1;padding:10px 14px;background:rgba(61,240,255,0.08);border:1px solid var(--cyber);border-radius:0 12px 12px 12px">
         <div style="font-size:11px;color:var(--gold);margin-bottom:4px">${esc(npcName)}${npcTitle?` · ${esc(npcTitle)}`:""}</div>
-        <div style="font-size:13px;color:var(--fg);line-height:1.8">${esc(o.line||"这一程，准备好了吗？")}</div>
+        <div class="dtw" style="font-size:13px;color:var(--fg);line-height:1.8">${esc(t)}</div>
       </div></div>`;
-    const metaphorHtml=o.metaphor?`<div style="text-align:center;color:var(--gold);font-size:12px;font-style:italic;margin:12px 0">「${esc(o.metaphor)}」</div>`:"";
-    stageHost.innerHTML=`<div style="padding:6px">
-      <div style="font-size:11px;color:var(--gold);margin-bottom:6px;letter-spacing:.12em;text-align:center">关卡 · ${esc(questMetaphorTxt)}</div>
-      ${sceneHtml}${lineHtml}${metaphorHtml}
+  }
+  function dialPlayerLine(t){
+    return `<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;justify-content:flex-end">
+      <div style="max-width:80%;padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.2);border-radius:12px 0 12px 12px">
+        <div class="dtw" style="font-size:13px;color:var(--fg2);line-height:1.8">${esc(t)}</div>
+      </div>
+      <div style="width:28px;height:28px;border-radius:50%;background:var(--neon);display:flex;align-items:center;justify-content:center;font-size:11px;color:#000;font-weight:bold;flex-shrink:0">你</div>
     </div>`;
   }
-  /* —— 渲染第 2 阶段：任务说明（列表式）—— */
+
+  /* —— 渲染第 1 阶段：剧情对话（多段互动，逐行打字机）—— */
+  function renderStageDialog(){
+    dialogDone=false;
+    if(!aiBriefReady){
+      stageHost.innerHTML=`<div style="padding:6px">
+        <div style="font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:.12em;text-align:center">关卡 · ${esc(questMetaphorTxt)}</div>
+        <div class="note" style="font-size:12px;color:var(--dim)">✦ 灵脉接驳中…${esc(npcName)} 正在斟酌开场（灵脉拟稿）</div>
+      </div>`;
+      return;
+    }
+    const o=aiBriefData;
+    const dlg=(o.dialog&&o.dialog.length)?o.dialog:[{s:"n",t:o.line||"这一程，准备好了吗？"}];
+    const sceneHtml=o.scene?`<div class="dtw" style="color:var(--dim);font-size:12px;margin-bottom:12px;line-height:1.7;font-style:italic">${esc(o.scene)}</div>`:"";
+    const body=dlg.map(l=>{
+      const t=String(l&&l.t||"").trim(); if(!t) return "";
+      return l.s==="p"?dialPlayerLine(t):dialNpcLine(t);
+    }).join("");
+    const metaphorHtml=o.metaphor?`<div class="dtw" style="text-align:center;color:var(--gold);font-size:12px;font-style:italic;margin:12px 0">「${esc(o.metaphor)}」</div>`:"";
+    stageHost.innerHTML=`<div class="qdial" style="padding:6px">
+      <div style="font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:.12em;text-align:center">关卡 · ${esc(questMetaphorTxt)}</div>
+      ${sceneHtml}${body}${metaphorHtml}
+      ${hintHtml()}
+    </div>`;
+    startTypewriter(stageHost,".qdial .dtw");
+    if(twState){
+      twState.onDone=()=>{ dialogDone=true; setHint("▼ 轻触继续 · 领取任务清单"); };
+    } else { dialogDone=true; setHint("▼ 轻触继续 · 领取任务清单"); }
+  }
+  /* —— 渲染第 2 阶段：任务说明（列表式·完成指标）—— */
   function renderStageBrief(){
     if(!aiBriefReady){ stageHost.innerHTML=`<div class="note" style="color:var(--dim)">灵脉拟稿中，请稍候…</div>`; return; }
     const o=aiBriefData;
@@ -1426,20 +1487,21 @@ function openQuest(qid){
         </div>
       </div>`).join("");
     const taskListHtml=`<div style="margin-top:14px;padding:10px 14px;background:rgba(61,240,255,0.06);border:1px dashed var(--cyber);border-radius:4px">
-      <div style="font-size:12px;color:var(--cyber);margin-bottom:8px">✦ 行者手机 · 第 ${q.day} 日 ${esc(q.tlabel)}</div>
+      <div style="font-size:12px;color:var(--cyber);margin-bottom:8px">✦ 行者手记 · 第 ${q.day} 日 ${esc(q.tlabel)}</div>
       <div style="font-size:13px;color:var(--fg);font-weight:bold;margin-bottom:6px">${esc(q.name)}</div>
-      <div style="font-size:12px;color:var(--dim)">耗时约 ${fmtDur(q.dur)} · ${q.items?q.items.length+" 条要点":q.points?q.points.length+" 条考点":""}${quiz.length?" · "+quiz.length+" 道试炼":""}</div>
+      <div style="font-size:12px;color:var(--dim)">完成指标：读毕手记全部 ${pages.length} 页${q.items?` · 掌握 ${q.items.length} 条要点`:q.points?` · 掌握 ${q.points.length} 条考点`:""}${quiz.length?` · 试炼答对 ${quiz.length}/${quiz.length}`:""}</div>
     </div>`;
     stageHost.innerHTML=`<div style="padding:6px">
       <div style="font-size:13px;color:var(--neon);margin-bottom:10px;font-weight:bold">✦ 行者任务 · 清单</div>
       ${bulletHtml||`<div class="note" style="color:var(--dim);font-size:12px">此关无详述——${esc(npcName)} 已当面交代清楚。</div>`}
       ${taskListHtml}
+      ${hintHtml()}
     </div>`;
+    setHint("▼ 轻触继续 · 翻开手记");
   }
-  /* —— 渲染第 3 阶段：书页内容 —— */
-  let bookPageIdx=0;
+  /* —— 渲染第 3 阶段：书页内容（行者手记）—— */
   function renderStageBook(){
-    bookPageIdx=0;
+    bookPageIdx=0; bookDone=false;
     renderStageBookPage();
   }
   function renderStageBookPage(){
@@ -1462,28 +1524,21 @@ function openQuest(qid){
     stageHost.innerHTML=`<div style="padding:6px">
       <div class="book"><div class="bp">${esc(p.title)}</div>${body}</div>
       ${pgNav}
+      ${hintHtml()}
     </div>`;
     const bp=$("#bkPrev",stageHost), bn=$("#bkNext",stageHost);
-    if(bp) bp.onpointerdown=()=>{ bookPageIdx=Math.max(0,bookPageIdx-1); renderStageBookPage(); };
-    if(bn) bn.onpointerdown=()=>{ bookPageIdx=Math.min(pages.length-1,bookPageIdx+1); renderStageBookPage(); };
+    if(bp) bp.onpointerdown=()=>{ SFX.tap(); bookPageIdx=Math.max(0,bookPageIdx-1); renderStageBookPage(); };
+    if(bn) bn.onpointerdown=()=>{ SFX.tap(); bookPageIdx=Math.min(pages.length-1,bookPageIdx+1); renderStageBookPage(); };
     const rec=$("#recBtn",stageHost); if(rec) bindOralKit(stageHost);
     twBindGlossary(stageHost);
-    /* 书页打字机：启动 */
+    /* 书页打字机：启动；读完显示继续提示（末页=进入试炼，否则=翻页） */
+    setHint("");
     stopTypewriter(); startTypewriter(stageHost);
-    stageHost.onpointerdown=e=>{
-      const gl=e.target.closest('.gl');
-      if(gl){ e.stopPropagation();
-        const g=D.glossary[gl.dataset.g]; if(!g) return;
-        const gc=document.createElement('div'); gc.className='gcard';
-        gc.innerHTML='<div class="gw">'+esc(gl.dataset.g)+'</div><div class="gs"><b>是什么</b>'+esc(g.what)+'</div><div class="gs"><b>装到哪</b>'+esc(g.where)+'</div><div class="gs"><b>为什么</b>'+esc(g.why)+'</div>';
-        document.body.appendChild(gc);
-        setTimeout(()=>{ try{gc.remove();}catch(e){} },6000);
-        gc.onpointerdown=()=>gc.remove();
-        return;
-      }
-      if(e.target.closest('button, .oralrow, .oralkit, .pager, .bp')) return;
-      typewriterExpand();
+    const bookDoneHint=()=>{
+      bookDone=true;
+      setHint(bookPageIdx>=pages.length-1?"▼ 轻触继续 · 进入试炼":"▼ 轻触继续 · 翻页");
     };
+    if(twState){ twState.onDone=bookDoneHint; } else { bookDoneHint(); }
   }
   function renderOralBlock(p){
     // 复用原有 renderPage 的 oral 分支代码
@@ -1530,69 +1585,84 @@ function openQuest(qid){
       } else {
         qInner.innerHTML=`<div class="note" style="border-left-color:var(--ok)">✓ 此关已通关 · 回看模式下不必再答试炼，可上翻书页重读。</div>`;
       }
-      nextBtn.style.display="none";
       return;
     }
     if(quiz.length){
       if(dsReady()){ startAiQuiz(); } else { drawQuiz(); }
     } else {
       qInner.innerHTML=`<div class="note" style="border-left-color:var(--ok)">此关无需试炼，可直接完成。</div>`;
-      if(finBtn) finBtn.disabled=false;
+      if(finBtn){ finBtn.disabled=false; finBtn.style.display="inline-block"; }
     }
   }
-  /* —— PPT 阶段切换逻辑 —— */
-  function renderPager(){
-    pager.innerHTML=STAGES.map((s,i)=>{
-      const cls=i===stageIdx?"cur":(i<stageIdx?"done":"");
-      return `<button class="btn sm ${cls?'primary':'ghost'}" data-stage="${i}" type="button" style="min-width:80px">${s.label}</button>`;
-    }).join("");
-    pager.querySelectorAll("[data-stage]").forEach(b=>{
-      b.onpointerdown=()=>{ SFX.tap(); goStage(parseInt(b.dataset.stage,10)); };
-    });
-    prevBtn.style.display = stageIdx>0?"inline-block":"none";
-    nextBtn.style.display = stageIdx<STAGES.length-1?"inline-block":"none";
-    if(stageIdx===STAGES.length-1){
-      nextBtn.style.display="none";
-      if(quiz.length>0 && !readonly && finBtn) finBtn.style.display="inline-block";
-    } else if(finBtn){ finBtn.style.display="none"; }
-  }
+  /* —— 点击推进（v44）：整页点击流转阶段 —— */
   function goStage(idx){
     stageIdx=Math.max(0,Math.min(STAGES.length-1,idx));
     stopTypewriter();
+    SFX.tap();
     STAGES[stageIdx].render();
-    renderPager();
+    if(finBtn){
+      const showFin=stageIdx===STAGES.length-1&&!readonly;
+      finBtn.style.display=showFin?"inline-block":"none";
+    }
+  }
+  function advanceStage(){
+    if(stageIdx===0){
+      /* 剧情互动：打字中→加速（typewriterExpand 自带音效）；完→进入任务说明 */
+      if(twState&&!twState.done){ typewriterExpand(); return; }
+      if(dialogDone) goStage(1);
+      return;
+    }
+    if(stageIdx===1){ goStage(2); return; }
+    if(stageIdx===2){
+      /* 书页：打字中→加速；未翻完→翻页；末页读完→进入试炼 */
+      if(twState&&!twState.done){ typewriterExpand(); return; }
+      if(bookPageIdx<pages.length-1){ SFX.tap(); bookPageIdx++; renderStageBookPage(); return; }
+      if(bookDone) goStage(3);
+      return;
+    }
+    /* 第 3 阶段（试炼）：点击不推进，由答题按钮驱动 */
   }
 
   /* ===== 初始化 ===== */
   function openQuestInit(){
-    // 立即显示第 1 阶段占位 + 分页器
-    renderPager();
     STAGES[0].render(); /* 显示"灵脉接驳中" */
-    // 然后加载 AI brief（完成后更新第 1 阶段 + 解锁第 2 阶段数据）
     loadAiBriefData();
   }
   function loadAiBriefData(){
     if(!dsReady()){
-      const briefDone=$("#briefDone",stageHost);
       aiBriefData={line:"灵脉未通，无法接驳到此关的场景叙述。配置好密钥后重开此关即可。"};
       aiBriefReady=true;
       STAGES[0].render();
-      STAGES[1].render();
       return;
     }
     const cached=st.aiBrief[q.id];
-    if(cached&&cached.v===2){ aiBriefData=cached; aiBriefReady=true; STAGES[0].render(); STAGES[1].render(); return; }
+    if(cached&&cached.v===3){ aiBriefData=cached; aiBriefReady=true; STAGES[0].render(); return; }
     genQuestBrief(q).then(o=>{
       if(!ov.isConnected) return;
       st.aiBrief[q.id]=o; save();
       aiBriefData=o; aiBriefReady=true;
-      STAGES[0].render(); STAGES[1].render();
+      STAGES[0].render();
     }).catch(e=>{
-      aiBriefData={line:"灵脉接驳失败——"+esc((e&&e.message)||"请稍后重试")};
+      aiBriefData={line:"灵脉接驳失败——"+((e&&e.message)||"请稍后重试")};
       aiBriefReady=true;
-      STAGES[0].render(); STAGES[1].render();
+      STAGES[0].render();
     });
   }
+  /* —— 整页点击推进：术语卡/交互组件除外（v44，绑定一次）—— */
+  stageHost.onpointerdown=e=>{
+    const gl=e.target.closest('.gl');
+    if(gl){ e.stopPropagation();
+      const g=D.glossary[gl.dataset.g]; if(!g) return;
+      const gc=document.createElement('div'); gc.className='gcard';
+      gc.innerHTML='<div class="gw">'+esc(gl.dataset.g)+'</div><div class="gs"><b>是什么</b>'+esc(g.what)+'</div><div class="gs"><b>装到哪</b>'+esc(g.where)+'</div><div class="gs"><b>为什么</b>'+esc(g.why)+'</div>';
+      document.body.appendChild(gc);
+      setTimeout(()=>{ try{gc.remove();}catch(err){} },6000);
+      gc.onpointerdown=()=>gc.remove();
+      return;
+    }
+    if(e.target.closest('button, .oralrow, .oralkit, .pager, .bp, input, textarea, .qreplwrap')) return;
+    advanceStage();
+  };
   /* quiz 相关辅助函数（供第 4 阶段使用，复用原有逻辑） */
   function normalize(s){ return String(s).replace(/[\s，。、；：""''！？（）()（）·—…《》<>]/g,"").toLowerCase(); }
   function startAiQuiz(){
@@ -1629,25 +1699,92 @@ function openQuest(qid){
       return;
     }
     const z=quiz[qi];
+    /* v44：NPC 串场词（AI 生成的 intro 优先，否则按 NPC 口癖池取） */
+    const kindLabel=z.kind==="judge"?"是非判断":"填空作答";
+    const intro=(z.intro&&String(z.intro).trim())?String(z.intro).trim():"";
+    const introPool=QUIZ_INTROS[npc.id]||QUIZ_INTROS_FALLBACK;
+    const introTxt=intro||introPool[(q.id+"_"+qi).split("").reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,0)%introPool.length];
+    const introHtml=`<div class="qreplwrap" style="margin:0 0 10px">
+      <div class="qav" style="background:var(--cyber)">${esc(npcName[0]||"?")}</div>
+      <div class="qbub" style="background:rgba(61,240,255,0.07);border:1px solid var(--cyber)">
+        <div class="qname">${esc(npcName)}${npcTitle?` · ${esc(npcTitle)}`:""}</div>
+        <div style="color:var(--fg2)">${esc(introTxt)}</div>
+      </div></div>`;
     if(z.kind==="judge"){
-      host.innerHTML=`<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · 是非断</span>${esc(z.q)}</div>
+      host.innerHTML=`${introHtml}<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · ${kindLabel}</span>${esc(z.q)}</div>
         <div class="jbtns"><button class="btn" id="jTrue">真</button><button class="btn" id="jFalse">伪</button></div>
         <div class="fb" id="fb"></div>`;
-      $("#jTrue",host).onpointerdown=()=>answer(z.a===true);
-      $("#jFalse",host).onpointerdown=()=>answer(z.a===false);
+      $("#jTrue",host).onpointerdown=()=>answer(z.a===true,"真");
+      $("#jFalse",host).onpointerdown=()=>answer(z.a===false,"伪");
     } else {
-      host.innerHTML=`<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · 填空断</span>${esc(z.q)}</div>
+      host.innerHTML=`${introHtml}<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · ${kindLabel}</span>${esc(z.q)}</div>
         <input id="blankIn" placeholder="填入 ▁ 处的词" autocomplete="off">
         <div class="jbtns"><button class="btn sm" id="hintBtn">提示</button><button class="btn sm primary" id="subBtn">作答</button></div>
         <div class="fb" id="fb"></div>`;
       const inp=$("#blankIn",host); inp.focus();
       $("#hintBtn",host).onpointerdown=()=>{ inp.value=z.a[0]; inp.placeholder=`${z.a.length} 字，首字「${z.a[0]}」`; };
-      const sub=()=>answer(z.accept.some(a=>normalize(a)===normalize(inp.value))||normalize(inp.value).includes(normalize(z.a)));
+      const sub=()=>answer(z.accept.some(a=>normalize(a)===normalize(inp.value))||normalize(inp.value).includes(normalize(z.a)),inp.value);
       $("#subBtn",host).onpointerdown=sub;
       inp.onkeydown=e=>{ if(e.key==="Enter") sub(); };
     }
   }
-  function answer(ok){
+  /* —— v44：答后 NPC 回复（口癖化鼓励 / 错题讲解式回复，符合全员语言最高准则）—— */
+  function quizReplyBubble(text,replaceEl){
+    const host=stageHost._quizHost; if(!host) return null;
+    const wrap=document.createElement("div");
+    wrap.className="qreplwrap";
+    wrap.innerHTML=`<div class="qav" style="background:var(--cyber)">${esc(npcName[0]||"?")}</div>
+      <div class="qbub" style="background:rgba(61,240,255,0.07);border:1px solid var(--cyber)">
+        <div class="qname">${esc(npcName)}</div>
+        <div class="qrepl" style="color:var(--fg2)">${esc(text)}</div>
+      </div>`;
+    if(replaceEl&&replaceEl.parentNode){ replaceEl.parentNode.replaceChild(wrap,replaceEl); }
+    else{
+      const fb=$("#fb",host);
+      if(fb&&fb.parentNode) fb.parentNode.insertBefore(wrap,fb.nextSibling);
+      else host.appendChild(wrap);
+    }
+    return wrap;
+  }
+  function praiseReply(){
+    const pool=QUIZ_PRAISE[npc.id]||QUIZ_PRAISE_FALLBACK;
+    return pool[Math.floor(Math.random()*pool.length)];
+  }
+  function wrongLocalReply(z,mine,okA){
+    const pt=D.pointsLib.find(p=>p.id===z.pid);
+    const sameN=st.wrong.filter(w=>w.pid===z.pid).length; /* 含本次 */
+    const kindTxt=z.kind==="judge"?"是非判断":"填空作答";
+    const key=(pt?pt.text.slice(0,20):String(z.pid));
+    const sameTail=sameN>=2?`这个考点已经 ${sameN} 次绊到你啦——这次把它彻底收进记忆里吧。`:"";
+    const pool=[
+      `这道${kindTxt}有点刁呀。别急——你答的「${esc(mine||"…")}」，和正解差在${key}这一处。再看一眼解析，下一题稳一些吧。`,
+      `差一点点而已哦。${key}这块容易混，把解析里的因果再顺一遍，回头再遇上它，你一定拿得下。`,
+      `没事的，雾里谁都会被绊一下嘛。这个考点是${key}——记「${esc(okA)}」这个正解，顺着解析理解一遍，比硬背牢固得多呢。`
+    ];
+    const base=pool[(q.id+"_"+qi).split("").reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,0)%pool.length];
+    return sameTail?base+sameTail:base;
+  }
+  function aiWrongReply(z,mine,okA,wrap){
+    if(!dsReady()) return;
+    const pt=D.pointsLib.find(p=>p.id===z.pid);
+    const sameN=st.wrong.filter(w=>w.pid===z.pid).length;
+    const kindTxt=z.kind==="judge"?"是非判断":"填空作答";
+    const sys="你是日式RPG《问道之旅·四十五日》中的NPC「"+dName(npc.id)+"·"+dTitle(npc.id)+"」，刚目睹玩家答错一道试炼题。\n"
+      +(window.WDChat&&WDChat.masterRule?WDChat.masterRule():"")
+      +"\n写一段≤70字的口语回复：先顺着玩家的情绪接住（严禁指责/讽刺/施压/PUA），然后讲清这个考点为什么是正解、给出一个记忆方法或背景补充，最后一句鼓励打气。符合你的人设与口癖。只输出回复文本，不要引号。";
+    const user="任务："+qdn(q)+"\n题目（"+kindTxt+"）："+z.q
+      +"\n玩家的回答："+(mine||"（空白）")
+      +"\n正确答案："+okA
+      +"\n解析："+(z.why||"")
+      +"\n考点："+(pt?pt.id+"："+pt.text.slice(0,80):String(z.pid||""))
+      +"\n该考点累计答错次数："+sameN;
+    dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"}).then(t=>{
+      const txt=(t||"").trim().replace(/^["「」"]|["「」"]$/g,"").slice(0,120);
+      const el=wrap&&wrap.isConnected?wrap.querySelector(".qrepl"):null;
+      if(el&&txt) el.textContent=txt;
+    }).catch(()=>{ /* 本地回复已在，静默 */ });
+  }
+  function answer(ok,mine){
     if(answered) return; answered=true;
     const host=stageHost._quizHost; if(!host) return;
     const z=quiz[qi];
@@ -1662,6 +1799,10 @@ function openQuest(qid){
       if(window.WDMem){ const pt=D.pointsLib.find(p=>p.id===z.pid); WDMem.wrong(q.npc,wTopic({pid:z.pid}),pt?+pt.star:null); }
     }
     fb.innerHTML=(ok?"✓ 答对了！":"✗ 答错了——")+`正确答案：<b style="color:var(--gold)">${esc(correct)}</b>。${esc(z.why)}`;
+    /* v44：答案对照段下方追加 NPC 智能回复 */
+    const repText=ok?praiseReply():wrongLocalReply(z,mine,correct);
+    const wrap=quizReplyBubble(repText);
+    if(!ok) aiWrongReply(z,mine,correct,wrap);
     const next=document.createElement("button");
     next.className="btn sm primary"; next.type="button";
     next.textContent = isLast ? "知道了，完成试炼" : "知道了，继续";
@@ -1671,8 +1812,6 @@ function openQuest(qid){
     save();
   }
 
-  prevBtn.onpointerdown=()=>goStage(stageIdx-1);
-  nextBtn.onpointerdown=()=>{ SFX.tap(); goStage(stageIdx+1); };
   openQuestInit();
   const closeQuest=()=>{ stopTypewriter(); if(questTimer){clearInterval(questTimer);questTimer=0;} if(window.WDMem)WDMem.setActive(null); ov.remove(); };
   $("#qx",ov).onpointerdown=closeQuest;
@@ -1894,7 +2033,8 @@ function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
     +"2）云蘅与职能NPC "+dName(npc1)+" 互动（体现两人关系与各自性格）；"
     +"3）玩家与 "+dName(npc1)+" 互动（玩家主动提问，NPC以角色身份回应）；"
     +(npc2?"4）"+dName(npc2)+" 可适时插话一句，体现多NPC在场感。":"")
-    +"所有发言像一群熟人在现场你一句我一句：允许短句、停顿、半句、跑题再拉回，不必每句完整、不必每句都推进什么，更不要每句都解释。整体语感接近日式轻小说的日常群像对白，有温度、有性格。禁网游黑话堆砌、禁江湖气装熟、禁AI腔、禁教书先生口吻、禁念任务编号与数值、禁已淘汰概念（"+obsolete.join("、")+"）。每条≤90字。";
+    +"所有发言像一群熟人在现场你一句我一句：允许短句、停顿、半句、跑题再拉回，不必每句完整、不必每句都推进什么，更不要每句都解释。整体语感接近日式轻小说的日常群像对白，有温度、有性格。禁网游黑话堆砌、禁江湖气装熟、禁AI腔、禁教书先生口吻、禁念任务编号与数值、禁已淘汰概念（"+obsolete.join("、")+"）。每条≤90字。"
+    +(window.WDChat&&WDChat.masterRule?WDChat.masterRule():"");
   const user="当日情境："+(dctx?JSON.stringify(dctx):"无")+"\n当前任务："+(aq?qdn(aq)+"（"+aq.tlabel+"）":"无在途任务")
     +"\n出场角色：云蘅、玩家、"+dName(npc1)+(npc2?"、"+dName(npc2):"")
     +"\n请生成 "+ids.length+" 条消息，严格按此顺序："
@@ -1959,6 +2099,7 @@ function refineYunheng(id,q,nq,perfect){
   const total=D.quests.filter(x=>qDone(x.id)).length;
   const obsolete=(window.WDRegistry&&WDRegistry.obsoleteTerms)?WDRegistry.obsoleteTerms():["提灯","引灯","引魂灯","问道录","仙侠","仙师","封妖塔","掌灯"];
   const sys="你是日式RPG《问道之旅·四十五日》的引路人「云蘅」。任务NPC刚说完结算的话，你在群里顺手接一句——注意是接话，不是作总结报告。"
+    +(window.WDChat&&WDChat.masterRule?WDChat.masterRule()+"\n":"")
     +"可以点一句她对这次交割的真实反应，可以再带一眼前路，也可以只留半句；收获、点评、下一步都不是必填项，按她此刻想说的来，禁止面面俱到。"
     +"≤90字，越自然越好，允许短句和停顿；禁AI腔（首先/其次/总之）、禁教书先生口吻、禁客服腔、禁念任务编号与数值奖励、禁已淘汰概念（"+obsolete.join("、")+"）。只输出正文，不要引号。";
   const user="刚交割的关卡：「"+qdn(q)+"」（"+q.tlabel+(perfect?"，试炼全对":"，试炼有错")+"）；当日进度 "+p.n+"/"+p.all+"，全程 "+total+"/"+D.quests.length+"（这些数字只供你心里有数，台词里不许念）。"
@@ -3148,6 +3289,7 @@ async function genPersona(npcId, feedback){
   return card;
 }
 /* 生成任务说明：游戏隐喻叙事 + 背景故事 + 知识拓展（替代旧版独立任务描述模块） */
+function firstNpcLine(dlg){ const n=dlg.find(l=>l.s==="n"); return n?n.t:(dlg[0]?dlg[0].t:""); }
 async function genQuestBrief(q){
   const npc=NPC[q.npc]||NPC.qingxuan;
   const persona=st.personas[q.npc]&&st.personas[q.npc].card;
@@ -3155,16 +3297,19 @@ async function genQuestBrief(q){
     +"故事背景（序章已向玩家讲过，scene里不必复述设定）：玩家是意外坠入「导游次元」的普通现代人——『域外之人』，已与圣女候选云蘅绑定、与记忆精灵璇玑结下灵魂契约。他只有走完四十五日、五幕导游试炼，在金榜台完成神圣导游就职仪式，云蘅才能恢复圣女之力、以圣器驱散遗忘之雾，界门才会重新为他打开。NPC是他的同行者，不是老师、不是客服。\n"
     +"要求：\n"
     +"1. scene 先给一个具体画面：时辰、雾况、NPC正在做的一件小事或周遭一个动静，让玩家像翻开轻小说的一页，≤80字。不要概述世界观、不要喊口号。\n"
-    +"2. line 是NPC本人当面对玩家说的话，自然承接scene，符合该角色性格，像轻小说/动画对白（有半句、停顿、潜台词），≤80字。\n"
+    +"2. dialog 是一段完整的剧情互动对话（数组，逐条输出）：NPC 当面对玩家交代这一程试炼，玩家也会简短回应、发问或犹豫——像轻小说/动画里的一段真实对手戏（有半句、停顿、潜台词）。条数 4～9 条，整体字数控制在 250～400 字之间：剧情密度高的关卡取上限，寻常关卡取下限——以简短为核心原则，不要无必要地拖长，每句都要推动交代/互动。\n"
+    +"   - NPC 台词（s:\"n\"）每条≤80字，符合该角色性格；玩家台词（s:\"p\"）每条≤30字，口语、克制，只是回应而非抢戏；\n"
+    +"   - 对话要有起伏：开场承接画面 → 交代此程是什么 → 玩家疑问/NPC 补一句关键的 → 收尾一句有余韵的话；不要轮流报幕，不要一言堂。\n"
     +"3. 「关卡定位」只作氛围参考：若定位不含战斗字样（如整备/夜巡/拓片/赏赐等），严禁出现妖兽、妖王、低吼、厮杀等战斗描写；即使是战斗定位，也重在气氛，不必喊打喊杀。\n"
     +"4. necessity/impact/reward 各≤70字：像同行者低声讲给他听的话，有温度、有信息，不写产品说明书、不做排比口号、不空洞夸奖；reward 不许出现具体数字（界面会另行显示）。\n"
     +"5. 严禁AI腔（首先/其次/总之/综上/值得一提的是）、禁教书先生口吻（掌握了/要记住/同学们/好好复习）、禁客服腔、禁网游黑话堆砌（新手村/刷本/开荒/掉落/团战/扛怪/上路）；可用轻小说式冒险语（试炼、封印、秘境、通关、修行、道力）。\n"
     +"6. 不剧透未解锁环节，不跑题，不给考试答案。\n"
     +"7. 只输出JSON。\n"
     +"8. 严禁使用已淘汰的旧概念：提灯、引灯、引魂灯、问道录、仙侠、仙师、封妖塔、幻纱行、机关童子、观星者、掌灯、镇塔尊者；统一用导游异次元世界观术语。\n"
+    +((window.WDChat&&WDChat.masterRule)?WDChat.masterRule()+"\n":"")
     +"【剧情先行·任务发布顺序】必须按以下顺序输出：\n"
     +"  ① scene：环境/事件/NPC当下的小动作，把玩家带进此刻，≤80字\n"
-    +"  ② line：NPC承接画面，才对玩家说起这一程试炼，≤80字\n"
+    +"  ② dialog：多段剧情互动对话（NPC 开口承接画面→交代这一程→玩家简短回应→收尾），4～9条，总字数250～400，导演式克制，不拖长\n"
     +"  ③ 任务三要素（necessity/impact/reward）依次写：\n"
     +"     - necessity 此行为何：这一程为何只有他这个域外之人能走（就职仪式只认他），但要像角色说的话，不要复读标签，≤70字\n"
     +"     - impact 雾散之后：此程完成后云蘅圣女之力的复苏与驱雾救世的进展，≤70字\n"
@@ -3190,28 +3335,41 @@ async function genQuestBrief(q){
     +(knowledge?("\n\n任务涉及知识点（可在说明中自然拓展）：\n"+knowledge):"")
     +(oralInfo?("\n\n涉及英文导游词："+oralInfo):"")
     +"\n\n注意：「关卡定位」由隐喻引擎给出，只作氛围参考（战斗关才有妖物层级；非战斗关如整备/夜巡/拓片不得写战斗）。围绕当前任务本身叙事，自然借用定位中的意象即可，不要复读定位文字。"
-    +"\n\n请输出JSON：{scene:string(一页轻小说式的场景画面，≤80字),line:string(NPC承接画面当面对玩家说的话，有性格有留白,≤80字),necessity:string(此行为何:像同行者低声说的话,点出就职仪式只认他这个域外之人,≤70字),impact:string(雾散之后:云蘅圣女之力复苏与驱雾救世的进展,≤70字),reward:string(此行所得:修行/铜钱/新的路如何通向归乡,≤70字,不写数字),metaphor:string(有余韵的轻小说式旁注,≤30字)}。";
+    +"\n\n请输出JSON：{scene:string(一页轻小说式的场景画面，≤80字),dialog:[{s:\"n\"或\"p\",t:string(台词)}](4～9条完整剧情互动，总字数250～400，NPC台词s为\"n\"、玩家台词s为\"p\"),necessity:string(此行为何:像同行者低声说的话,点出就职仪式只认他这个域外之人,≤70字),impact:string(雾散之后:云蘅圣女之力复苏与驱雾救世的进展,≤70字),reward:string(此行所得:修行/铜钱/新的路如何通向归乡,≤70字,不写数字),metaphor:string(有余韵的轻小说式旁注,≤30字)}。";
   const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {kind:"questbrief"});
   let o;
   try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else throw e; }
   o.scene=(o.scene||"").slice(0,120);
-  o.line=(o.line||"").slice(0,120);
   o.necessity=(o.necessity||"").slice(0,100);
   o.impact=(o.impact||"").slice(0,100);
   o.reward=(o.reward||"").slice(0,100);
   if(o.metaphor) o.metaphor=String(o.metaphor).slice(0,50);
+  /* dialog 规范化：条数 4~9，过滤空台词；旧格式（仅 line）回退为单条 */
+  let dlg=Array.isArray(o.dialog)?o.dialog.filter(l=>l&&String(l.t||"").trim()).map(l=>({s:l.s==="p"?"p":"n",t:String(l.t).trim().slice(0,120)})):[];
+  if(!dlg.length&&o.line) dlg=[{s:"n",t:String(o.line).slice(0,120)}];
+  if(dlg.length>9) dlg=dlg.slice(0,9);
+  o.dialog=dlg;
+  o.line=firstNpcLine(dlg);   /* 兼容旧读取方 */
   /* 兼容旧缓存：若无三要素字段，将旧 brief 拆分为 necessity 兜底 */
   if(!o.necessity&&o.brief) o.necessity=String(o.brief).slice(0,100);
-  o.v=2;   /* v33 轻小说 schema：旧 prompt 生成的缓存一律失效重生成 */
+  o.v=3;   /* v44 多段对话 schema：旧 prompt 生成的缓存一律失效重生成 */
   o.at=new Date().toISOString();
-  /* v43：导演合理性筛查——审核世界观/事理逻辑/情境/人物弧光，fail-open */
+  /* v43：导演合理性筛查——审核世界观/事理逻辑/情境/人物弧光/对话体量，fail-open */
   try{
     if(window.WDChat&&WDChat.directorAudit){
       const audit=await WDChat.directorAudit(o,{npcId:q.npc,quest:q,kind:"questbrief"});
       if(!audit.pass&&audit.revised){
         o=audit.revised;
-        if(o&&typeof o==="object"){ o.v=2; o.at=new Date().toISOString(); }
+        if(o&&typeof o==="object"){
+          /* 审核改写后重新规范化 dialog */
+          let dlg2=Array.isArray(o.dialog)?o.dialog.filter(l=>l&&String(l.t||"").trim()).map(l=>({s:l.s==="p"?"p":"n",t:String(l.t).trim().slice(0,120)})):[];
+          if(!dlg2.length&&o.line) dlg2=[{s:"n",t:String(o.line).slice(0,120)}];
+          if(dlg2.length>9) dlg2=dlg2.slice(0,9);
+          o.dialog=dlg2;
+          o.line=firstNpcLine(dlg2);
+          o.v=3; o.at=new Date().toISOString();
+        }
       }
     }
   }catch(e){ /* 审核失败不阻断 */ }
