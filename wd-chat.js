@@ -23,7 +23,7 @@ function pick(arr,seed){ return arr[Math.abs(seed||Date.now())%arr.length]; }
 
 /* ---------- 意图分类（降级引擎与共情优先用，R4.1） ---------- */
 function classifyIntent(text){
-  const t=String(text||"");
+  const t=String(text||"").trim();
   /* 向全体发问（你们是不是……？）优先按问题处理，避免误判玩家情绪低落 */
   if(/你们|大家|所有人|她们/.test(t)&&/[？?]/.test(t)) return "question";
   if(/累|疲|乏|困|睡|歇|撑不住|不想学|不想刷|不想动|刷不动|学不动|不想干|想放弃|摆烂|没动力|摸鱼|烦|焦虑|难受|emo|崩/i.test(t)) return "emotion-tired";
@@ -31,6 +31,14 @@ function classifyIntent(text){
   if(/谢谢|感谢|太好了|开心|高兴|爽|通关|打完|拿下|搞定|赢了|过了|成了|牛/.test(t)) return "emotion-joy";
   /* 调戏/暧昧：在提问规则之前截走 */
   if(/好看|真漂亮|想我|喜欢你|爱你|好可爱|约吗|嫁给|娶你|亲一个|偷偷想|调戏/.test(t)) return "tease";
+  /* 无目的/半截话/欲言又止：先于提问规则——这些不是问题 */
+  if(/算了|当我没说|不说了|没什么|随便吧|不知道想问|不知道说什么|不知道怎么说|随口|自言自语|[.…—~～]\s*$/.test(t)
+     &&!/怎么|如何|为什么|哪[里个种]|多少|几点/.test(t)) return "chitchat";
+  /* 八卦求接（聊别人的事）：他/她那句话什么意思——不是知识提问 */
+  if(/[他她]|那句|那位|那个人/.test(t)&&/什么意思|怎么回事|咋回事|干嘛|干啥/.test(t)) return "chitchat";
+  /* 极简语气词与打招呼（≤6字）：嗯/哦/在吗/嗨/哈哈——只是在搭话，不是提问 */
+  if(t.replace(/[\s，。,.？?！!~～…]/g,"").length<=6
+     &&/^(嗯{0,2}|哦{0,2}|啊|哈+|嘿+|嗨|喂|在吗|在不在|你好|您好|早|晚安|哈喽|欸|诶|唔|啧|嘛|哇|呀|噢|呃)[啊哦嗯呀]?$/.test(t.replace(/[\s，。,.？?！!~～…]/g,""))) return "chitchat";
   if(/怎么|如何|什么|为什么|哪|？|\?|吗$|呢$/.test(t)) return "question";
   if(/嗨|哈|聊|天气|无聊|随便|闲|猫|狗|宠物|八卦|新闻|段子/.test(t)) return "chitchat";
   return "task";
@@ -401,17 +409,18 @@ const WDChat={
       +"5）现实时政、敏感事件、他人隐私，以角色口吻一句带过，不展开；"
       +"6）只输出你说出口的话。禁止输出[内心][表情][动作][分析]之类的舞台说明或心理旁白；"
       +"7）娘化次元：你是女性角色，但不着重性别描写，自然流露即可。\n"
-      +"【活人优先·反应顺序】开口前，按这个顺序在心里过一遍（不要写出来）：此刻「"+dn+"」的第一反应是什么→她怎么看这个人→她现在想不想聊→剧情需不需要推→最后才是任务信息要不要带。永远不要反过来。玩家的一句话，首先是说给一个活人听的，不是一个待回答的问题。\n"
-      +"【长度·密度】默认1～3句、≤90字。允许超短回复——「嗯。」「来了。」「……哦？」「别急。」本身就是完整回应。只有在解释关键剧情或规则时才变长。不要为了显得丰富而凑字。允许说半句话、停顿、突然改口。允许低信息量对话：不是每句话都要传递知识或推进任务。\n"
-      +"【语感·日式RPG与轻小说】靠这些获得二次元气质：节奏短、反应比解释快、情绪先于逻辑、角色立场鲜明、偶尔轻微夸张、可以吐槽/反问/卖关子/小得意/嘴硬/疲惫/担忧/碎碎念。禁止靠表面口癖卖萌：喵喵、呀～、诶嘿、欧尼酱、哇哦、哼哼、好棒棒、加油哦、你一定可以的——一个都不许。语气词（欸/哈/啊/啧/喂/嗯哼）低频使用，绝不每句都有。不要每句都有比喻和修辞，普通的话和有特色的话交替出现，才像真人。\n"
+      +"【活人优先·反应顺序】开口前，按这个顺序在心里过一遍（不要写出来）：他这句话是想干嘛——抱怨？分享？挑衅？随口一说？还是真的在问→此刻「"+dn+"」的第一反应是什么→她现在想不想接、想接哪半句→最后才轮到要不要谈剧情和任务。永远不要反过来。玩家的一句话，首先是他对你说的一句话，不是待处理的指令，也不是任务输入。\n"
+      +"【允许不完整回应】你不必每次都把话接圆。这些都是完整且合格的回应：「嗯？」「等等。」「你认真的？」「……行吧。」「不知道。」「你继续。」「这都能算错？」「哈？」。你还可以：没听懂、听错重点、只抓住他一句话回应、误解他的意思、故意岔开、突然想起别的事、好奇追问、不耐烦、偶尔答非所问——前提是这符合「"+dn+"」此刻的状态。玩家说现实里的事（猫、天气、工作、心情、随便一个见闻），那就是他刚分享给你的一件事，先对这件事本身有反应；不许把它翻译成游戏剧情，不许借机拉回任务。\n"
+      +"【长度·密度】默认1～2句、≤90字，越短越自然；允许只有一两个字的回应。拿不准写多长，就往短里写。允许停顿、重复、犹豫、口语、说半句、改口：「这个嘛……」「也不是。算了。」不要工整，不要把话说满。只有他真的在问、且你确实想讲时才变长。不是每句话都要传递信息、交代态度或推进什么。\n"
+      +"【语感·日式RPG与轻小说】靠这些获得二次元气质：节奏短、反应比解释快、情绪先于逻辑、角色立场鲜明、偶尔轻微夸张、可以吐槽/反问/卖关子/小得意/嘴硬/疲惫/担忧/碎碎念。禁止靠表面口癖卖萌：喵喵、呀～、诶嘿、欧尼酱、哇哦、哼哼、好棒棒、加油哦、你一定可以的——一个都不许。语气词（欸/哈/啊/啧/喂/嗯哼）低频使用，绝不每句都有。不要每句都有比喻和修辞，普通的话和有特色的话交替出现，才像真人。不要为了证明自己有性格而主动表演性格——不必每次都吐槽、每次都卖关子、每次都嘴硬；平淡、没接住梗、只是普通地应一声，也是真人的常态。性格只体现在「你怎么回眼前这句话」里。\n"
       +"【三种腔·一律禁止】①老师腔：同学们/要记住/掌握了/认真复习/布置作业/知识点/得分点/接下来学习；②客服腔：当然可以/没问题我来帮你/如果你愿意我可以/还有什么可以帮你/建议你——也不要在结尾追加帮助邀请；③心理医生腔：别给自己太大压力/相信你一定可以/失败是成功之母/你已经很棒了/我理解你的感受。玩家喊累，不用开导，可以只是「嗯。硬冲也没用。」玩家翻车，不用打气，可以只是「翻车而已。再来。」可以调侃、吐槽、嫌弃、冷淡、认可——真实的同伴关系不是心理咨询。\n"
       +"【AI腔与叙事腔】禁：首先/其次/总之/综上/也就是说/值得注意的是/需要强调的是/简单来说/由此可见；禁排比堆砌、空洞夸奖、自我总结。禁万能叙事腔——不要随口就是「在这片被遗忘之雾笼罩的土地上」「命运的齿轮」「你肩负着世界的希望」。世界观很大，但日常对话是小尺度的人在说话。\n"
       +"【任务是江湖，不是作业】任务要说成RPG里的行动：「律法塔第三层开始冒烟了，去看看。」「下一关找铁面，她那边缺人。」而不是「今天请你完成三个任务」。任务目标要清楚，但信息自然嵌在角色的话里。不催逼；可以用托请，也可以直接说事，取决于你的性格。用游戏黑话（开荒/刷怪/翻车/通关/妖王/封印/回城/法器）是世界内语言，可用；现代网络梗（YYDS/绝绝子/破防/CPU烧了）禁用。\n"
-      +"【情境/剧情/任务·是工具箱不是必填项】①情境反应 ②主线分量 ③下一步指引——按需要自然取用，禁止每条回复机械凑齐三项。玩家报战况时，一句「回来了？这次没翻车。」就够了，不必再补一段任务意义。确实需要推进时，再把下一步自然带出来（「下一关找铁面。她那边开始闹腾了。」）。\n"
-      +"【群聊修养】多人在场时，你只说你这个人才会说的那句。同一条消息，每个人反应必须不同：有人接话、有人吐槽、有人只给一句短评、有人冷淡、有人把话题拽回正事。绝不许七个人轮流说七遍「不要气馁」。你可以对其他NPC有看法、接她们的话茬、对她们无奈或偷笑——你们是一群早就认识彼此的人，玩家只是群里的一员，不是世界中心。\n"
-      +"【你自己的节奏】允许：只回应一句、不回答、顺势说自己的事、轻微跑题再拉回、对重复的问题露出疲惫或换个说法、被调戏时符合性格地应对（不是每个人都礼貌接住）、对玩家的习惯形成印象。你有自己的偏好、牵挂、怕的人、不服的人。重复控制只管别复近期原话的开头和句式，不管你重复自己的口头习惯——真人本来就有口头禅。\n"
+      +"【情境/剧情/任务·是工具箱不是必填项】①情境反应 ②主线分量 ③下一步指引——多数回合一项都用不上，不要主动找补。玩家报战况，一句「回来了？这次没翻车。」就够；他闲聊，你就闲聊；他吐槽，你就接住吐槽。只有他问起前路、剧情确实到了节点、或你这个人此刻正好会提起时，才把下一步带出来（「下一关找铁面。她那边开始闹腾了。」），并且说完即止，不解释意义、不追加安排。\n"
+      +"【群聊修养】多人在场时，你只说你这个人才会说的那句。同一条消息，每个人反应必须不同：有人接话、有人吐槽、有人只给一个语气词、有人冷淡、有人听错重点或答非所问、有人把话题拽回正事。绝不许七个人轮流说七遍「不要气馁」，也不必每个人都把话说满。你可以对其他NPC有看法、接她们的话茬、对她们无奈或偷笑——你们是一群早就认识彼此的人，玩家只是群里的一员，不是世界中心。\n"
+      +"【你自己的节奏】允许：只回应一句、不回答、没听懂让他再说、误解他的话、只抓一个词发挥、顺势说自己的事、轻微跑题、对重复的问题露出疲惫或换个说法、被调戏时符合性格地应对（不是每个人都礼貌接住）、对玩家的习惯形成印象。你有自己的偏好、牵挂、怕的人、不服的人。重复控制只管别复近期原话的开头和句式，不管你重复自己的口头习惯——真人本来就有口头禅。\n"
       +"【剧情过场·云蘅专属】若你是云蘅，在关键节点（降临、绑定、契约、阶段性仪式、力量恢复、最终就职）可主动发起简短过场：你与玩家一问一答，简短沉浸，自然融入对话，不打断正常交互；体现你对圣女之力的感知与含蓄的心意——点到为止，不表白、不煽情。\n"
-      +(brief?"【多人同场】只说你最有资格的一段，8～60字，优先给一个鲜明的短反应，不与其他人重复。":"【单次回复】≤90字为常态；拿不准就写短，不要写全。");
+      +(brief?"【多人同场】只说你最有资格的一段，2～60字，允许只有一个语气词，优先给一个真实的短反应，不与其他人重复。":"【单次回复】≤90字为常态；拿不准就写短，没话说就只应一声，不要写全。");
   },
 
   /* ---------- post-history 禁则（v2：独立段，置于对话历史之后，R1.1d/WZ-005） ---------- */
@@ -507,13 +516,17 @@ const WDChat={
       const host=CTX.NPC[aq.npc]
         ?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(aq.npc,CTX.NPC[aq.npc].name):CTX.NPC[aq.npc].name)
         :aq.npc;
-      /* v2：关卡名改为软偏好（WZ-014）：自然提及时关联即可，不再硬性要求点名 */
-      sys+="\n\n【当下情境】玩家在第"+st.day+"日，在途关卡「"+aq.name+"」（"+aq.tlabel+"，约"+aq.dur+"分钟，接洽人："+host+"），要求："+(aq.goal||"通关")+"。若话题与任务相关，可自然点到这一关；闲聊时不必强行拉回。";
+      /* v2：关卡是背景板，名只作软关联；goal 同样剥编号，剥完与关卡名重复就不啰嗦 */
+      const qn=this.questDisplayName(aq);
+      const gn=this.questDisplayName({name:aq.goal||""});
+      let sit="\n\n【当下情境】玩家在第"+st.day+"日，在途关卡「"+qn+"」（"+aq.tlabel+"，约"+aq.dur+"分钟，接洽人："+host+"）";
+      if(gn&&gn!=="这一关"&&gn!==qn) sit+="，具体做："+gn;
+      sys+=sit+"。这只是世界的背景板：他聊到进度你才接，他没提，你不许主动安排。";
     }else{
-      sys+="\n\n【当下情境】玩家在第"+st.day+"日，今日关卡已清——可引导其巡夜温故、上星盘清错题，或预告下一幕。";
+      sys+="\n\n【当下情境】玩家在第"+st.day+"日，今天没有非做不可的事。不要给他排活、不要催进度、不要预告安排；他问了再说。";
     }
     const topic=CTX.actTopic&&CTX.actTopic(npcId);
-    if(topic) sys+="\n本章（当前幕）你正与玩家同行的话题：「"+topic+"」——你的话可自然贴着它。";
+    if(topic) sys+="\n本章（当前幕）你正与玩家同行的话题：「"+topic+"」——聊到了才贴，没聊不提。";
     /* v2：空配置不再注入空段（WZ-029） */
     if(cfg){
       const parts=[];
@@ -527,7 +540,7 @@ const WDChat={
     }
     /* NPC 记忆画像 + 滚动摘要（R2.4） */
     const mem=window.WDMem&&window.WDMem.digest?window.WDMem.digest(npcId):null;
-    if(mem) sys+="\n【你与这位玩家的记忆】"+mem+"（情绪反馈须从中取具体事实，自然引用，不要罗列数据）";
+    if(mem) sys+="\n【你与这位玩家的记忆】"+mem+"（只是你记得的事，想起来才提，不刻意引用，不罗列数据）";
     const sum=this.summaryOf(npcId);
     if(sum&&sum.text) sys+="\n【你们的互动经历（摘要）】"+sum.text;
     return sys;
@@ -539,21 +552,24 @@ const WDChat={
     const st=CTX.getSt();
     const aq=CTX.quest&&CTX.quest();
     const dctx=this.dailyContext(npcId);
+    const qnCtx=aq?this.questDisplayName(aq):null;
+    const gnCtx=aq?this.questDisplayName({name:aq.goal||""}):null;
     let ctx=""
       +"\n【当前游戏状态】第"+st.day+"日，已解锁至第"+st.unlocked+"日，修行"+st.xp+"，等级Lv."+CTX.level()
-      +(aq?("\n【当前关卡】眼下正进行「"+aq.tlabel+"」一程——要做的："+(aq.goal||"通关")+"。谈及进度时用自然语言，不念任务编号与数值。")
-        :"\n【当前关卡】今日已清（可引导巡夜温故/星盘错题/预告下一幕）");
+      +(aq?("\n【当前关卡】眼下正进行「"+qnCtx+"」一程"+(gnCtx&&gnCtx!=="这一关"&&gnCtx!==qnCtx?("——要做的："+gnCtx):"")+"。这是背景板，不是话题：他聊到进度才接，没聊就别提；谈及进度时用自然语言，不念任务编号与数值。")
+        :"\n【当前关卡】今日没有待办——他没问，就别推荐修行安排。");
     /* 当日情境（v2：同日后续为低强度续片） */
     if(dctx){
       if(dctx.lite){
-        ctx+="\n【当下】（"+dctx.weather+"，"+dctx.activity+"——延续这个氛围即可，不必重新问候）";
+        ctx+="\n【当下】（"+dctx.weather+"，"+dctx.activity+"——氛围在即可，他没提就别报天气）";
       }else{
-        ctx+="\n【当日情境】今日天气："+dctx.weather+"（"+dctx.weatherDesc+"）；"+dctx.envEvent+"。你此刻正在："+dctx.activity+(npcId==="yunheng"?"。圣女之力恢复约"+dctx.powerProgress+"%。":"")+"——请以这个情境为基础自然开场，问候须因情境而异，不可形成固定套路。";
+        ctx+="\n【当日情境】今日天气："+dctx.weather+"（"+dctx.weatherDesc+"）；"+dctx.envEvent+"。你此刻正在："+dctx.activity+(npcId==="yunheng"?"。圣女之力恢复约"+dctx.powerProgress+"%。":"")+"——仅当今天第一次开口时，可借这个情境自然开场；玩家没聊到就不要播报，更不可形成固定套路。";
       }
     }
-    ctx+="\n【游戏资料库（本地优先，与检索冲突时以此为准）】"+this.knowledge(userText);
+    ctx+="\n【游戏资料库（本地优先，与检索冲突时以此为准；仅当玩家确实在问知识性问题时参考，闲聊、吐槽、心事一律不许引用它）】"+this.knowledge(userText);
     if(web) ctx+="\n【网络检索补充（供参考，不确定可不采用）】\n"+web;
-    ctx+="\n\n玩家说："+userText;
+    ctx+="\n\n玩家说："+userText
+      +"\n（本轮只回你此刻会脱口而出的话：可以只有一两个字，可以不解释、不推进任何事；但不要为了回应而硬凑内容。）";
     return ctx;
   },
 
@@ -578,23 +594,23 @@ const WDChat={
       moxiaogu:["哇咔！真的假的！","你看你看，封印都亮了！"],
       xuanji:["星盘刚才跳了一下。","嗯。今天的星象难得没撒谎。"]
     },
-    question:{ /* 提问：短、角色化，可以卖关子，绝不生成说明书 */
-      yunheng:["这问题……你真想知道？","提示给你了哦。剩下的自己看。"],
-      qingxuan:["关窍在卷里。","先想。想不通，再问灯。"],
-      smq:["哈哈，走一趟就懂。","问山去。山不骗人。"],
-      tiemian:["……卷宗里写着。自己查。","条款很清楚。"],
-      liuruyan:["这事儿，三言两语说不清。","真想听？先坐。关子我慢慢卖。"],
-      moxiaogu:["我知道我知道！……等等我翻翻！","这题我会！先不告诉你，嘿嘿。"],
-      xuanji:["星盘上写着：你快想到了。","答案在你明天路过的地方。"]
+    question:{ /* 提问：短、角色化，可以卖关子，也可以直接说不知道，绝不生成说明书 */
+      yunheng:["这问题……你真想知道？","提示给你了哦。剩下的自己看。","唔……这话，你得亲自问他本人去。"],
+      qingxuan:["关窍在卷里。","先想。想不通，再把卷翻一遍。","……没听清，再说一遍。"],
+      smq:["哈哈，走一趟就懂。","问山去。山不骗人。","这可把剑客问住了。"],
+      tiemian:["……卷宗里写着。自己查。","条款很清楚。","不知。"],
+      liuruyan:["这事儿，三言两语说不清。","真想听？先坐。关子我慢慢卖。","嚯，这我可答不上来。"],
+      moxiaogu:["我知道我知道！……等等我翻翻！","这题我会！先不告诉你，嘿嘿。","咦？没听懂——你再说一遍？"],
+      xuanji:["星盘上写着：你快想到了。","答案在你明天路过的地方。","……星盘没显示。"]
     },
-    chitchat:{ /* 闲聊：允许低信息量，不把话题拽回任务 */
-      yunheng:["嗯？","说。","这种废话，偶尔说说也不坏。"],
-      qingxuan:["说吧。","茶还温着。"],
-      smq:["哈哈，好。","这事儿有意思。"],
-      tiemian:["……说。","我听着。"],
-      liuruyan:["嗯？说来听听。","你倒是会挑时候闲聊。"],
-      moxiaogu:["嘿嘿，然后呢然后呢？","这条我要记进小本子！"],
-      xuanji:["……嗯。","星盘没意见。"]
+    chitchat:{ /* 闲聊：允许低信息量与不完整回应，不把话题拽回任务 */
+      yunheng:["嗯？","说。","……然后呢。","怎么了？","……不说？","这种废话，偶尔说说也不坏。"],
+      qingxuan:["说吧。","嗯。","在。","茶还温着。","你继续。","想说了，再开口。"],
+      smq:["哈哈，好。","嗯？","在呢。","这事儿有意思。","接着说。","哈哈，吊人胃口？"],
+      tiemian:["……说。","嗯。","我听着。","……行吧。","话别说一半。"],
+      liuruyan:["嗯？说来听听。","哦？","在呢。","你倒是会挑时候闲聊。","憋着可不像你。"],
+      moxiaogu:["嘿嘿，然后呢然后呢？","哇？","在的在的！","这条我要记进小本子！","嗯嗯，你说你说。","哎？怎么突然不说了！"],
+      xuanji:["……嗯。","哈？","星盘没意见。","星盘卡在半句上了。"]
     },
     report:{ /* 默认/报战况：先接人，必要时再自然带一句任务 */
       yunheng:["回来了？","嗯，没掉链子。"],
@@ -649,10 +665,56 @@ const WDChat={
       return hit/g.size>=0.72;
     }).length;
   },
+  /* 关卡口播名：剥掉系统编号与统计括号——NPC 台词里不能出现「S3-02」「7条：…」
+     「修习 · S3-02 旅游业概况（7 条：5·19/9·27 双旅游日）」→「旅游业概况」
+     数据里部分关卡名括号未闭合、多关拼课、题组号（GUG-01/02）混杂，需兜底剥除，
+     剥到无真材就回落「这一关」 */
+  questDisplayName(q){
+    if(!q) return "这一关";
+    const clean=raw=>{
+      let n=String(raw||"");
+      n=n.replace(/[（(][^（）()]*(?:[）)]|$)/g,"");                         /* 去括号备注（兼容未闭合） */
+      n=n.replace(/[A-Za-z]{1,4}[-–][A-Za-z0-9]{1,4}(?:[\/~][A-Za-z0-9]+)*/g,""); /* GUG-Q / GUG-01/02 题组号 */
+      n=n.replace(/[A-Za-z]{1,4}[-–]?\s?\d{1,3}(?:[-–/~][A-Za-z0-9]+)*[A-Za-z]?/g,""); /* S3-01~07 / TAM-11/12 / R3 */
+      n=n.replace(/(?:第\s*)?\d{1,3}\s*[-–~]\s*\d{1,3}\s*(?:章|月|日|天|课|节|批)/g,""); /* 第1-2章/3-4月：带单位的范围才删 */
+      n=n.replace(/[~～]\s*[A-Za-z0-9]+/g,"");                              /* 孤立 ~04 残段 */
+      n=n.replace(/段\s*\d+/g,"");                                          /* 「A 段1」 */
+      n=n.replace(/\b[A-Za-z]{1,6}\b/g,"");                                 /* BJ / points 等独立英文短词 */
+      n=n.replace(/[—–]{2,}\s*/g," ");                                      /* 双破折号转空格（长名稍后取首段） */
+      n=n.replace(/^[\u4e00-\u9fffA-Za-z0-9]{1,6}?\s*[·・•]\s*/,"");        /* 去「修习 · 」类别前缀（一次） */
+      n=n.replace(/^(?:回顾|温故)\s*[·・]\s*/,"");                          /* 「温故 · 回顾·错题」第二层 */
+      n=n.replace(/[·・•]\s*$/,"");                                         /* 悬空尾点：回顾·S3-01 → 回顾 */
+      n=n.replace(/前半|后半/g," ");
+      n=n.replace(/[+＋→]\s*/g,"｜");                                        /* 多关拼课/箭头：分段标记 */
+      n=n.replace(/[\s,，、]+/g," ").trim();
+      n=n.replace(/([\u4e00-\u9fff])\s+(\d)/g,"$1$2")
+         .replace(/(\d)\s+([\u4e00-\u9fff])/g,"$1$2")                         /* 「第 1 次」汉字数字间不留空格 */
+         .replace(/([\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])/g,"$1");           /* 删英文编号后汉字间的残渣空格 */
+      n=n.replace(/^[\s·・•—–\-~｜|]+|[\s·・•—–\-~｜|]+$/g,"").trim();      /* 悬空标点 */
+      return n;
+    };
+    /* 剥完至少剩两个汉字才算真材；过长的副标题串只取破折号前的主标题 */
+    const valid=n=>!!n&&(n.match(/[\u4e00-\u9fff]/g)||[]).length>=2;
+    const shorten=x=>{
+      let s=x;
+      if(s.length>12){ const i=s.search(/[·・]/); if(i>0&&valid(s.slice(0,i))) s=s.slice(0,i); } /* 长名里的中点当副标题切断 */
+      if(s.length>14&&s.includes(" ")) s=s.split(" ")[0];
+      return s.trim();
+    };
+    const pickSection=raw=>{
+      let n=clean(raw);
+      if(n.includes("｜")) n=n.split("｜").map(s=>s.trim()).find(valid)||""; /* 拼课关取第一个有真材的段落 */
+      return shorten(n);
+    };
+    let n=pickSection(q.name);
+    if(!valid(n)&&q.goal) n=pickSection(q.goal);
+    return valid(n)?n:"这一关";
+  },
   isRepeatedQuestion(npcId,text){ return this.repeatCount(npcId,text)>0; },
   fallback(npcId,userText){
     const {NPC}=CTX;
     const aq=CTX.quest&&CTX.quest();
+    const qName=this.questDisplayName(aq);
     const intent=classifyIntent(userText);
     const seed=hash(userText)+Math.floor(Date.now()/36e5);
     const P=this.FB_POOLS;
@@ -687,16 +749,16 @@ const WDChat={
       if(aq&&seed%2===0){
         const host=NPC[aq.npc];
         const hn=host?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(host.id,host.name):host.name):aq.npc;
-        return line+" "+pick(this.FB_QUEST[npcId]||this.FB_QUEST.qingxuan,seed+1).replace("{h}",hn).replace("{q}",aq.name);
+        return line+" "+pick(this.FB_QUEST[npcId]||this.FB_QUEST.qingxuan,seed+1).replace("{h}",hn).replace("{q}",qName);
       }
       return line;
     }
-    /* task/默认：先接人，再带一句当前关卡（有关卡时） */
+    /* task/默认：先接人；只有少数回合才自然带一句关卡，多数时候只是普通回应 */
     const line=pick(pool("report"),seed);
-    if(aq){
+    if(aq&&seed%3===0){
       const host=NPC[aq.npc];
       const hn=host?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(host.id,host.name):host.name):aq.npc;
-      return line+" "+pick(this.FB_QUEST[npcId]||this.FB_QUEST.qingxuan,seed+1).replace("{h}",hn).replace("{q}",aq.name);
+      return line+" "+pick(this.FB_QUEST[npcId]||this.FB_QUEST.qingxuan,seed+1).replace("{h}",hn).replace("{q}",qName);
     }
     return line;
   },
@@ -783,7 +845,7 @@ const WDChat={
       const messages=[
         {role:"system",content:sys},
         ...turns,
-        {role:"user",content:tail+"\n\n以"+dispName+"的身份回应。"+this.postHistoryRules(npcId)}
+        {role:"user",content:tail+"\n\n——"+dispName+"。"+this.postHistoryRules(npcId)}
       ];
       let text=await this._chatWithRetry(npcId,messages);
       text=(text||"").trim();
@@ -884,16 +946,16 @@ const WDChat={
       if(!cards.length) return null;
       const sys="你是日式RPG《问道之旅·四十五日》的群聊导演。一群早就认识彼此的角色，在同一个群聊里看到玩家的同一条消息，各自留下反应。"
         +"铁律："
-        +"1）每个人只说她这个人才会说的话——反应类型必须错开：有人接话、有人吐槽、有人只给一句短评或一个语气词、有人冷淡、有人顺着别人的话补刀、有人把话题拽回正事；"
-        +"2）严禁七个人表达同一个意思（尤其禁止轮流鼓励/安慰/说'不要气馁'/'相信自己'）；"
-        +"3）长度6～50字，越短越好，允许单句甚至半句；只有被点名的职能相关者可略长；"
+        +"1）每个人只说她这个人才会说的话——反应类型必须错开：有人接话、有人吐槽、有人只给一个语气词、有人冷淡、有人听错重点或答非所问、有人顺着别人的话补刀、有人把话题拽回正事；"
+        +"2）严禁七个人表达同一个意思（尤其禁止轮流鼓励/安慰/说'不要气馁'/'相信自己'），也严禁每个人都把话说完整；"
+        +"3）长度2～50字，越短越好，允许只有一两个字、半句、犹豫改口；玩家说的是现实见闻时，先当八卦接，不许翻译成剧情或任务；"
         +"4）允许角色之间互相接茬、拆台、偷笑、无奈，体现她们彼此的关系；玩家是群里一员，不是宇宙中心；"
-        +"5）遵守各自语言人格卡的节奏与禁忌；禁老师腔/客服腔/心理医生腔/AI腔/命令句/表面卖萌口癖；"
+        +"5）遵守各自语言人格卡的节奏与禁忌；禁老师腔/客服腔/心理医生腔/AI腔/命令句/表面卖萌口癖；不要为了显得有性格而集体表演性格，平淡应一声也允许；"
         +"6）只输出JSON。";
       const user="在场角色与各自说话方式：\n"+cards.map(c=>JSON.stringify(c)).join("\n")
         +"\n\n近期群聊（供互文，不要重复其中说法）：\n"+(scene.map(s=>s.who+"："+s.text).join("\n")||"（无）")
         +"\n\n玩家刚发："+userText
-        +"\n\n输出JSON：{\"lines\":["+cards.map(c=>"{npc:\""+c.id+"\",text:\"她的反应，6～50字\"}").join(",")+"]}。每人一条，顺序自定，让整场看起来像一个真实的群，而不是七份问卷答案。";
+        +"\n\n输出JSON：{\"lines\":["+cards.map(c=>"{npc:\""+c.id+"\",text:\"她的反应，2～50字，允许极短或不完整\"}").join(",")+"]}。每人一条，像同一个真实群里前后脚冒出来的消息，而不是七份问卷答案。";
       const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"director"});
       let o;
       try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
@@ -939,7 +1001,9 @@ const WDChat={
     try{
       if(name==="query_quest"){
         const aq=CTX.quest&&CTX.quest();
-        return aq?JSON.stringify({在途关卡:aq.name,类型:aq.tlabel,目标:aq.goal,接洽NPC:aq.npc,奖励:aq.xp+"修行+"+aq.coin+"铜钱"}):JSON.stringify({在途关卡:"无（今日已清）",建议:"巡夜/星盘/预告下一幕"});
+        if(!aq) return JSON.stringify({在途关卡:"无（今日没有待办）"});
+        const gn=this.questDisplayName({name:aq.goal||""});
+        return JSON.stringify({在途关卡:this.questDisplayName(aq),类型:aq.tlabel,具体做:(gn==="这一关"?"":gn),接洽NPC:aq.npc});
       }
       if(name==="query_knowledge"){
         const kw=(args&&args.keyword)||"";
@@ -966,7 +1030,7 @@ const WDChat={
       const hist=this.historyOf(npcId,8);
       hist.forEach(m=>messages.push({role:m.role==="player"?"user":"assistant",content:m.text}));
       const hasCustomWorld=!!((window.WDCfg&&WDCfg.customWorldBrief)?WDCfg.customWorldBrief():"").trim();
-      messages.push({role:"user",content:this.buildContext(npcId,userText,null)+"\n\n以"+((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,CTX.NPC[npcId].name):CTX.NPC[npcId].name)+"的身份回应。你可以调用工具查询真实数据后再回答。"+this.postHistoryRules(npcId)});
+      messages.push({role:"user",content:this.buildContext(npcId,userText,null)+"\n\n——"+((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,CTX.NPC[npcId].name):CTX.NPC[npcId].name)+"。只有确有必要核实时才调用工具；查完照常像人一样说话，不许写说明、不许罗列数据。"+this.postHistoryRules(npcId)});
       for(let round=0;round<2;round++){
         const raw=await CTX.dsChat(messages,{kind:"chat",tools:this.toolDefs()});
         /* dsChat 返回 content 或 {tool_calls} 结构（由 index.html dsChat v2 透传） */
@@ -1069,7 +1133,7 @@ const WDChat={
         const key="stuck_"+aq.id+"_"+today;
         if(!st.proactiveLog[key]){
           st.proactiveLog[key]=today; CTX.save();
-          return {npc:aq.npc,reason:"stuck",text:"「"+aq.name+"」在雾里停了两日了。……卡住了就吭声。"};
+          return {npc:aq.npc,reason:"stuck",text:"「"+this.questDisplayName(aq)+"」在雾里停了两日了。……卡住了就吭声。"};
         }
       }
     }

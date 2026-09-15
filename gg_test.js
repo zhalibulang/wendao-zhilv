@@ -387,27 +387,29 @@ const driver=`
     const r=WDChat.postHistoryRules('qingxuan');
     if(!r.includes('已淘汰旧概念禁用')) throw new Error('postHistoryRules缺旧概念禁令');
   });
-  /* ===== 剧情先行 + 任务说明三要素（v27）===== */
-  run('genQuestBrief prompt含剧情先行硬约束',()=>{
+  /* ===== 剧情先行 + 任务说明三要素（v27 建立 / v33 轻小说化）===== */
+  run('genQuestBrief prompt含剧情先行顺序与轻小说约束（v33）',()=>{
     reset();
     const qsrc=genQuestBrief.toString();
-    if(!qsrc.includes('剧情先行硬约束')) throw new Error('任务说明prompt缺剧情先行约束');
-    if(!qsrc.includes('杜绝任务先行、剧情后置')) throw new Error('缺"杜绝任务先行"硬约束');
+    if(!qsrc.includes('剧情先行·任务发布顺序')) throw new Error('任务说明prompt缺剧情先行顺序约束');
     /* 三要素字段须在 schema 中明确要求 */
     if(!qsrc.includes('necessity')) throw new Error('schema缺necessity字段');
     if(!qsrc.includes('impact')) throw new Error('schema缺impact字段');
     if(!qsrc.includes('reward')) throw new Error('schema缺reward字段');
     if(!qsrc.includes('scene')) throw new Error('schema缺scene字段');
+    if(!qsrc.includes('轻小说')) throw new Error('v33 必须声明轻小说/GALGAME 文风');
+    if(!qsrc.includes('新手村')) throw new Error('必须明确禁用网游黑话（新手村/刷本等）');
+    if(qsrc.includes('玩家在做任务=网络游戏行为')) throw new Error('旧版网游行为设定必须移除');
   });
-  run('genQuestBrief prompt含核心世界观三逻辑',()=>{
+  run('genQuestBrief prompt含核心世界观三逻辑（v33）',()=>{
     reset();
     const qsrc=genQuestBrief.toString();
     /* 玩家是唯一具备就职仪式资格的域外之人 */
     if(!qsrc.includes('域外之人')) throw new Error('缺"域外之人"硬约束');
     if(!qsrc.includes('就职仪式')) throw new Error('缺"就职仪式"硬约束');
-    /* NPC能力复苏=世界拯救必要条件 */
-    if(!qsrc.includes('能力复苏')) throw new Error('缺"能力复苏"硬约束');
-    if(!qsrc.includes('圣女之力恢复')) throw new Error('缺"圣女之力恢复"硬约束');
+    /* 圣女复苏+驱雾=世界拯救逻辑 */
+    if(!qsrc.includes('圣女之力')||!qsrc.includes('复苏')) throw new Error('缺圣女之力复苏逻辑');
+    if(!qsrc.includes('驱雾')) throw new Error('缺驱雾救世逻辑');
     /* 玩家收益与返回原世界目标相关 */
     if(!qsrc.includes('返回原世界')) throw new Error('缺"返回原世界"硬约束');
   });
@@ -418,12 +420,15 @@ const driver=`
     reconcile();
     if(st.aiBrief['D01M']) throw new Error('旧schema aiBrief应被清除');
   });
-  run('新schema aiBrief缓存保留',()=>{
+  run('v2轻小说schema aiBrief缓存保留；旧prompt缓存清除（v33）',()=>{
     reset();
-    /* 新 schema 含三要素字段，不应被清除 */
-    st.aiBrief['D01M']={scene:'雾在涌',line:'这一关交给你',necessity:'非你不可',impact:'圣女复苏',reward:'+25修行',metaphor:'试炼',at:new Date().toISOString()};
+    /* v2 轻小说 schema 保留 */
+    st.aiBrief['D01M']={v:2,scene:'雾在涌',line:'这一程交给你',necessity:'只有你能走',impact:'她会醒一分',reward:'道力与盘缠',metaphor:'试炼',at:new Date().toISOString()};
+    /* v1 网游腔 schema（有三要素但无 v 标记）必须清除 */
+    st.aiBrief['D02M']={scene:'妖王低吼',line:'开荒去',necessity:'非你不可',impact:'能力复苏',reward:'掉落',at:new Date().toISOString()};
     reconcile();
-    if(!st.aiBrief['D01M']) throw new Error('新schema aiBrief不应被清除');
+    if(!st.aiBrief['D01M']) throw new Error('v2 schema aiBrief 不应被清除');
+    if(st.aiBrief['D02M']) throw new Error('v1 网游腔缓存必须清除重生成');
   });
   run('旧概念缓存自动清除',()=>{
     reset();
@@ -595,7 +600,7 @@ const driver=`
     if(!dayHtml.includes('data-toggle='))throw new Error('日节点缺 data-toggle（折叠失效）');
     if(!dayHtml.includes('data-expanded='))throw new Error('日节点缺展开态');
   });
-  run('云蘅结算回应：任务NPC之后接棒且含三要素',()=>{
+  run('云蘅结算回应：任务NPC之后接棒，口播名且不念数值',()=>{
     reset(); st.unlocked=1;
     const q=D.quests.find(x=>x.id==='D01M');
     settleQuest(q,true,null);
@@ -605,10 +610,10 @@ const driver=`
     if(idxYh<0)throw new Error('云蘅结算回应缺失');
     if(idxYh<idxAck)throw new Error('云蘅必须在任务NPC结算回复之后接棒');
     const ym=st.dialogue[idxYh], t=ym.text;
-    if(!t.includes(q.name))throw new Error('缺任务总结（关卡名）');
-    if(!t.includes('+'+q.xp+'修行'))throw new Error('缺收获数字');
-    if(!/全对|磕绊|星盘/.test(t))throw new Error('缺经验分析');
-    if(!/下一关|巡夜/.test(t))throw new Error('缺下一步引导');
+    if(!t.includes(WDChat.questDisplayName(q)))throw new Error('缺关卡口播名：'+t);
+    if(/[SDE]\\d+-\\d+|\\+\\d+修行/.test(t))throw new Error('结算台词不应念编号或数值：'+t);
+    if(!/全对|没漏|磕绊|星盘/.test(t))throw new Error('缺一句真实反应');
+    if(!/雾动了|今天就到这儿|交割/.test(t))throw new Error('缺收束感');
     if(!ym.refs||!ym.refs.some(x=>x.qid===q.id))throw new Error('云蘅回应缺已完成任务ref');
     if(!qDone(q.id)||st.xp<q.xp)throw new Error('结算未生效（done/修行）');
   });
@@ -678,7 +683,8 @@ const driver=`
     const aq=firstActiveQuest();
     if(!aq)throw new Error('无在途关卡');
     const s=WDChat.sysPrompt('qingxuan',false);
-    if(!s.includes('「'+aq.name+'」'))throw new Error('情境段应含当前关卡名');
+    if(!s.includes('「'+WDChat.questDisplayName(aq)+'」'))throw new Error('情境段应含当前关卡口播名');
+    if(/[SDE]\\d+-\\d+/.test(s.slice(s.indexOf('【当下情境】'),s.indexOf('接洽人'))))throw new Error('情境段不应泄漏任务编号');
     if(s.includes('至少自然点到一次'))throw new Error('关卡点名应已降为软偏好');
   });
   /* ===== 书页打字机效果 ===== */
@@ -713,6 +719,91 @@ const driver=`
     });
     if(s.includes('多夸赞')) throw new Error('不应再机械要求夸赞鼓励');
     if(s.includes('激励而非教育')) throw new Error('旧教育基调约束应已移除');
+  });
+  run('v30.1 允许不完整回应/误解答非所问/反表演',()=>{
+    reset();
+    const doc=WDChat.defaultAiDocument('yunheng','云蘅','引路人',false);
+    ['允许不完整回应','答非所问','误解','主动表演性格','没听懂'].forEach(k=>{
+      if(!doc.includes(k)) throw new Error('文档缺新规则：'+k);
+    });
+    /* 多人同场下限放宽到2字，允许只有一个语气词（brief=true 为多人变体） */
+    const brief=WDChat.defaultAiDocument('yunheng','云蘅','引路人',true);
+    if(!brief.includes('2～60字')) throw new Error('多人同场应允许2字起的极短回应');
+  });
+  run('v30.1 无在途关卡时不主动排活',()=>{
+    reset();
+    const origQuest=WDChat._ctx.quest;
+    WDChat._ctx.quest=()=>null;
+    try{
+      const s=WDChat.sysPrompt('qingxuan',false);
+      if(!s.includes('没有非做不可的事')) throw new Error('无关卡时应声明不排活');
+      if(s.includes('预告下一幕')) throw new Error('不应再主动预告安排');
+      const c=WDChat.buildContext('qingxuan','随便聊聊',null);
+      if(c.includes('可引导')) throw new Error('buildContext 无关卡时不应引导修行安排');
+    }finally{ WDChat._ctx.quest=origQuest; }
+  });
+  run('v30.1 在途关卡只是背景板，不要求主动安排',()=>{
+    reset();
+    const s=WDChat.sysPrompt('qingxuan',false);
+    if(!s.includes('背景板')) throw new Error('关卡应被定义为背景板而非话题任务');
+    /* 脏数据关卡（编号/未闭合括号）：sysPrompt、buildContext、query_quest 均不得向 LLM 泄漏编号 */
+    const dirty=D.quests.find(q=>q.id==='D01S2');
+    const origQuest=WDChat._ctx.quest;
+    WDChat._ctx.quest=()=>dirty;
+    try{
+      const sp=WDChat.sysPrompt('qingxuan',false);
+      const bc=WDChat.buildContext('qingxuan','闲聊',null);
+      const tq=WDChat.toolExec('query_quest',{},'qingxuan');
+      [sp,bc,tq].forEach((x,i)=>{
+        if(/S3-02|5·19|[（(]7 条/.test(x)) throw new Error('编号/统计括号泄漏到 LLM 输入('+i+')：'+x.slice(0,200));
+      });
+    }finally{ WDChat._ctx.quest=origQuest; }
+  });
+  run('v30.1 资料库仅知识提问可用，闲聊禁止引用',()=>{
+    reset();
+    const c=WDChat.buildContext('moxiaogu','我家猫今天又打翻了水杯',null);
+    if(!c.includes('闲聊、吐槽、心事一律不许引用')) throw new Error('资料库应标注闲聊禁用');
+    if(!c.includes('不要为了回应而硬凑')) throw new Error('尾消息应允许低信息量回应');
+  });
+  run('v30.1 导演prompt允许极短/听错/答非所问',()=>{
+    reset();
+    /* 直接校验导演系统提示构造不可行（内部方法），以文档+常量一致性间接保证 */
+    const doc=WDChat.defaultAiDocument('tiemian','铁面先生','镇塔者',true);
+    if(!doc.includes('听错重点或答非所问')) throw new Error('群聊修养应允许听错与答非所问');
+  });
+  run('v30.1 questDisplayName 剥编号/括号/类别前缀',()=>{
+    reset();
+    const cases=[
+      [{name:'修习 · S3-02 旅游业概况（7 条：5·19/9·27 双旅游日）',tlabel:'修习'},'旅游业概况'],
+      [{name:'修习 · S3-02 旅游业概况（7 条：5·19/9·27 双旅游日',goal:'S3-02 旅游业概况（7 条）',tlabel:'修习'},'旅游业概况'],
+      [{name:'主线 · 整备行囊',tlabel:'主线'},'整备行囊'],
+      [{name:'支线 · 夜探长城（一）',tlabel:'支线'},'夜探长城'],
+      [{name:'省身 · 错题速览 + 修行录 45 天总盘点（完成率/streak/',tlabel:'省身'},'错题速览'],
+      [{name:'吟游 · TAM-11/12 + 天安门全稿第 1 次完整朗读（6 分',goal:'TAM-11/12 + 天安门全稿第 1 次完整朗读（6 分钟录音）',tlabel:'吟游'},'天安门全稿第1次完整朗读'],
+      [{name:'主线 · S1-08 后半（05-08）+ S1-09 前半（01-0',goal:'S1-08 后半（05-08）+ S1-09 前半（01-03）',tlabel:'修习'},'这一关'],
+      [{name:'',tlabel:'试炼'},'这一关'],
+      [null,'这一关']
+    ];
+    cases.forEach(([q,exp])=>{
+      const got=WDChat.questDisplayName(q);
+      if(got!==exp) throw new Error(JSON.stringify(q.name)+' → '+got+'，期望 '+exp);
+    });
+    /* 真实数据：每个关卡口播名都不得残留编号/括号/前半后半 */
+    D.quests.forEach(q=>{
+      const d=WDChat.questDisplayName(q);
+      if(/[SDE]\\d|TAM\\d|（|）|\\(|\\)|前半|后半/.test(d)) throw new Error(q.id+' 口播名仍脏：'+d);
+    });
+  });
+  run('v30.1 极简搭话/欲言又止/八卦不派任务不答非所问',()=>{
+    reset();
+    const q=WDChat.questDisplayName(firstActiveQuest());
+    ['在吗','嗯','哈哈','那个……算了，当我没说','我也不知道我想问什么','你说他刚才那句话什么意思啊'].forEach(txt=>{
+      ['yunheng','tiemian','moxiaogu'].forEach(id=>{
+        const r=WDChat.fallback(id,txt);
+        if(r.includes(q)) throw new Error('「'+txt+'」不应触发关卡牵引：'+r);
+        if(/不知道。?$/.test(r)&&/什么意思|想问什么/.test(txt)) throw new Error('八卦/无目的发言不应全员答「不知道」：'+r);
+      });
+    });
   });
   run('typewriterExpand 逐段展开无 clicks 分支',()=>{
     reset();
@@ -909,6 +1000,148 @@ const driver=`
     ensureGuidanceScene();
     if(st.dialogue.length!==1) throw new Error('已有对话时不应生成引导对话');
     if(st.dialogueInitDay!==st.day) throw new Error('应标记当日已初始化');
+  });
+  run('v31 序章初见过场不阻断当日引导，且排在引导之前',()=>{
+    reset(); st.unlocked=1;
+    st.dialogue.push({id:'cs_arrive',role:'npc',npc:'yunheng',text:'初见过场',cutscene:'arrive',at:new Date().toISOString(),day:st.day});
+    st.dialogueInitDay=0;
+    ensureGuidanceScene();
+    if(st.dialogue.length<7) throw new Error('过场之外仍应生成当日引导，实际'+st.dialogue.length);
+    if(st.dialogue[0].cutscene!=='arrive') throw new Error('初见过场必须位于对话流最前');
+    if(!st.dialogue.slice(1).every(m=>m.guidance===true)) throw new Error('过场之后应全部是当日引导消息');
+  });
+  run('v33 启程入口：intro 启动序章播放器而非直接落过场',()=>{
+    const code=intro.toString();
+    if(!code.includes('startPrologue()')) throw new Error('intro 启程按钮必须启动序章播放器');
+    if(code.includes('triggerCutscene("arrive")')) throw new Error('intro 不再直接触发 arrive 过场（已融入序章）');
+    if(!code.includes('dsKeyGate')) throw new Error('序章入口必须提供 AI 密钥配置门');
+  });
+  /* ===== v33 视觉小说序章 ===== */
+  run('v33 序章脚本：三拍类型齐全且关键剧情点一个不缺',()=>{
+    if(!Array.isArray(PROLOGUE_SCRIPT)||PROLOGUE_SCRIPT.length<18) throw new Error('序章至少18拍，实际'+(PROLOGUE_SCRIPT.length));
+    const types={}; PROLOGUE_SCRIPT.forEach(b=>types[b.t]=(types[b.t]||0)+1);
+    if(!types.narr||!types.mono||!types.dlg) throw new Error('必须含旁白/独白/对话三拍：'+JSON.stringify(types));
+    if(types.narr<3) throw new Error('旁白拍不足');
+    if(types.dlg<8) throw new Error('NPC对话拍不足8拍，叙事撑不起来');
+    const all=PROLOGUE_SCRIPT.map(b=>b.x||"").join(" ");
+    ['遗忘之雾','绑定','灵魂契约','{xuanji}','域外之人','天命导游','四十五日','五幕','金榜台','就职仪式','整备行装']
+      .forEach(k=>{ if(!all.includes(k)) throw new Error('序章缺关键剧情点：'+k); });
+    /* 五种修行方式必须在五事拍 */
+    const five=PL_FIVE.map(f=>f.k).join("");
+    ['读卷','试炼','录音','巡夜','星盘'].forEach(k=>{ if(!five.includes(k)) throw new Error('五事拍缺：'+k); });
+    /* 关键拍 id 齐全（finishPrologue 落流依赖） */
+    ['arrive','pact','bind','road'].forEach(id=>{
+      if(!PROLOGUE_SCRIPT.some(b=>b.id===id)) throw new Error('序章缺关键拍 id：'+id);
+    });
+  });
+  run('v33 序章脚本：无淘汰词、无网游黑话、无未替换占位',()=>{
+    const allow={player:1,yunheng:1,xuanji:1,qingxuan:1,smq:1};
+    PROLOGUE_SCRIPT.forEach((b,i)=>{
+      const x=b.x||"";
+      WDRegistry.obsoleteTerms().forEach(t=>{ if(x.includes(t)) throw new Error('第'+i+'拍含淘汰词：'+t); });
+      ['新手村','刷本','开荒','掉落','团战','扛怪','引魂灯'].forEach(t=>{ if(x.includes(t)) throw new Error('第'+i+'拍含网游黑话：'+t); });
+      const ph=x.match(/\{(\w+)\}/g);
+      if(ph) ph.forEach(p=>{ const k=p.slice(1,-1); if(!allow[k]) throw new Error('第'+i+'拍有未定义占位：'+p); });
+      if(b.t!=="title"&&x&&(x.length<8||x.length>120)) throw new Error('第'+i+'拍长度异常：'+x.length);
+    });
+  });
+  run('v33 序章 AI 编修 prompt：保拍数保剧情、禁黑话禁加戏',()=>{
+    const code=refinePrologueLines.toString();
+    ['保持拍数','灵魂契约','域外之人','金榜台','新手村','obsoleteTerms','JSON'].forEach(k=>{
+      if(!code.includes(k)) throw new Error('序章编修prompt缺：'+k);
+    });
+  });
+  run('v33 finishPrologue：三节点标记+三条精粹落流+幂等，之后才出引导',()=>{
+    reset(); st.unlocked=1; st.dialogueInitDay=0;
+    finishPrologue();
+    ['arrive','bind','pact'].forEach(n=>{ if(!st.cutscenes[n]) throw new Error('序章结束必须标记节点：'+n); });
+    const cs=st.dialogue.filter(m=>m.cutscene);
+    if(cs.length!==3) throw new Error('应落流3条序章精粹，实际'+cs.length);
+    if(cs[0].cutscene!=='arrive'||cs[0].npc!=='yunheng') throw new Error('第一条必须是云蘅初见绑定');
+    if(cs[1].cutscene!=='pact'||cs[1].npc!=='xuanji') throw new Error('第二条必须是璇玑灵魂契约');
+    if(cs[2].cutscene!=='bind'||cs[2].npc!=='yunheng') throw new Error('第三条必须是云蘅启程（衔接任务）');
+    if(!cs[2].text.includes('整备行装')) throw new Error('启程拍必须引向第一日整备任务');
+    /* 再调一次不重复落流（幂等） */
+    const n=st.dialogue.length;
+    finishPrologue();
+    if(st.dialogue.length!==n) throw new Error('finishPrologue 必须幂等');
+    /* 序章精粹之后才允许当日引导 */
+    ensureGuidanceScene();
+    const guide=st.dialogue.filter(m=>m.guidance);
+    if(guide.length<6) throw new Error('序章后应生成当日引导6+条');
+    if(st.dialogue.indexOf(guide[0])<st.dialogue.indexOf(cs[0])) throw new Error('引导必须排在序章之后');
+  });
+  run('v33 渲染合并：序章精粹视觉上排在当日opener与任务卡之前',()=>{
+    reset(); st.unlocked=1; st.dialogueInitDay=0;
+    /* mock 的 getElementById 每次返回新元素，这里为 #stream 挂稳定替身以捕获渲染输出 */
+    const sink=makeEl();
+    const origQ=document.querySelector;
+    document.querySelector=s=>s==='#stream'?sink:origQ(s);
+    try{
+      finishPrologue();   // 内部已 render() → renderChat()
+    }finally{ document.querySelector=origQ; }
+    const h=sink.innerHTML;
+    const iArrive=h.indexOf('圣仪阵');
+    const iPact=h.indexOf('星轨从未给外来者');
+    const iOpen=h.indexOf('利其器');   // 第1日 gear opener「先整备法器——利其器，方能斩妖」
+    if(iArrive<0||iPact<0||iOpen<0) throw new Error('序章/ opener 文本缺失，无法比较顺序');
+    if(!(iArrive<iPact&&iPact<iOpen)) throw new Error('序章三精粹必须排在当日任务发放（opener）之前');
+  });
+  run('v33 序章占位名跟随自定义NPC名',()=>{
+    reset();
+    const y=plNames('{yunheng}{xuanji}{qingxuan}{smq}{player}');
+    if(!y.includes(dName('xuanji'))||!y.includes(st.player)) throw new Error('占位替换失败：'+y);
+    if(y.includes('{')) throw new Error('存在未替换占位：'+y);
+  });
+  run('v33 questMetaphor：非战斗关不挂妖王层级',()=>{
+    reset();
+    const gear=D.quests.find(q=>q.type==='gear'&&q.rarity==='epic');
+    if(gear&&questMetaphor(gear).includes('妖王')) throw new Error('整备类事务关不得称妖王：'+questMetaphor(gear));
+    const flash=D.quests.find(q=>q.type==='flash');
+    if(flash&&/妖王|妖将|雾卒/.test(questMetaphor(flash))) throw new Error('夜巡关不得挂战斗层级：'+questMetaphor(flash));
+    const boss=D.quests.find(q=>q.type==='boss'||q.type==='drill');
+    if(boss&&!/妖王|妖将|雾卒/.test(questMetaphor(boss))) throw new Error('战斗关仍应体现妖物层级');
+  });
+  run('v33 本地简报兜底：轻小说标签与文案，无旧AI味标签',()=>{
+    /* openQuest 函数体内含 fallback 闭包源码与渲染标签 */
+    const src=openQuest.toString();
+    ['此行为何','雾散之后','此行所得','灵脉拟稿'].forEach(k=>{ if(!src.includes(k)) throw new Error('本地兜底缺新标签：'+k); });
+    ['为何必行','世界回响','你的所得','非你不可','AI 生成 · 以界面点选为准'].forEach(k=>{ if(src.includes(k)) throw new Error('旧AI味标签残留：'+k); });
+  });
+  run('v31 序章叙事：默认恢复完整故事；JSON/残损自定义不显示「{」',()=>{
+    reset();
+    WDCfg.setWorldBrief('');
+    if(introNarrative()!==DEFAULT_INTRO_NARRATIVE) throw new Error('默认世界观必须逐字使用设计长段');
+    if(!introNarrative().includes('四十五日')) throw new Error('默认故事内容缺失');
+    try{
+      /* 配置面板存进 JSON 结构化文本：序章应提取叙事字段而非显示花括号 */
+      WDCfg.setWorldBrief(JSON.stringify({世界观:'长安城下雾潮日甚，导游次元濒临崩解。唯有集齐传奇导游之力，方能逆转。',版本:'x'}));
+      const a=introNarrative();
+      if(a[0]==='{'||a.includes('"世界观"')) throw new Error('JSON 不应泄漏到序章：'+a);
+      if(!a.includes('长安城下雾潮日甚')) throw new Error('应提取世界观字段：'+a);
+      /* 残损/无叙事 JSON 回退默认 */
+      WDCfg.setWorldBrief('{');
+      if(introNarrative()!==DEFAULT_INTRO_NARRATIVE) throw new Error('残损 brief 应回退默认故事');
+      WDCfg.setWorldBrief(JSON.stringify({a:1,b:['x']}));
+      if(introNarrative()!==DEFAULT_INTRO_NARRATIVE) throw new Error('无叙事字段应回退默认故事');
+      /* 多行散文：取完整句子，不残留换行与花括号 */
+      WDCfg.setWorldBrief('雾起于城西。\\n众导游列阵以待，只等外来者现身。');
+      const c=introNarrative();
+      if(c.includes('\\n')||c[0]==='{') throw new Error('散文 brief 取句异常：'+JSON.stringify(c));
+      if(!c.includes('雾起于城西')) throw new Error('应采用散文首句');
+    }finally{ WDCfg.setWorldBrief(''); }
+  });
+  run('v31 过场润色去剧本化：arrive 不派任务、只出一条口语',()=>{
+    if(!CUTSCENE_HINT.arrive.includes('禁止交代任务')) throw new Error('arrive 节点必须禁止加戏派任务');
+    const code=refineCutscene.toString();
+    if(!code.includes('禁止多组引号')) throw new Error('过场润色应禁止剧本式多引号分段');
+    if(!/≤\s*80字/.test(code)) throw new Error('过场润色应限制为一条短消息（≤80字）');
+  });
+  run('v31 引导润色/战报 prompt 禁淘汰概念与重演初见',()=>{
+    const g=refineGuidanceScene.toString();
+    if(!g.includes('不许重演初见')) throw new Error('引导润色应声明绑定仪式已结束、不重演初见');
+    if(!g.includes('obsoleteTerms')) throw new Error('引导润色应注入注册表淘汰词');
+    if(!refineAction.toString().includes('引魂灯')) throw new Error('战报润色应禁引魂灯等淘汰概念');
   });
   run('judgeDomain：法条关键词强匹配铁面',()=>{
     reset();
