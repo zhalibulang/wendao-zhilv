@@ -490,6 +490,11 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 /* ===== 任务页点击推进提示（v44）===== */
 .stagehint{text-align:center;color:var(--gold);font-size:12px;letter-spacing:.18em;margin:14px 0 4px;animation:hintPulse 1.6s ease-in-out infinite}
 @keyframes hintPulse{0%,100%{opacity:.35}50%{opacity:1}}
+/* v45：剧情对话仿聊天逐条弹出 */
+.qdial-line{overflow:hidden}
+.qdial-hidden{display:none}
+.qdial-pop{animation:qdialPop .35s cubic-bezier(.2,.8,.4,1) both}
+@keyframes qdialPop{0%{opacity:0;transform:translateY(12px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}
 /* 试炼题型标签与题干分离（v44） */
 .qz .kk{display:block;margin-bottom:8px;letter-spacing:.14em}
 /* 试炼 NPC 串场词/答后回复气泡（v44） */
@@ -1166,8 +1171,8 @@ function heartNew(){
    - 标签（<span><em>等）即时输出，仅文字逐字显示，保证 HTML 结构完整
    - 点击委托绑定在 pageHost 上，typewriter 重建 innerHTML 后术语仍可点 */
 let twTimer=null, twState=null;
-/* 打字机速度：默认 200ms/字，最大加速至 40ms/字（5倍），持久化到 localStorage */
-const TW_SPEED_DEFAULT=200, TW_SPEED_MIN=40, TW_SPEED_MAX=400;
+/* 打字机速度：默认 200ms/字，最大加速至 20ms/字（10倍），持久化到 localStorage */
+const TW_SPEED_DEFAULT=200, TW_SPEED_MIN=20, TW_SPEED_MAX=400;
 function twSpeed(){
   try{
     const v=parseInt(localStorage.getItem('twSpeed'),10);
@@ -1439,9 +1444,11 @@ function openQuest(qid){
     </div>`;
   }
 
-  /* —— 渲染第 1 阶段：剧情对话（多段互动，逐行打字机）—— */
+  /* —— 渲染第 1 阶段：剧情对话（仿聊天，逐条弹出，无打字机）—— */
+  let dialogShown=0, dialogTotal=0, dialogTimer=null;
   function renderStageDialog(){
-    dialogDone=false;
+    dialogDone=false; dialogShown=0; dialogTotal=0;
+    if(dialogTimer){ clearTimeout(dialogTimer); dialogTimer=null; }
     if(!aiBriefReady){
       stageHost.innerHTML=`<div style="padding:6px">
         <div style="font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:.12em;text-align:center">关卡 · ${esc(questMetaphorTxt)}</div>
@@ -1451,21 +1458,63 @@ function openQuest(qid){
     }
     const o=aiBriefData;
     const dlg=(o.dialog&&o.dialog.length)?o.dialog:[{s:"n",t:o.line||"这一程，准备好了吗？"}];
-    const sceneHtml=o.scene?`<div class="dtw" style="color:var(--dim);font-size:12px;margin-bottom:12px;line-height:1.7;font-style:italic">${esc(o.scene)}</div>`:"";
-    const body=dlg.map(l=>{
-      const t=String(l&&l.t||"").trim(); if(!t) return "";
-      return l.s==="p"?dialPlayerLine(t):dialNpcLine(t);
-    }).join("");
-    const metaphorHtml=o.metaphor?`<div class="dtw" style="text-align:center;color:var(--gold);font-size:12px;font-style:italic;margin:12px 0">「${esc(o.metaphor)}」</div>`:"";
+    /* 将 scene / 各条 dialog / metaphor 统一排成逐条弹出序列 */
+    const lines=[];
+    if(o.scene) lines.push({html:`<div style="color:var(--dim);font-size:12px;margin-bottom:12px;line-height:1.7;font-style:italic">${esc(o.scene)}</div>`});
+    dlg.forEach(l=>{
+      const t=String(l&&l.t||"").trim(); if(!t) return;
+      lines.push({html:l.s==="p"?dialPlayerLine(t):dialNpcLine(t)});
+    });
+    if(o.metaphor) lines.push({html:`<div style="text-align:center;color:var(--gold);font-size:12px;font-style:italic;margin:12px 0">「${esc(o.metaphor)}」</div>`});
+    dialogTotal=lines.length;
     stageHost.innerHTML=`<div class="qdial" style="padding:6px">
       <div style="font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:.12em;text-align:center">关卡 · ${esc(questMetaphorTxt)}</div>
-      ${sceneHtml}${body}${metaphorHtml}
+      <div id="qdialList"></div>
       ${hintHtml()}
     </div>`;
-    startTypewriter(stageHost,".qdial .dtw");
-    if(twState){
-      twState.onDone=()=>{ dialogDone=true; setHint("▼ 轻触继续 · 领取任务清单"); };
-    } else { dialogDone=true; setHint("▼ 轻触继续 · 领取任务清单"); }
+    const list=$("#qdialList",stageHost);
+    lines.forEach(l=>{
+      const div=document.createElement("div");
+      div.className="qdial-line qdial-hidden";
+      div.innerHTML=l.html;
+      list.appendChild(div);
+    });
+    setHint("");
+    /* 首条延迟弹出，随后链式展开 */
+    dialogTimer=setTimeout(revealDialogLine,400);
+  }
+  function revealDialogLine(){
+    if(dialogShown>=dialogTotal){
+      dialogDone=true; setHint("▼ 轻触继续 · 领取任务清单"); return;
+    }
+    const list=$("#qdialList",stageHost); if(!list) return;
+    const el=list.children[dialogShown];
+    if(el){ el.classList.remove("qdial-hidden"); el.classList.add("qdial-pop"); SFX.tap(); }
+    dialogShown++;
+    /* 自动滚动到底部 */
+    stageHost.scrollTop=stageHost.scrollHeight;
+    if(dialogShown<dialogTotal){
+      dialogTimer=setTimeout(revealDialogLine,700+Math.random()*350);
+    } else {
+      dialogDone=true; setHint("▼ 轻触继续 · 领取任务清单");
+    }
+  }
+  function dialogSkipOrNext(){
+    if(dialogShown<dialogTotal){
+      /* 跳过等待，一次性弹出全部剩余 */
+      if(dialogTimer){ clearTimeout(dialogTimer); dialogTimer=null; }
+      const list=$("#qdialList",stageHost); if(list){
+        for(let i=dialogShown;i<dialogTotal;i++){
+          const el=list.children[i];
+          if(el){ el.classList.remove("qdial-hidden"); el.classList.add("qdial-pop"); }
+        }
+      }
+      dialogShown=dialogTotal; dialogDone=true;
+      stageHost.scrollTop=stageHost.scrollHeight;
+      setHint("▼ 轻触继续 · 领取任务清单");
+      return;
+    }
+    if(dialogDone) goStage(1);
   }
   /* —— 渲染第 2 阶段：任务说明（列表式·完成指标）—— */
   function renderStageBrief(){
@@ -1598,6 +1647,7 @@ function openQuest(qid){
   function goStage(idx){
     stageIdx=Math.max(0,Math.min(STAGES.length-1,idx));
     stopTypewriter();
+    if(dialogTimer){ clearTimeout(dialogTimer); dialogTimer=null; }
     SFX.tap();
     STAGES[stageIdx].render();
     if(finBtn){
@@ -1607,8 +1657,8 @@ function openQuest(qid){
   }
   function advanceStage(){
     if(stageIdx===0){
-      /* 剧情互动：打字中→加速（typewriterExpand 自带音效）；完→进入任务说明 */
-      if(twState&&!twState.done){ typewriterExpand(); return; }
+      /* v45：剧情对话仿聊天——弹出中→跳过剩余；全部弹出→进入任务说明 */
+      if(dialogShown<dialogTotal){ dialogSkipOrNext(); return; }
       if(dialogDone) goStage(1);
       return;
     }
@@ -1813,7 +1863,7 @@ function openQuest(qid){
   }
 
   openQuestInit();
-  const closeQuest=()=>{ stopTypewriter(); if(questTimer){clearInterval(questTimer);questTimer=0;} if(window.WDMem)WDMem.setActive(null); ov.remove(); };
+  const closeQuest=()=>{ stopTypewriter(); if(dialogTimer){clearTimeout(dialogTimer);dialogTimer=null;} if(questTimer){clearInterval(questTimer);questTimer=0;} if(window.WDMem)WDMem.setActive(null); ov.remove(); };
   $("#qx",ov).onpointerdown=closeQuest;
   const qx2=$("#qx2",ov); if(qx2) qx2.onpointerdown=closeQuest;
   if(finBtn) finBtn.onpointerdown=()=>{ settleQuest(q,quizPerfect,ov); };
@@ -2677,11 +2727,11 @@ function renderCfg(){
       <div style="font-size:12px;color:var(--cyber);margin-bottom:6px">✦ 体验调节 · 打字机速度</div>
       <div class="cfgrow" style="align-items:center;gap:10px">
         <span style="font-size:11px;color:var(--dim);white-space:nowrap">慢</span>
-        <input type="range" id="twSpeedSlider" min="${TW_SPEED_MIN}" max="${TW_SPEED_MAX}" step="10" value="${twSpeed()}" style="flex:1;accent-color:var(--cyber);cursor:pointer">
+        <input type="range" id="twSpeedSlider" min="${TW_SPEED_MIN}" max="${TW_SPEED_MAX}" step="10" value="${twSpeed()}" style="flex:1;accent-color:var(--cyber);cursor:pointer;direction:rtl">
         <span style="font-size:11px;color:var(--dim);white-space:nowrap">快</span>
         <span id="twSpeedLabel" style="font-size:11px;color:var(--gold);min-width:54px;text-align:right">${twSpeed()}ms</span>
       </div>
-      <div class="note">范围 ${TW_SPEED_MAX}ms～${TW_SPEED_MIN}ms（5倍加速），默认 200ms；即时生效，持久化到本机。</div>
+      <div class="note">范围 ${TW_SPEED_MAX}ms～${TW_SPEED_MIN}ms（10倍加速），默认 200ms；即时生效，持久化到本机。</div>
     </div>
   </div>
   <div class="cfgpane on" data-pane="av">

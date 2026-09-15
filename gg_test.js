@@ -500,17 +500,20 @@ const driver=`
     /* 整页点击推进绑定 */
     if(!htmlSrc.includes('stageHost.onpointerdown')) throw new Error('缺整页点击推进绑定');
   });
-  run('剧情互动多段对话：genQuestBrief v3 要求 4~9 条 dialog 且打字机逐行显示',()=>{
+  run('剧情互动多段对话：genQuestBrief v3 要求 4~9 条 dialog 且仿聊天逐条弹出（v45）',()=>{
     reset();
     const qsrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8').match(/async function genQuestBrief[\\s\\S]{0,16000}?\\n\\}/)[0];
     if(!qsrc.includes('dialog')) throw new Error('schema 缺 dialog 多段对话');
     if(!qsrc.includes('4～9')&&!qsrc.includes('4~9')) throw new Error('未约束对话条数 4~9');
     if(!qsrc.includes('250～400')&&!qsrc.includes('250~400')) throw new Error('未约束总字数 250~400');
     if(!qsrc.includes('o.v=3')) throw new Error('未打 v3 schema 标记');
-    /* 剧情互动渲染须走打字机（.dtw 选择器）且完成后可点击推进 */
+    /* v45：剧情互动改为仿聊天逐条弹出，不再接打字机 */
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
-    if(!htmlSrc.includes('startTypewriter(stageHost,".qdial .dtw")')) throw new Error('剧情互动未接打字机');
-    if(!htmlSrc.includes('typewriterExpand')) throw new Error('缺点击加速逻辑');
+    if(!htmlSrc.includes('revealDialogLine')) throw new Error('缺逐条弹出函数 revealDialogLine');
+    if(!htmlSrc.includes('dialogSkipOrNext')) throw new Error('缺跳过/推进函数 dialogSkipOrNext');
+    if(!htmlSrc.includes('qdial-hidden')) throw new Error('缺隐藏态 CSS');
+    if(!htmlSrc.includes('qdial-pop')) throw new Error('缺弹出动画 CSS');
+    if(!htmlSrc.includes('dialogShown')) throw new Error('缺弹出计数器');
   });
   run('试炼题型与题干分离显示 + 错字修复（是非判断/行者手记）',()=>{
     reset();
@@ -545,6 +548,15 @@ const driver=`
     const poolsTxt=htmlSrc.slice(htmlSrc.indexOf('const QUIZ_INTROS='),htmlSrc.indexOf('};',htmlSrc.indexOf('const QUIZ_PRAISE=')));
     const ids=['yunheng','qingxuan','smq','tiemian','liuruyan','moxiaogu','xuanji'];
     ids.forEach(id=>{ if(!poolsTxt.includes(id+':[')) throw new Error('口癖池缺 '+id); });
+  });
+  run('打字机速度滑轨：最大10倍速 + direction:rtl 方向正确（v45）',()=>{
+    reset();
+    const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    if(!htmlSrc.includes('TW_SPEED_MIN=20')) throw new Error('TW_SPEED_MIN 应为 20（10倍速）');
+    if(!htmlSrc.includes('direction:rtl')) throw new Error('滑轨缺 direction:rtl 翻转');
+    if(!htmlSrc.includes('10倍加速')) throw new Error('说明文本未更新为10倍');
+    /* 确认旧值 5倍 文本已移除 */
+    if(htmlSrc.includes('5倍加速')) throw new Error('残留旧文本「5倍加速」');
   });
   run('旧概念缓存自动清除',()=>{
     reset();
