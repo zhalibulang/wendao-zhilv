@@ -1285,6 +1285,103 @@ const driver=`
       if(r2!==null)throw new Error('少于2人应返回null');
       console.log('PASS  WDChat directorRespond无AI安全降级');
     }catch(e){ errors.push('WDChat directorRespond降级 => '+e.message); console.log('FAIL  WDChat directorRespond降级 : '+e.message); }
+    /* v36：arcSeed 全员完整 */
+    try{
+      const ids=Object.keys(WDRegistry.all());
+      if(ids.length!==7) throw new Error('NPC数量异常: '+ids.length);
+      ids.forEach(id=>{
+        const a=WDRegistry.arcSeedOf(id);
+        if(!a||!a.goal||!a.arc) throw new Error(id+' 缺 arcSeed.goal/arc');
+      });
+      console.log('PASS  v36 arcSeed: 7 NPC 均含 goal+arc');
+    }catch(e){ errors.push('v36 arcSeed => '+e.message); console.log('FAIL  v36 arcSeed : '+e.message); }
+    /* v36：systemPrefix 注入 arcBlock */
+    try{
+      reset();
+      const s=WDChat.systemPrefix('yunheng',false);
+      if(!s.includes('角色目的与弧线')) throw new Error('systemPrefix 未注入 arcBlock');
+      if(!s.includes('圣女之力')) throw new Error('yunheng goal 未注入');
+      console.log('PASS  v36 systemPrefix 注入角色目的与弧线');
+    }catch(e){ errors.push('v36 systemPrefix arc => '+e.message); console.log('FAIL  v36 systemPrefix arc : '+e.message); }
+    /* v36：voiceBlock 含动漫/RPG 方向 */
+    try{
+      const s=WDChat.voiceBlock('qingxuan',false);
+      if(!/日式RPG|轻小说|GALGAME/.test(s)) throw new Error('voiceBlock 缺动漫方向');
+      if(!s.includes('同行者不是世界中心')) throw new Error('缺同行者约束');
+      console.log('PASS  v36 voiceBlock 含动漫/RPG 语感方向');
+    }catch(e){ errors.push('v36 voiceBlock => '+e.message); console.log('FAIL  v36 voiceBlock : '+e.message); }
+    /* v36：genPersona prompt 含 goal/arc */
+    try{
+      const src=genPersona.toString();
+      if(!/goal/.test(src)) throw new Error('genPersona 未要求 goal');
+      if(!/arc/.test(src)) throw new Error('genPersona 未要求 arc');
+      if(!src.includes('arcSeedOf')) throw new Error('genPersona 未引用 arcSeedOf 基线');
+      console.log('PASS  v36 genPersona prompt 含 goal/arc 字段');
+    }catch(e){ errors.push('v36 genPersona => '+e.message); console.log('FAIL  v36 genPersona : '+e.message); }
+    /* v36：人设面板含 goal/arc 编辑字段 */
+    try{
+      const src=openPersonaPanel.toString();
+      if(!/data-fld="goal"/.test(src)) throw new Error('人设面板缺 goal 编辑字段');
+      if(!/data-fld="arc"/.test(src)) throw new Error('人设面板缺 arc 编辑字段');
+      console.log('PASS  v36 人设面板含 goal/arc 编辑字段');
+    }catch(e){ errors.push('v36 人设面板 => '+e.message); console.log('FAIL  v36 人设面板 : '+e.message); }
+    /* v36：导演系统函数已挂载 */
+    try{
+      if(typeof WDChat.directorPlan!=='function') throw new Error('directorPlan 未定义');
+      if(typeof WDChat.directorFlow!=='function') throw new Error('directorFlow 未定义');
+      const rp=await WDChat.directorPlan('测试',{targets:['yunheng']});
+      if(rp!==null) throw new Error('无AI时 directorPlan 应返回null');
+      const rf=await WDChat.directorFlow('测试',{targets:['yunheng']});
+      if(rf!==null) throw new Error('无AI时 directorFlow 应返回null');
+      console.log('PASS  v36 directorPlan/directorFlow 已挂载且无AI安全降级');
+    }catch(e){ errors.push('v36 导演函数 => '+e.message); console.log('FAIL  v36 导演函数 : '+e.message); }
+    /* v36：respond 支持 directorHint 形参 */
+    try{
+      const src=WDChat.respond.toString();
+      if(!/directorHint/.test(src)) throw new Error('respond 未声明 directorHint');
+      const src2=WDChat.respondWithTools.toString();
+      if(!/directorHint/.test(src2)) throw new Error('respondWithTools 未声明 directorHint');
+      console.log('PASS  v36 respond/respondWithTools 支持 directorHint');
+    }catch(e){ errors.push('v36 directorHint => '+e.message); console.log('FAIL  v36 directorHint : '+e.message); }
+    /* v36：npcAnswer 接入 directorFlow */
+    try{
+      const src=npcAnswer.toString();
+      if(!src.includes('directorFlow')) throw new Error('npcAnswer 未接入 directorFlow');
+      console.log('PASS  v36 npcAnswer 接入 directorFlow');
+    }catch(e){ errors.push('v36 npcAnswer => '+e.message); console.log('FAIL  v36 npcAnswer : '+e.message); }
+    /* v36：settleQuest 接入导演任务完成反应 */
+    try{
+      const src=settleQuest.toString();
+      if(!src.includes('questreact')) throw new Error('settleQuest 未接入 questreact');
+      if(!src.includes('directorFlow')) throw new Error('settleQuest 未接入 directorFlow');
+      console.log('PASS  v36 settleQuest 接入导演任务完成反应');
+    }catch(e){ errors.push('v36 settleQuest => '+e.message); console.log('FAIL  v36 settleQuest : '+e.message); }
+    /* v36：DS_PROFILES 含 directorplan 档 */
+    try{
+      if(!DS_PROFILES.directorplan) throw new Error('DS_PROFILES 缺 directorplan 档');
+      if(DS_PROFILES.directorplan.max_tokens>400) throw new Error('directorplan max_tokens 过高');
+      console.log('PASS  v36 DS_PROFILES 含 directorplan 低token档');
+    }catch(e){ errors.push('v36 DS_PROFILES => '+e.message); console.log('FAIL  v36 DS_PROFILES : '+e.message); }
+    /* v36：@ 弹窗纯函数 */
+    try{
+      const l1=filterMentionList('');
+      if(l1[0].id!=='__ALL__') throw new Error('首项应为所有人');
+      if(l1.filter(x=>x.kind==='npc').length<7) throw new Error('NPC数量不足');
+      const l2=filterMentionList('云');
+      if(!l2.some(x=>x.id==='yunheng')) throw new Error('云 应命中云蘅');
+      const l3=filterMentionList('zzz不存在');
+      if(l3.length!==0) throw new Error('无匹配应返回空数组');
+      console.log('PASS  v36 @mention filterMentionList 过滤正确');
+    }catch(e){ errors.push('v36 filterMentionList => '+e.message); console.log('FAIL  v36 filterMentionList : '+e.message); }
+    /* v36：@ 弹窗插入函数 */
+    try{
+      const r=insertMention('@云 在吗',0,2,'云蘅');
+      if(r.value!=='@云蘅 在吗') throw new Error('插入结果错误: '+r.value);
+      if(r.caret!==3) throw new Error('光标应在 @云蘅 之后, got '+r.caret);
+      const r2=insertMention('嘿 @青 哪里',2,4,'青玄先生');
+      if(!r2.value.startsWith('嘿 @青玄先生 哪里')) throw new Error('中间插入错误: '+r2.value);
+      console.log('PASS  v36 @mention insertMention 插入与光标定位正确');
+    }catch(e){ errors.push('v36 insertMention => '+e.message); console.log('FAIL  v36 insertMention : '+e.message); }
     console.log('\\n===== RESULT =====');
     if(errors.length){console.log('FAILURES '+errors.length);errors.forEach(e=>console.log(' - '+e));process.exit(1);}
     else { console.log('ALL TESTS PASSED'); process.exit(0); }

@@ -474,9 +474,20 @@ const WDChat={
     }
     /* 语言人格卡（注册表 voice：节奏/招式/示例/禁忌/关系；与用户自定义人设冲突时后者优先） */
     const voiceBlock=this.voiceBlock(npcId,!!persona);
+    /* 角色目标与弧线：优先人设卡 goal/arc，回退注册表 arcSeed */
+    const cardObj=st.personas[npcId]&&st.personas[npcId].card;
+    const goal=(cardObj&&cardObj.goal)||((window.WDRegistry&&WDRegistry.arcSeedOf)?(WDRegistry.arcSeedOf(npcId)||{}).goal:"");
+    const arc=(cardObj&&cardObj.arc)||((window.WDRegistry&&WDRegistry.arcSeedOf)?(WDRegistry.arcSeedOf(npcId)||{}).arc:"");
+    let arcBlock="";
+    if(goal||arc){
+      let parts=["\n\n【角色目的与弧线】"];
+      if(goal) parts.push("你的目标："+goal+"——你的言行应朝此方向，但不直白宣告。");
+      if(arc) parts.push("你的弧线："+arc+"——随与玩家同行自然体现此变化，不刻意宣告。");
+      arcBlock=parts.join("");
+    }
     return "【世界观事实文件】\n"+wbStr
       +"\n\n【行为约束】\n"+doc
-      +voiceBlock+personaBlock+growthBlock;
+      +voiceBlock+personaBlock+arcBlock+growthBlock;
   },
 
   /* ---------- 语言人格卡（从 npc-registry 的 voice 派生；供稳定前缀与群聊导演共用） ---------- */
@@ -496,6 +507,11 @@ const WDChat={
       if(rel.length) s+="\n与在场众人的关系（决定你如何接她们的话茬）："+rel.join("；");
     }
     if(userOverride) s+="\n（若与玩家自定义角色基准冲突，以自定义为准，但说话节奏与辨识度仍遵循本卡。）";
+    s+="\n【语感来源·日式RPG / 轻小说 / GALGAME】你的台词节奏对标日式轻小说与RPG对白："
+      +"反应快于解释、情绪先于逻辑、立场鲜明、允许半句与停顿、可吐槽/反问/卖关子/小得意/嘴硬/疲惫；"
+      +"玩家是同行者不是世界中心，你是有人格的居民不是NPC客服。"
+      +"禁止靠表面口癖卖萌（喵/呀～/诶嘿/欧尼酱），禁止AI腔与三种腔（老师/客服/心理医生）。"
+      +"性格只体现在「你怎么回眼前这句话」里，不要为证明有性格而表演性格。";
     return s;
   },
 
@@ -541,7 +557,7 @@ const WDChat={
   },
 
   /* ---------- 上下文组装（v2：作为 user 侧动态内容，置于历史之后的尾消息） ---------- */
-  buildContext(npcId,userText,web){
+  buildContext(npcId,userText,web,directorHint){
     const {NPC}=CTX, npc=NPC[npcId]||NPC.qingxuan;
     const st=CTX.getSt();
     const aq=CTX.quest&&CTX.quest();
@@ -564,6 +580,7 @@ const WDChat={
     if(web) ctx+="\n【网络检索补充（供参考，不确定可不采用）】\n"+web;
     ctx+="\n\n玩家说："+userText
       +"\n（本轮只回你此刻会脱口而出的话：可以只有一两个字，可以不解释、不推进任何事；但不要为了回应而硬凑内容。）";
+    if(directorHint) ctx+="\n【导演指示·仅方向，不替你写词】"+directorHint+"（这是群聊导演给你这一句的方向，仍按你自己的节奏与性格开口）";
     return ctx;
   },
 
@@ -678,7 +695,7 @@ const WDChat={
        [1..n-2] 历史 turns（原生多轮，120 字×8）
        [n-1] user  = 动态上下文 + 玩家输入 + post-history 禁则
      返回 {text, degraded}；永不 reject。 */
-  async respond(npcId,userText,brief){
+  async respond(npcId,userText,brief,directorHint){
     const {NPC}=CTX, npc=NPC[npcId]||NPC.qingxuan;
     /* v35：AI-only——无密钥直接返回错误，不再本地兜底 */
     if(!CTX.dsReady()) return {text:"",degraded:true,error:"灵脉未通：未配置 API 密钥"};
@@ -688,7 +705,7 @@ const WDChat={
       if(this.shouldSearch(userText)) web=await this.webSearch(userText.replace(/@[^\s，。,,]+/g,"").trim());
       const sys=this.sysPrompt(npcId,brief);
       const hist=this.historyOf(npcId,8);
-      const tail=this.buildContext(npcId,userText,web);
+      const tail=this.buildContext(npcId,userText,web,directorHint);
       const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
       const hasCustomWorld=!!((window.WDCfg&&WDCfg.customWorldBrief)?WDCfg.customWorldBrief():"").trim();
       /* 历史转原生 turns（role: player→user / npc→assistant） */
@@ -776,6 +793,89 @@ const WDChat={
       }
     }
     return text;
+  },
+
+  /* ---------- 增强导演系统 v36：导演计划 + 编排流 ---------- */
+  /* 导演计划缓存（60s TTL，防短时连发重复调用） */
+  _dPlanCache:new Map(),
+  _cacheKey(text,opts){
+    const q=opts.quest?opts.quest.id:"";
+    const t=opts.targets?opts.targets.join(","):"";
+    const last=(this.recentScene&&this.recentScene(1)[0])?this.recentScene(1)[0].who:"";
+    return hash(text+"|"+t+"|"+q+"|"+last+"|"+(opts.kind||"chat"));
+  },
+
+  /* 导演计划：AI 决定谁开口、什么类型、什么方向（不写台词） */
+  async directorPlan(userText,opts){
+    opts=opts||{};
+    if(!CTX.dsReady()) return null;
+    const {NPC}=CTX;
+    const targets=opts.targets||[];
+    const kind=opts.kind||"chat";
+    /* 缓存检查 */
+    const ck=this._cacheKey(userText,opts);
+    const cached=this._dPlanCache.get(ck);
+    if(cached&&(Date.now()-cached.at)<60000) return cached.plan;
+    /* 全量 NPC 精简卡（让导演能判断谁会插话） */
+    const cards=Object.keys(NPC).map(id=>{
+      const npc=NPC[id]; if(!npc) return null;
+      const name=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(id,npc.name):npc.name;
+      const v=(window.WDRegistry&&WDRegistry.voiceOf)?WDRegistry.voiceOf(id):null;
+      const arc=(window.WDRegistry&&WDRegistry.arcSeedOf)?WDRegistry.arcSeedOf(id):null;
+      return {id,name,role:npc.role||"",
+        cadence:v?v.cadence:"",
+        goal:arc?arc.goal:""};
+    }).filter(Boolean);
+    const scene=this.recentScene?this.recentScene(10):[];
+    const userDoc=(window.WDCfg&&WDCfg.directorDoc)?WDCfg.directorDoc():"";
+    let sys=userDoc&&userDoc.trim()
+      ?userDoc.trim()
+      :("你是日式RPG《问道之旅·四十五日》的群聊导演。看完玩家这句话与近期对话，决定接下来哪些NPC该开口、按什么顺序、用什么反应类型。"
+        +"反应类型：respond(正常接话) / interject(插话，多为半句或语气词) / react(对他人的反应) / guide(把话题轻拽回正事/任务方向)。"
+        +"通常1-2人开口，极少超过3人。被@的人通常必回应；未被@的人只在她的性格确实会被勾起时插话。"
+        +"hint用≤20字给该NPC这一句的方向，不要替她写台词。");
+    if(kind==="questreact"&&!(userDoc&&userDoc.trim())){
+      sys+="玩家刚交付关卡，任务NPC应给一个有性格的、非「已交付」式模板的反应；其他人若性格上会接才插话。";
+    }
+    sys+="只输出JSON。";
+    let user="在场角色与各自说话方式：\n"+cards.map(c=>JSON.stringify(c)).join("\n")
+      +"\n\n近期群聊（供互文，不要重复其中说法）：\n"+(scene.map(s=>s.who+"："+s.text).join("\n")||"（无）")
+      +"\n\n玩家刚发："+userText
+      +"\n\n输出JSON：{\"plan\":[{\"npc\":\"id\",\"type\":\"respond\",\"hint\":\"这一句的方向≤20字\"}]}";
+    if(targets.length){
+      user+="\n被@的角色："+targets.map(id=>NPC[id]?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(id,NPC[id].name):NPC[id].name):id).join("、")+"——这些人通常必回应。";
+    }
+    try{
+      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"directorplan"});
+      let o;
+      try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
+      catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(!m) return null; o=JSON.parse(m[0]); }
+      const seen=new Set();
+      const plan=(o.plan||[]).filter(p=>p&&p.npc&&NPC[p.npc]&&!seen.has(p.npc)&&seen.add(p.npc))
+        .slice(0,4)
+        .map(p=>({npc:p.npc,type:p.type||"respond",hint:String(p.hint||"").slice(0,40)}));
+      if(!plan.length) return null;
+      const result={plan};
+      this._dPlanCache.set(ck,{plan:result,at:Date.now()});
+      return result;
+    }catch(e){ return null; }
+  },
+
+  /* 导演编排流：计划 → 逐个 NPC 生成台词（顺序执行保留次序） */
+  async directorFlow(userText,opts){
+    opts=opts||{};
+    if(!CTX.dsReady()) return null;
+    const plan=await this.directorPlan(userText,opts);
+    if(!plan||!plan.plan||!plan.plan.length) return null;
+    const out=[];
+    for(const e of plan.plan){
+      if(!CTX.NPC[e.npc]) continue;
+      const r=(opts.tools!==false&&this.respondWithTools)
+        ? await this.respondWithTools(e.npc,userText,opts.brief,e.hint)
+        : await this.respond(e.npc,userText,opts.brief,e.hint);
+      if(r&&r.text) out.push({npc:e.npc,text:r.text});
+    }
+    return out.length?out:null;
   },
 
   /* ---------- 对话导演（v3：全员群聊单次生成，人群式差异化反应，互文） ---------- */
@@ -872,7 +972,7 @@ const WDChat={
     return "（工具调用失败，请自行作答）";
   },
   /* Agent loop（≤2 轮工具调用，R3.2）：带工具的 respond 增强；失败静默回退普通 respond */
-  async respondWithTools(npcId,userText,brief){
+  async respondWithTools(npcId,userText,brief,directorHint){
     if(!CTX.dsReady()) return this.respond(npcId,userText,brief);
     try{
       const messages=[
@@ -881,7 +981,7 @@ const WDChat={
       const hist=this.historyOf(npcId,8);
       hist.forEach(m=>messages.push({role:m.role==="player"?"user":"assistant",content:m.text}));
       const hasCustomWorld=!!((window.WDCfg&&WDCfg.customWorldBrief)?WDCfg.customWorldBrief():"").trim();
-      messages.push({role:"user",content:this.buildContext(npcId,userText,null)+"\n\n——"+((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,CTX.NPC[npcId].name):CTX.NPC[npcId].name)+"。只有确有必要核实时才调用工具；查完照常像人一样说话，不许写说明、不许罗列数据。"+this.postHistoryRules(npcId)});
+      messages.push({role:"user",content:this.buildContext(npcId,userText,null,directorHint)+"\n\n——"+((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,CTX.NPC[npcId].name):CTX.NPC[npcId].name)+"。只有确有必要核实时才调用工具；查完照常像人一样说话，不许写说明、不许罗列数据。"+this.postHistoryRules(npcId)});
       for(let round=0;round<2;round++){
         const raw=await CTX.dsChat(messages,{kind:"chat",tools:this.toolDefs()});
         /* dsChat 返回 content 或 {tool_calls} 结构（由 index.html dsChat v2 透传） */

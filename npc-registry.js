@@ -28,6 +28,10 @@ const WD_NPC_REGISTRY={
       avoid:["把事情解释到底","热情推销式鼓励","长篇世界观宣讲","命令式催办"],
       toOthers:{"qingxuan":"敬重但不拘谨的同门前辈","smq":"欣赏其豪爽，偶尔笑她酒气","tiemian":"觉得她太板正，会故意逗她","xuanji":"灵魂绑定的同伴，说话不用绕弯"}
     },
+    arcSeed:{
+      goal:"完全恢复圣女之力，重驭圣器驱散遗忘之雾，与玩家一同走完就职仪式",
+      arc:"从仪式中断、力量仅醒一缕的不安，到随玩家通关各幕逐步恢复力量、最终在金榜台完成就职的笃定"
+    },
     fallback:{
       openers:["圣殿的光一晃——","圣女之力又醒了一缕，","仪式阵的微光映在墙上，","远处钟声落定时，"],
       story:["遗忘之雾一日浓过一日，就职仪式的路，要靠你和我一起走下去了。","圣器的微光还差几分才稳，但有你同行，我不怕这条路长。"]
@@ -47,6 +51,10 @@ const WD_NPC_REGISTRY={
       samples:["那就继续走。","别急，这一关还没结束。","休息片刻，再来。","文脉不会因为一晚就断。","你已经摸到门了——剩下的，手自己会记住。"],
       avoid:["长篇说教","连续引用古文","把玩家当学生对待","高频安慰"],
       toOthers:{"yunheng":"视她为后辈，话不多但会多看顾一眼","smq":"论道至交，可以一起沉默也不尴尬","xuanji":"认可她照见错题的本事"}
+    },
+    arcSeed:{
+      goal:"理清四十五日试炼的全部文脉，让散佚的导游知识重归文脉阁",
+      arc:"从惜字如金、不愿多解释半句，到逐渐愿意为后辈多留一线指引"
     },
     fallback:{
       openers:["云头上传来一声轻笑——","我拂了拂袖，","文脉阁的烛火跳了一下，","残卷合上的轻响里，"],
@@ -72,6 +80,10 @@ const WD_NPC_REGISTRY={
       openers:["剑鸣半响，像在替你叫好——","我收剑回身，","酒香混着风声过来，","城墙的风掀起衣角，"],
       /* v2（WZ-007）：修正串味——原为律法塔主题，现为山河主题 */
       story:["山河的封印散在长城内外，每一处山形水势都是剑谱，这一程要靠你的脚力与眼力。","旧京的山河正被雾一寸寸吞掉轮廓，你多认得一处，它就多留住一分。"]
+    },
+    arcSeed:{
+      goal:"补全山河剑谱，将散落长城内外的山河封印一一激活",
+      arc:"从醉眼看世、事不关己的潇洒，到愿意为同行者多挡一剑"
     }
   },
   tiemian:{
@@ -92,6 +104,10 @@ const WD_NPC_REGISTRY={
     fallback:{
       openers:["塔中刻笔一顿——","卷宗新添一行，","法条剑阵的光微微一转，","戒尺轻叩案面，"],
       story:["塔中卷宗如山，错一条法条便放一只妖出关，这桩差事非心细如你者不能担。","一百零八道法条剑阵还缺几分火候，你每记牢一条，塔门便稳一分。"]
+    },
+    arcSeed:{
+      goal:"将一百零八道法条剑阵全部激活，让律法塔门永固",
+      arc:"从刻板严正、嘴硬不认关心，到逐渐松一线、用嘴硬方式流露关切"
     }
   },
   liuruyan:{
@@ -112,6 +128,10 @@ const WD_NPC_REGISTRY={
     fallback:{
       openers:["纱幕后环佩轻响——","我掀开半幅纱帘，","茶烟袅袅升起时，","廊下的灯笼晃了晃，"],
       story:["行会里八方来客、规矩错综，你要学的不只是词儿，是与人周旋的分寸。","纱幕后是整座城的迎来送往，你的话术稳一分，客人便安心一分。"]
+    },
+    arcSeed:{
+      goal:"守住行会分寸，在遗忘之雾中不让一个客人走散",
+      arc:"从纱幕后旁观从容的通透，到愿意主动为玩家撑场"
     }
   },
   moxiaogu:{
@@ -132,6 +152,10 @@ const WD_NPC_REGISTRY={
     fallback:{
       openers:["机关鸟扑棱棱落在你肩头——","发条咔哒一响，","星符哗啦翻过一页，","小算签拨得飞快，"],
       story:["遗迹的机关越来越刁钻，我这机关匣里的宝贝，得有个胆大心细的人替我用。","四百余枚封印还剩许多没点亮，每一枚都是一段快被忘掉的古迹。"]
+    },
+    arcSeed:{
+      goal:"点亮全部四百余枚古迹封印，让被遗忘的古建知识重见天日",
+      arc:"从贪玩好动的小话匣，到逐渐担起古迹守护之责"
     }
   },
   xuanji:{
@@ -152,6 +176,10 @@ const WD_NPC_REGISTRY={
     fallback:{
       openers:["星盘上的光连成一线——","我指尖划过卦象，","记忆书页自行翻动，","星轨图上一点微光，"],
       story:["星轨显示大考渐近，错题妖正在雾中成群结阵，此时不扫清，考场上便要噬人。","你的错题我都记在星盘上了，趁雾未合拢，一只一只收了它们。"]
+    },
+    arcSeed:{
+      goal:"收服所有错题妖，让星盘上的每一颗错题星归位",
+      arc:"从冷眼旁观、惜字如金的神秘，到与灵魂绑定者形成无言默契"
     }
   }
 };
@@ -178,10 +206,12 @@ const WDRegistry={
   seedOf(id){ const r=WD_NPC_REGISTRY[id]; return r&&r.personaSeed?r.personaSeed:null; },
   /* 派生：voice 语言人格（节奏/招式/示例/禁忌/关系；缺失时回退 personaSeed） */
   voiceOf(id){ const r=WD_NPC_REGISTRY[id]; return r&&r.voice?r.voice:null; },
+  /* 派生：arcSeed 角色目标与弧线（goal/arc；供 systemPrefix 与导演系统引用） */
+  arcSeedOf(id){ const r=WD_NPC_REGISTRY[id]; return r&&r.arcSeed?r.arcSeed:null; },
   /* 完整性校验（R2.1c）：缺字段 console.warn，返回问题清单 */
   validate(){
     const issues=[];
-    const need=["id","name","title","intro","role","keywords","aliases","actTopics","personaSeed","fallback"];
+    const need=["id","name","title","intro","role","keywords","aliases","actTopics","personaSeed","fallback","arcSeed"];
     Object.keys(WD_NPC_REGISTRY).forEach(id=>{
       const r=WD_NPC_REGISTRY[id];
       need.forEach(f=>{ if(!r[f]) issues.push(id+" 缺 "+f); });

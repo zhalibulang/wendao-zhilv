@@ -21,7 +21,7 @@ function defaults(){
     style:{tone:"",humor:"",depth:""},
     attr:{str:2,agi:2,int:2}, hist:[], rejected:0,
     npcNames:{}, npcTitles:{}, npcPersonas:{}, customWorldBrief:"",
-    aiDocument:""};
+    aiDocument:"", directorDoc:""};
 }
 function sanitize(recount){
   if(!cfg.npcAvatar||typeof cfg.npcAvatar!=="object"){ if(recount&&cfg.npcAvatar!==undefined)cfg.rejected++; cfg.npcAvatar={}; }
@@ -38,6 +38,7 @@ function sanitize(recount){
   if(!cfg.npcPersonas||typeof cfg.npcPersonas!=="object"){ if(recount&&cfg.npcPersonas!==undefined)cfg.rejected++; cfg.npcPersonas={}; }
   if(typeof cfg.customWorldBrief!=="string")cfg.customWorldBrief="";
   if(typeof cfg.aiDocument!=="string")cfg.aiDocument="";
+  if(typeof cfg.directorDoc!=="string")cfg.directorDoc="";
 }
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(cfg)); }catch(e){} }
 function emit(keys){ try{ window.dispatchEvent(new CustomEvent("wd:cfg",{detail:{keys:keys||[]}})); }catch(e){} }
@@ -146,6 +147,10 @@ const WDCfg={
      这是统一 AI 互动思路的唯一编辑入口。 */
   aiDocument(){ return cfg.aiDocument||""; },
   setAiDocument(text){ this.set("aiDocument",(text||"").slice(0,12000),"编辑AI接口文档"); },
+  /* 导演工作标准用户自定义：非空时完全替代 directorPlan 的默认系统 prompt。
+     留空 → 使用系统默认导演标准；非空 → 用户的工作标准为准。 */
+  directorDoc(){ return cfg.directorDoc||""; },
+  setDirectorDoc(text){ this.set("directorDoc",(text||"").slice(0,8000),"编辑导演工作标准"); },
   export(){
     return JSON.stringify({ver:VER, exportedAt:new Date().toISOString(), cfg:cfg},null,1);
   },

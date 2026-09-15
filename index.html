@@ -829,8 +829,12 @@ function render(){
   bindNav(); switchView(view);
   $("#oralFab").onpointerdown=()=>{ SFX.tap(); switchView("oral"); };
   const inp=$("#chatInput");
-  inp.onkeydown=e=>{ if(e.key==="Enter"){ sendChat(); } };
+  inp.oninput=()=>onChatInput(inp);
+  inp.onkeydown=e=>{ if(handleMentionKey(e,inp)) return; if(e.key==="Enter"){ sendChat(); } };
   $("#sendBtn").onpointerdown=sendChat;
+  document.addEventListener("pointerdown",e=>{
+    if(_mentionPop&&_mentionPop.contains&&!_mentionPop.contains(e.target)) closeMention();
+  },true);
 }
 /* 全链路中第一个「已解锁未完成」的关卡（群聊 NPC 接话/任务发布的事实源） */
 function firstActiveQuest(){
@@ -899,21 +903,20 @@ function npcAnswer(targets,text){
   const all=targets.length>1;
   typing(true,all);
   toast(all?"各位已收到喊话……":"正在与"+dName(targets[0])+"对话……");
-  /* v2（R3.1）：多人场景优先走对话导演（单次调用生成整场，互文），失败回退并行 */
   const flags=(st.agentFlags=st.agentFlags||{director:true,tools:true,proactive:true});
-  if(all&&flags.director&&window.WDChat&&WDChat.directorRespond){
-    WDChat.directorRespond(targets,text).then(lines=>{
+  const aq=firstActiveQuest();
+  /* v36：统一导演流——导演决定谁开口（含插话/反应），逐个 NPC 生成台词 */
+  if(flags.director&&window.WDChat&&WDChat.directorFlow){
+    WDChat.directorFlow(text,{targets,brief:all,quest:aq,tools:flags.tools}).then(lines=>{
       if(lines&&lines.length){
         lines.forEach(l=>{
-          const aqP=firstActiveQuest();
           const m={role:"npc",npc:l.npc,text:l.text,at:new Date().toISOString(),day:st.day};
-          if(aqP) m.refs=[{qid:aqP.id}];
+          if(aq) m.refs=[{qid:aq.id}];
           st.dialogue.push(m);
           if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
         });
         save(); typing(false); renderChat(); return;
       }
-      /* 导演失败 → 回退并行模式 */
       npcAnswerParallel(targets,text,all);
     }).catch(()=>{ npcAnswerParallel(targets,text,all); });
     return;
@@ -943,6 +946,7 @@ function npcAnswerParallel(targets,text,all){
   });
 }
 function sendChat(){
+  closeMention();
   const inp=$("#chatInput"); const v=inp.value.trim(); if(!v) return;
   st.notes[st.day+"_"+Date.now()]=v;
   inp.value="";
@@ -962,34 +966,7 @@ function yunhengProxy(text){
   /* 领域明确 → 该 NPC 直接以本人身份接话；其余情况云蘅出面。不搞双重应答。 */
   npcAnswer([target],text);
 }
-/* NPC插话智能判断：基于发言时机逻辑，决定是否有其他NPC自然插话 */
-function maybeNpcChimeIn(text,primarySpeaker){
-  if(!window.WDChat||!WDChat.shouldChimeIn) return;
-  const aq=firstActiveQuest();
-  const recent=st.dialogue.slice(-6).map(m=>({npc:m.npc,text:m.text}));
-  /* 遍历NPC，找出有强相关性应插话的（排除主发言人和云蘅） */
-  const candidates=[];
-  for(const id of Object.keys(NPC)){
-    if(id===primarySpeaker||id==="yunheng") continue;
-    const r=WDChat.shouldChimeIn(id,{text:text,speaker:primarySpeaker,recent:recent,quest:aq});
-    if(r.chime) candidates.push({id,reason:r.reason});
-  }
-  if(!candidates.length) return;
-  /* 只让最相关的1位NPC插话，避免对话流过载 */
-  const pick=candidates[0];
-  setTimeout(()=>{
-    if(!st) return;
-    aiRespond(pick.id,text,true).then(r=>{
-      if(!r.text) return; /* v35：AI 失败时插话静默取消，不推空消息 */
-      const aqR=firstActiveQuest();
-      const m={role:"npc",npc:pick.id,text:r.text,at:new Date().toISOString(),day:st.day};
-      if(!r.refs&&aqR) m.refs=[{qid:aqR.id}];
-      st.dialogue.push(m);
-      if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-      save(); renderChat();
-    }).catch(()=>{});
-  },800);
-}
+/* v36：maybeNpcChimeIn 已移除——导演流 directorFlow 统一决定插话，不再需要独立插话判断 */
 
 /* 点击对话流中的 NPC 名：自动生成玩家情境开场白并触发该 NPC 的标准回应 */
 function talkToNpc(npcId){
@@ -1759,6 +1736,22 @@ function settleQuest(q,quizPerfect,ov){
   st.dialogue.push(ymsg);
   if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
   refineYunheng(ymsg.id,q,nq,quizPerfect);
+  // v36：任务完成反应——导演决定任务NPC+其他可能插话者，AI生成有性格的反应
+  if(window.WDChat&&WDChat.directorFlow&&dsReady()){
+    WDChat.directorFlow("玩家交割了「"+qdn(q)+"」。",{targets:[q.npc],kind:"questreact",quest:q,tools:(st.agentFlags||{}).tools}).then(lines=>{
+      if(!lines||!lines.length) return;
+      const ackIdx=st.dialogue.findIndex(m=>m&&m.role==="npc"&&m.npc===q.npc&&(m.text||"").includes("已交付"));
+      if(ackIdx>=0){
+        const taskLine=lines.find(l=>l.npc===q.npc);
+        if(taskLine) st.dialogue[ackIdx].text=taskLine.text;
+      }
+      lines.filter(l=>l.npc!==q.npc).forEach(l=>{
+        st.dialogue.push({role:"npc",npc:l.npc,text:l.text,refs:[{qid:q.id}],at:new Date().toISOString(),day:st.day});
+      });
+      if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+      save(); renderChat();
+    }).catch(()=>{});
+  }
   // NPC 个人故事线：随任务里程碑自然续写
   WDChat.storyAppend(q.npc,"与玩家并肩，见证了「"+qdn(q)+"」的交付");
   // 交付特效：完成印章 + 修行/铜钱飘字 + 金粒子
@@ -2547,6 +2540,7 @@ function renderCfg(){
     <button data-tab="npc" type="button">NPC角色</button>
     <button data-tab="world" type="button">世界观</button>
     <button data-tab="aidoc" type="button">AI文档</button>
+    <button data-tab="director" type="button">导演</button>
     <button data-tab="attr" type="button">初始属性</button>
     <button data-tab="data" type="button">数据</button>
     <button data-tab="agent" type="button">实验特性</button>
@@ -2630,6 +2624,17 @@ function renderCfg(){
       <button class="btn sm ghost" id="clauseClearBtn" type="button">清除违规记录</button>
     </div>
     <div id="clauseCheckResult" style="margin-top:8px"></div>
+  </div>
+
+  <div class="cfgpane" data-pane="director">
+    <div class="note">导演工作标准——决定群聊导演如何编排对话流（谁开口、什么反应类型、什么方向）。留空 → 使用系统默认标准；输入内容 → 完全替代默认导演指令。</div>
+    <div class="cfgrow" style="align-items:flex-start"><textarea id="cfgDirectorDoc" maxlength="8000" rows="14" style="width:100%;font-size:12px;line-height:1.5;font-family:ui-monospace,Menlo,Consolas,monospace" placeholder="留空使用系统默认导演标准。载入系统默认后可直接编辑，保存后立即生效……">${esc(c.directorDoc||"")}</textarea></div>
+    <div class="savegrid" style="margin:6px 0">
+      <button class="btn sm primary" id="directorSave" type="button">保存</button>
+      <button class="btn sm" id="directorLoadDefault" type="button">载入系统默认（可直接编辑）</button>
+      <button class="btn sm ghost" id="directorReset" type="button">清空并恢复默认</button>
+    </div>
+    <div class="small" id="directorMsg" style="color:var(--ok)"></div>
   </div>
 
   <div class="cfgpane" data-pane="attr">
@@ -2789,6 +2794,28 @@ function renderCfg(){
     const txt=WDChat.defaultAiDocument(null,"{name}","{title}",false);
     $("#cfgAiDoc",ov).value=txt;
     const m=$("#aiDocMsg",ov); m.textContent="系统默认模板已载入（{name}/{title} 会按 NPC 自动替换）· 直接改完保存即可"; setTimeout(()=>{if(m.isConnected)m.textContent="";},3000);
+  };
+  /* ---- 导演工作标准 ---- */
+  $("#directorSave",ov).onpointerdown=()=>{ SFX.tap();
+    const v=$("#cfgDirectorDoc",ov).value;
+    WDCfg.setDirectorDoc(v);
+    const m=$("#directorMsg",ov); m.textContent=v?"已保存 · 下次导演编排即刻采用用户标准":"已清空 · 恢复系统默认导演标准";
+    setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+  };
+  $("#directorReset",ov).onpointerdown=()=>{ SFX.tap();
+    WDCfg.setDirectorDoc(""); $("#cfgDirectorDoc",ov).value="";
+    const m=$("#directorMsg",ov); m.textContent="已清空 · 恢复系统默认导演标准"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+  };
+  $("#directorLoadDefault",ov).onpointerdown=()=>{ SFX.tap();
+    const txt="你是日式RPG《问道之旅·四十五日》的群聊导演。看完玩家这句话与近期对话，决定接下来哪些NPC该开口、按什么顺序、用什么反应类型。\n"
+      +"反应类型：respond(正常接话) / interject(插话，多为半句或语气词) / react(对他人的反应) / guide(把话题轻拽回正事/任务方向)。\n"
+      +"通常1-2人开口，极少超过3人。被@的人通常必回应；未被@的人只在她的性格确实会被勾起时插话。\n"
+      +"hint用≤20字给该NPC这一句的方向，不要替她写台词。\n"
+      +"任务完成时，任务NPC应给一个有性格的、非「已交付」式模板的反应；其他人若性格上会接才插话。\n"
+      +"允许角色之间互相接茬、拆台、偷笑、无奈，体现她们彼此的关系。玩家是群里一员，不是宇宙中心。\n"
+      +"只输出JSON。";
+    $("#cfgDirectorDoc",ov).value=txt;
+    const m=$("#directorMsg",ov); m.textContent="系统默认导演标准已载入 · 直接改完保存即可"; setTimeout(()=>{if(m.isConnected)m.textContent="";},3000);
   };
   /* ---- 条款检查 ---- */
   $("#clauseCheckBtn",ov).onpointerdown=()=>{ SFX.tap();
@@ -2967,6 +2994,7 @@ function quizStage(qid){ const n=st.quizAttempts[qid]||0; return n===0?"first":n
 const DS_PROFILES={
   chat:      {temperature:1.1,frequency_penalty:0.4,presence_penalty:0.25,max_tokens:400},
   director:  {temperature:1.0,frequency_penalty:0.3,presence_penalty:0.2,max_tokens:900},
+  directorplan:{temperature:0.6,max_tokens:300,response_format:{type:"json_object"}},
   summary:   {temperature:0.5,max_tokens:500},
   evolve:    {temperature:0.6,max_tokens:1000,response_format:{type:"json_object"}},
   quiz:      {temperature:0.7,max_tokens:1200,response_format:{type:"json_object"}},
@@ -3093,7 +3121,7 @@ async function genPersona(npcId, feedback){
   const persona=st.personas[npcId];
   /* 用户在配置中心输入的人设描述基准（WDCfg.npcPersonas）——作为第一参考硬约束 */
   const customPersona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
-  const sys="你是游戏角色设定师。基于给定的游戏世界背景与NPC基础信息，产出严谨的角色人设卡片。只输出JSON。";
+  const sys="你是游戏角色设定师。基于给定的游戏世界背景与NPC基础信息，产出严谨的角色人设卡片。每个角色须有明确的个人目标与角色弧线，体现她在故事中的目的与成长，而非只是功能性NPC。只输出JSON。";
   const user="游戏背景信息：\n"+JSON.stringify(buildWorldBrief(),null,1)
     +"\n\n要设定的NPC："+JSON.stringify({id:npcId,姓名:dName(npcId),称号:dTitle(npcId),职能:NPC_ROLE[npcId]||"",背景:npc.intro})
     +(customPersona?("\n\n【用户设定的角色基准·硬约束】"+customPersona
@@ -3105,7 +3133,8 @@ async function genPersona(npcId, feedback){
     +"\n\n【世界观硬约束】本游戏世界观是「玩家意外跌入导游异次元，遗忘之雾入侵，玩家通关导游试炼以拯救世界并重返家园」。"
     +"严禁出现以下已淘汰的旧概念："+OBSOLETE_TERMS.join("、")+"。"
     +"人设须贴合导游异次元的传奇导游设定，性格鲜明、可信。"
-    +"\n\n请输出JSON，字段：name(姓名)、identity(身份背景，30-50字，须体现其导游职能)、personality(性格特征，3-4个短语，必须与用户设定基准一致)、style(对话风格描述，必须与用户设定基准一致)、relations(与其他角色关系数组，每项{name,rel})。";
+    +((window.WDRegistry&&WDRegistry.arcSeedOf)?("\n\n该NPC的目标/弧线基线（生成时须贴合，可润色不可偏离）："+JSON.stringify(WDRegistry.arcSeedOf(npcId))):"")
+    +"\n\n请输出JSON，字段：name(姓名)、identity(身份背景，30-50字，须体现其导游职能)、personality(性格特征，3-4个短语，必须与用户设定基准一致)、style(对话风格描述，必须与用户设定基准一致)、relations(与其他角色关系数组，每项{name,rel})、goal(此角色个人目标：她想要什么，30字内，贴合导游异次元世界观)、arc(角色弧线：她在这四十五日里会如何变化，40字内，渐进不突兀)。";
   const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {kind:"persona"});
   let card;
   try{ card=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
@@ -3114,6 +3143,8 @@ async function genPersona(npcId, feedback){
   /* 保证 personality 为数组，便于后续统一处理与直接编辑 */
   if(typeof card.personality==="string") card.personality=card.personality.split(/[、,，;；\s]+/).filter(Boolean);
   if(!Array.isArray(card.personality)) card.personality=[];
+  if(typeof card.goal==="string") card.goal=card.goal.slice(0,60);
+  if(typeof card.arc==="string") card.arc=card.arc.slice(0,80);
   return card;
 }
 /* 生成任务说明：游戏隐喻叙事 + 背景故事 + 知识拓展（替代旧版独立任务描述模块） */
@@ -3397,6 +3428,8 @@ function openPersonaPanel(){
       <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">性格</label><textarea data-fld="personality" data-id="${n.id}" maxlength="80" rows="2" placeholder="以、分隔，如：活泼可爱、热心、急躁" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(Array.isArray(c.personality)?c.personality.join("、"):c.personality)}</textarea></div>
       <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">对话风格</label><textarea data-fld="style" data-id="${n.id}" maxlength="120" rows="2" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(c.style||"")}</textarea></div>
       <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">关系</label><textarea data-fld="relations" data-id="${n.id}" maxlength="200" rows="2" placeholder="格式：姓名:关系；姓名:关系" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc((c.relations||[]).map(r=>(r.name||"")+":"+(r.rel||"")).join("；"))}</textarea></div>
+      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">目标</label><textarea data-fld="goal" data-id="${n.id}" maxlength="60" rows="2" placeholder="她想要什么" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(c.goal||"")}</textarea></div>
+      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">弧线</label><textarea data-fld="arc" data-id="${n.id}" maxlength="80" rows="2" placeholder="她会如何变化" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(c.arc||"")}</textarea></div>
     </div>`:`<div class="npcnote">${esc(n.intro)}</div>`;
     return `<div class="book" id="pc_${n.id}">
       <div class="bp"><img src="${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(n.id):""}" alt="" style="width:24px;height:24px;image-rendering:pixelated;vertical-align:-6px;margin-right:6px"><span class="pid">${esc(dName(n.id))}</span><em>${esc(dTitle(n.id))}</em> ${status}</div>
@@ -3493,6 +3526,111 @@ function parseMention(text){
   }
   return null;
 }
+
+/* ==================== @ 提及弹窗选单 ==================== */
+let _mentionPop=null;
+const _mentionState={open:false,atPos:-1,token:"",list:[],sel:0};
+
+function filterMentionList(token){
+  const t=(token||"").trim();
+  const out=[];
+  const allKw=["所有人","各位","全员","大家","全部"];
+  if(!t||allKw.some(k=>k.startsWith(t)||(t.length>=2&&k.includes(t)))){
+    out.push({id:"__ALL__",name:"所有人",title:"全员应答",kind:"all"});
+  }
+  const seen=new Set(["__ALL__"]);
+  for(const id in MENTION_ALIASES){
+    const aliases=MENTION_ALIASES[id]||[];
+    const hit=!t||aliases.some(a=>a===t||a.startsWith(t)||(t.length>=2&&a.includes(t)));
+    if(!hit||seen.has(id)) continue;
+    seen.add(id);
+    out.push({id,name:dName(id),title:dTitle(id),kind:"npc"});
+  }
+  return out;
+}
+
+function insertMention(value,atPos,endPos,name){
+  const before=value.slice(0,atPos+1);
+  const after=value.slice(endPos);
+  const next=before+name+after;
+  return{value:next,caret:(before+name).length};
+}
+
+function onChatInput(inp){
+  const pos=inp.selectionStart??inp.value.length;
+  const upTo=inp.value.slice(0,pos);
+  const m=upTo.match(/@([^\s@，。、,；;:！？!?]{0,8})$/);
+  if(!m){closeMention();return;}
+  _mentionState.atPos=m.index;
+  _mentionState.token=m[1];
+  openMention(inp,m[1]);
+}
+
+function openMention(inp,token){
+  const list=filterMentionList(token);
+  if(!list.length){closeMention();return;}
+  _mentionState.list=list;_mentionState.sel=0;_mentionState.open=true;
+  if(!_mentionPop){
+    _mentionPop=document.createElement("div");
+    _mentionPop.className="mention-pop";
+    Object.assign(_mentionPop.style,{
+      position:"absolute",zIndex:"9999",maxHeight:"42vh",overflowY:"auto",
+      background:"var(--bg)",border:"1px solid var(--border-lit)",
+      borderRadius:"6px",boxShadow:"0 2px 12px rgba(0,0,0,.35)",
+      fontSize:"13px",fontFamily:"zpix,monospace",minWidth:"160px",
+      padding:"4px"
+    });
+    document.body.appendChild(_mentionPop);
+  }
+  renderMentionList(inp);
+  positionMention(inp);
+}
+
+function renderMentionList(inp){
+  const items=_mentionState.list.map((it,i)=>{
+    const sel=i===_mentionState.sel;
+    return '<div class="ment-item" data-i="'+i+'" style="padding:7px 10px;cursor:pointer;'+(sel?"background:var(--gold);color:var(--bg);border-radius:4px;":"")+'">'
+      +'<b>'+esc(it.name)+'</b> <span style="opacity:.7;font-size:11px">'+esc(it.title)+'</span></div>';
+  }).join("");
+  _mentionPop.innerHTML=items;
+  _mentionPop.querySelectorAll("[data-i]").forEach(el=>{
+    el.onpointerdown=e=>{e.preventDefault();selectMention(inp,+el.dataset.i);};
+  });
+}
+
+function positionMention(inp){
+  const r=inp.getBoundingClientRect();
+  const popH=Math.min(_mentionPop.offsetHeight||160,220);
+  _mentionPop.style.left=r.left+"px";
+  _mentionPop.style.top=(r.top-popH-4)+"px";
+  _mentionPop.style.width=Math.max(r.width,160)+"px";
+}
+
+function handleMentionKey(e,inp){
+  if(!_mentionState.open) return false;
+  const n=_mentionState.list.length;
+  if(e.key==="ArrowDown"){e.preventDefault();_mentionState.sel=(_mentionState.sel+1)%n;renderMentionList(inp);return true;}
+  if(e.key==="ArrowUp"){e.preventDefault();_mentionState.sel=(_mentionState.sel-1+n)%n;renderMentionList(inp);return true;}
+  if(e.key==="Enter"||e.key==="Tab"){e.preventDefault();selectMention(inp,_mentionState.sel);return true;}
+  if(e.key==="Escape"){e.preventDefault();closeMention();return true;}
+  return false;
+}
+
+function selectMention(inp,idx){
+  const it=_mentionState.list[idx];if(!it) return;
+  const end=inp.selectionStart??inp.value.length;
+  const r=insertMention(inp.value,_mentionState.atPos,end,it.name);
+  inp.value=r.value;
+  try{inp.setSelectionRange(r.caret,r.caret);}catch(e){}
+  closeMention();
+  inp.focus();
+}
+
+function closeMention(){
+  _mentionState.open=false;_mentionState.list=[];_mentionState.sel=0;_mentionState.atPos=-1;_mentionState.token="";
+  if(_mentionPop){_mentionPop.remove();_mentionPop=null;}
+}
+
 /* 网络检索 / 资料库匹配 / 对话生成已整体移入独立模块 wd-chat.js（window.WDChat），
    此处仅保留薄委托：本文件专注 UI 粘合，模块可在任意宿主复用。 */
 async function aiRespond(npcId,userText,brief){
