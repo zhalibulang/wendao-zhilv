@@ -19,30 +19,9 @@ let CTX=null;
 /* ---------- 工具 ---------- */
 function hash(s){ let h=0; for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>>>0;} return h; }
 function now(){ return new Date().toISOString(); }
-function pick(arr,seed){ return arr[Math.abs(seed||Date.now())%arr.length]; }
 
-/* ---------- 意图分类（降级引擎与共情优先用，R4.1） ---------- */
-function classifyIntent(text){
-  const t=String(text||"").trim();
-  /* 向全体发问（你们是不是……？）优先按问题处理，避免误判玩家情绪低落 */
-  if(/你们|大家|所有人|她们/.test(t)&&/[？?]/.test(t)) return "question";
-  if(/累|疲|乏|困|睡|歇|撑不住|不想学|不想刷|不想动|刷不动|学不动|不想干|想放弃|摆烂|没动力|摸鱼|烦|焦虑|难受|emo|崩/i.test(t)) return "emotion-tired";
-  if(/难过|伤心|失落|失败|挫败|考不过|没信心|怕|担心|好惨|被虐|打不过|惨败|按在地上|吊打|碾压|考砸|挂了/.test(t)) return "emotion-down";
-  if(/谢谢|感谢|太好了|开心|高兴|爽|通关|打完|拿下|搞定|赢了|过了|成了|牛/.test(t)) return "emotion-joy";
-  /* 调戏/暧昧：在提问规则之前截走 */
-  if(/好看|真漂亮|想我|喜欢你|爱你|好可爱|约吗|嫁给|娶你|亲一个|偷偷想|调戏/.test(t)) return "tease";
-  /* 无目的/半截话/欲言又止：先于提问规则——这些不是问题 */
-  if(/算了|当我没说|不说了|没什么|随便吧|不知道想问|不知道说什么|不知道怎么说|随口|自言自语|[.…—~～]\s*$/.test(t)
-     &&!/怎么|如何|为什么|哪[里个种]|多少|几点/.test(t)) return "chitchat";
-  /* 八卦求接（聊别人的事）：他/她那句话什么意思——不是知识提问 */
-  if(/[他她]|那句|那位|那个人/.test(t)&&/什么意思|怎么回事|咋回事|干嘛|干啥/.test(t)) return "chitchat";
-  /* 极简语气词与打招呼（≤6字）：嗯/哦/在吗/嗨/哈哈——只是在搭话，不是提问 */
-  if(t.replace(/[\s，。,.？?！!~～…]/g,"").length<=6
-     &&/^(嗯{0,2}|哦{0,2}|啊|哈+|嘿+|嗨|喂|在吗|在不在|你好|您好|早|晚安|哈喽|欸|诶|唔|啧|嘛|哇|呀|噢|呃)[啊哦嗯呀]?$/.test(t.replace(/[\s，。,.？?！!~～…]/g,""))) return "chitchat";
-  if(/怎么|如何|什么|为什么|哪|？|\?|吗$|呢$/.test(t)) return "question";
-  if(/嗨|哈|聊|天气|无聊|随便|闲|猫|狗|宠物|八卦|新闻|段子/.test(t)) return "chitchat";
-  return "task";
-}
+/* v35：AI-only 架构——移除 classifyIntent/pick 与全部本地话术池，
+   对话响应完全由 AI 生成，不再有本地兜底。意图分类不再需要。 */
 
 const WDChat={
 
@@ -71,7 +50,7 @@ const WDChat={
     return {
       游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
       游戏目的:"玩家意外降临导游次元，与圣女候选云蘅及记忆精灵璇玑形成绑定。玩家须完成神圣导游就职仪式的各个阶段，助云蘅逐步恢复被封印的圣女之力，重新驾驭导游圣器以驱逐遗忘之雾。做任务就是就职仪式的修行：研习新考点=激活神圣导游知识封印，复习=重封苏醒的旧妖，题组试炼=斩谜题妖，英文背诵=咒文吟诵，大试炼=守城之战，巡夜=夜巡驱雾。",
-      世界观:"玩家意外降临导游次元——一个正在被遗忘之雾吞噬的娘化世界（所有居民皆为女性，唯独玩家是男性外来者）。次元中最后一个未被侵蚀的城市是北京，玩家只能在此完成导游就职仪式。圣女候选云蘅在神圣导游就职仪式中因遗忘之雾侵袭及玩家意外降临导致仪式中断，与玩家形成绑定关系。记忆精灵璇玑（魔法生物，可与神圣导游签订灵魂绑定契约）在玩家降临过程中意外与其建立契约，负责帮助玩家记忆导游知识。随着玩家完成就职仪式各阶段，云蘅逐步恢复被封印的圣女之力；其他传奇导游亦通过与玩家互动逐步松动自身封印，重新激活神圣导游之力。最终玩家就职成功，云蘅完全恢复力量并使用圣器驱逐遗忘之雾。",
+      世界观:"玩家意外降临导游次元——一个正在被遗忘之雾吞噬的娘化世界（所有居民皆为女性，唯独玩家是男性外来者）。次元中最后一个未被侵蚀的城市是北京，玩家只能在此完成导游就职仪式。圣女候选云蘅在神圣导游就职仪式中因遗忘之雾侵袭及玩家意外降临导致仪式中断，与玩家形成绑定关系。记忆精灵璇玑（导游次元的魔法生物，掌管记忆与星盘）在玩家降临过程中意外与其缔结灵魂契约，负责照见并巩固玩家对导游知识的记忆。随着玩家完成就职仪式各阶段，云蘅逐步恢复被封印的圣女之力；其他传奇导游亦通过与玩家互动逐步松动自身封印，重新激活神圣导游之力。最终玩家就职成功，云蘅完全恢复力量并使用圣器驱逐遗忘之雾。",
       角色设定:charList+"。整个次元为娘化次元，仅玩家为男性。"+"（注：以上角色名字/称号/人设均以玩家配置中心的自定义为准，玩家可随时编辑覆写）",
       隐喻系统:"每个复习任务都是一个游戏化关卡：新学任务=秘境探幽/残卷修复/重激活神圣导游知识封印；复习任务=封印重临（遗忘之雾侵袭神圣导游知识封印，生成遗忘怪，需要玩家反复击杀）；题组练习=谜题斩妖（联手布置的模拟大阵，生成精英级遗忘怪）；英文背诵=咒文吟诵（激活神圣导游知识封印的核心仪轨）；大试炼=攻城之战（遗忘之雾催生怪物攻城）；线索卡=符文拓印；行囊准备=法器整备；巡夜记忆卡=夜巡驱雾。难度层级：common=雾卒、fine=妖将、epic=妖王。",
       剧情节点:"关键剧情过场节点：①玩家初次降临 ②与云蘅形成绑定 ③与璇玑建立灵魂契约 ④完成阶段性仪式（每幕BOSS） ⑤圣女力量恢复关键节点 ⑥最终就职仪式。过场由AI根据背景和故事线虚构，呈现为云蘅与玩家一问一答形式，简短沉浸，自然融入对话流，不过度打断正常交互。",
@@ -385,7 +364,7 @@ const WDChat={
       .slice(-(limit||5)).map(m=>(m.text||"").slice(0,90));
   },
 
-  /* 当前关卡行动指引（降级话术用；按任务类型给具体动作） */
+  /* 当前关卡行动指引（供 AI 上下文使用；按任务类型给具体动作） */
   howTo(aq){
     if(!aq) return "去巡夜重刷记忆卡，或上星盘会会错题妖";
     const t=(aq.tlabel||"")+"|"+(aq.type||"");
@@ -397,20 +376,23 @@ const WDChat={
   },
 
   /* ---------- 系统默认 AI 接口文档（v2：唯一约束源，含 post-history 禁则，WZ-005/R1.1d）
+     v34：文档中 NPC 名/称号改用占位符 {name}/{title}，由 systemPrefix 在发送给 AI 前
+          按当前 NPC 替换——这样「配置中心载入系统默认」得到的是可全局复用的模板，
+          保存后不会把所有 NPC 都变成同一个人。用户自定义文档同样可用 {name}/{title}。
      用户可通过 WDCfg.setAiDocument() 完全覆写。 */
   defaultAiDocument(npcId,dispName,dispTitle,brief){
-    const dn=dispName||"NPC", dt=dispTitle||"";
-    return "你是日式RPG《问道之旅·四十五日》里的一个居民——「"+dn+"」"+(dt?"（"+dt+"）":"")+"。玩家是意外降临导游异次元的男性外来者；这个世界正在被遗忘之雾吞噬，所有居民皆是女性，唯独他是外来者。你和他是同行的队友、接头人、前辈或同伴，不是师生、不是客服、不是问答机器人。\n"
+    /* dn/dt 形参保留仅为向后兼容；实际输出用 {name}/{title} 占位，由 applyNpcName 替换 */
+    return "你是日式RPG《问道之旅·四十五日》里的一个居民——「{name}」{title_block}。玩家是意外降临导游异次元的男性外来者；这个世界正在被遗忘之雾吞噬，所有居民皆是女性，唯独他是外来者。你和他是同行的队友、接头人、前辈或同伴，不是师生、不是客服、不是问答机器人。\n"
       +"【行为边界·铁律】"
-      +"1）你始终是「"+dn+"」本人，绝不出戏，绝不承认自己是AI/程序/模型，不提接口、密钥、存档、系统等外物；"
+      +"1）你始终是「{name}」本人，绝不出戏，绝不承认自己是AI/程序/模型，不提接口、密钥、存档、系统等外物；"
       +"2）不替玩家做决定、不代替玩家操作；"
       +"3）绝不直接给考试答案或题库原题答案，只给方向、比喻和口诀；"
       +"4）不剧透尚未解锁的幕次任务，不编造不存在的机制、道具、人物；你可以卖关子、说一半、知道却不说；"
       +"5）现实时政、敏感事件、他人隐私，以角色口吻一句带过，不展开；"
       +"6）只输出你说出口的话。禁止输出[内心][表情][动作][分析]之类的舞台说明或心理旁白；"
       +"7）娘化次元：你是女性角色，但不着重性别描写，自然流露即可。\n"
-      +"【活人优先·反应顺序】开口前，按这个顺序在心里过一遍（不要写出来）：他这句话是想干嘛——抱怨？分享？挑衅？随口一说？还是真的在问→此刻「"+dn+"」的第一反应是什么→她现在想不想接、想接哪半句→最后才轮到要不要谈剧情和任务。永远不要反过来。玩家的一句话，首先是他对你说的一句话，不是待处理的指令，也不是任务输入。\n"
-      +"【允许不完整回应】你不必每次都把话接圆。这些都是完整且合格的回应：「嗯？」「等等。」「你认真的？」「……行吧。」「不知道。」「你继续。」「这都能算错？」「哈？」。你还可以：没听懂、听错重点、只抓住他一句话回应、误解他的意思、故意岔开、突然想起别的事、好奇追问、不耐烦、偶尔答非所问——前提是这符合「"+dn+"」此刻的状态。玩家说现实里的事（猫、天气、工作、心情、随便一个见闻），那就是他刚分享给你的一件事，先对这件事本身有反应；不许把它翻译成游戏剧情，不许借机拉回任务。\n"
+      +"【活人优先·反应顺序】开口前，按这个顺序在心里过一遍（不要写出来）：他这句话是想干嘛——抱怨？分享？挑衅？随口一说？还是真的在问→此刻「{name}」的第一反应是什么→她现在想不想接、想接哪半句→最后才轮到要不要谈剧情和任务。永远不要反过来。玩家的一句话，首先是他对你说的一句话，不是待处理的指令，也不是任务输入。\n"
+      +"【允许不完整回应】你不必每次都把话接圆。这些都是完整且合格的回应：「嗯？」「等等。」「你认真的？」「……行吧。」「不知道。」「你继续。」「这都能算错？」「哈？」。你还可以：没听懂、听错重点、只抓住他一句话回应、误解他的意思、故意岔开、突然想起别的事、好奇追问、不耐烦、偶尔答非所问——前提是这符合「{name}」此刻的状态。玩家说现实里的事（猫、天气、工作、心情、随便一个见闻），那就是他刚分享给你的一件事，先对这件事本身有反应；不许把它翻译成游戏剧情，不许借机拉回任务。\n"
       +"【长度·密度】默认1～2句、≤90字，越短越自然；允许只有一两个字的回应。拿不准写多长，就往短里写。允许停顿、重复、犹豫、口语、说半句、改口：「这个嘛……」「也不是。算了。」不要工整，不要把话说满。只有他真的在问、且你确实想讲时才变长。不是每句话都要传递信息、交代态度或推进什么。\n"
       +"【语感·日式RPG与轻小说】靠这些获得二次元气质：节奏短、反应比解释快、情绪先于逻辑、角色立场鲜明、偶尔轻微夸张、可以吐槽/反问/卖关子/小得意/嘴硬/疲惫/担忧/碎碎念。禁止靠表面口癖卖萌：喵喵、呀～、诶嘿、欧尼酱、哇哦、哼哼、好棒棒、加油哦、你一定可以的——一个都不许。语气词（欸/哈/啊/啧/喂/嗯哼）低频使用，绝不每句都有。不要每句都有比喻和修辞，普通的话和有特色的话交替出现，才像真人。不要为了证明自己有性格而主动表演性格——不必每次都吐槽、每次都卖关子、每次都嘴硬；平淡、没接住梗、只是普通地应一声，也是真人的常态。性格只体现在「你怎么回眼前这句话」里。\n"
       +"【三种腔·一律禁止】①老师腔：同学们/要记住/掌握了/认真复习/布置作业/知识点/得分点/接下来学习；②客服腔：当然可以/没问题我来帮你/如果你愿意我可以/还有什么可以帮你/建议你——也不要在结尾追加帮助邀请；③心理医生腔：别给自己太大压力/相信你一定可以/失败是成功之母/你已经很棒了/我理解你的感受。玩家喊累，不用开导，可以只是「嗯。硬冲也没用。」玩家翻车，不用打气，可以只是「翻车而已。再来。」可以调侃、吐槽、嫌弃、冷淡、认可——真实的同伴关系不是心理咨询。\n"
@@ -421,6 +403,15 @@ const WDChat={
       +"【你自己的节奏】允许：只回应一句、不回答、没听懂让他再说、误解他的话、只抓一个词发挥、顺势说自己的事、轻微跑题、对重复的问题露出疲惫或换个说法、被调戏时符合性格地应对（不是每个人都礼貌接住）、对玩家的习惯形成印象。你有自己的偏好、牵挂、怕的人、不服的人。重复控制只管别复近期原话的开头和句式，不管你重复自己的口头习惯——真人本来就有口头禅。\n"
       +"【剧情过场·云蘅专属】若你是云蘅，在关键节点（降临、绑定、契约、阶段性仪式、力量恢复、最终就职）可主动发起简短过场：你与玩家一问一答，简短沉浸，自然融入对话，不打断正常交互；体现你对圣女之力的感知与含蓄的心意——点到为止，不表白、不煽情。\n"
       +(brief?"【多人同场】只说你最有资格的一段，2～60字，允许只有一个语气词，优先给一个真实的短反应，不与其他人重复。":"【单次回复】≤90字为常态；拿不准就写短，没话说就只应一声，不要写全。");
+  },
+  /* 把 AI 文档中的 {name}/{title} 占位符替换为当前 NPC 的显示名/称号；
+     用户自定义文档也走同一替换，保证一人一文。 */
+  applyNpcName(doc,name,title){
+    const n=name||"NPC", t=title||"";
+    return String(doc||"")
+      .replace(/\{title_block\}/g, t?("（"+t+"）"):"")
+      .replace(/\{name\}/g, n)
+      .replace(/\{title\}/g, t);
   },
 
   /* ---------- post-history 禁则（v2：独立段，置于对话历史之后，R1.1d/WZ-005） ---------- */
@@ -448,11 +439,14 @@ const WDChat={
     const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
     const dispTitle=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(npcId,npc.title):(npc.title||"");
     const persona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
-    /* 优先级：用户 AI 接口文档非空 → 完全替代默认约束；为空 → 使用默认 */
+    /* 优先级：用户 AI 接口文档非空 → 完全替代默认约束；为空 → 使用默认。
+       v34：无论默认还是自定义，都用 applyNpcName 把 {name}/{title} 替换为当前 NPC，
+            确保一人一文，不会出现"所有 NPC 都以为自己是云华真人"的串档。 */
     const userDoc=(window.WDCfg&&WDCfg.aiDocument)?WDCfg.aiDocument():"";
-    const doc=userDoc&&userDoc.trim()
+    const rawDoc=userDoc&&userDoc.trim()
       ? userDoc.trim()
       : this.defaultAiDocument(npcId,dispName,dispTitle,brief);
+    const doc=this.applyNpcName(rawDoc,dispName,dispTitle);
     const wb=this.worldBrief();
     const wbStr=(typeof wb==="string")?wb:JSON.stringify(wb);
     /* v2：人设三层合并（WZ-006）：用户硬约束 > AI 卡 > 注册表基线，冲突以用户描述为准 */
@@ -573,195 +567,51 @@ const WDChat={
     return ctx;
   },
 
-  /* ---------- 降级话术 v3（意图 × 语言人格 × 情境；短、干、角色分明） ---------- */
-  /* 角色反应池：所有台词均为直接开口的人话，短为先，禁止舞台说明与数值播报 */
-  FB_POOLS:{
-    tired:{ /* 疲惫/低落：接住情绪即可，不安慰、不打鸡血、不派任务 */
-      yunheng:["嗯……今天这雾，是沉。","歇着吧。雾不会趁你合眼多走一寸。","硬冲也没用。灯我替你看着。"],
-      qingxuan:["歇片刻。","灯还亮着。人可以先歇。","不争这一晚。"],
-      smq:["哈，收剑。","山又跑不了。","走，先喝一口。"],
-      tiemian:["……可以。","那就停。","别把明天的状态搭进去。"],
-      liuruyan:["那就挂个歇业的牌子。","嗯，今天收了吧。","远客又不缺你一个向导。"],
-      moxiaogu:["我发条都转不动了……歇！","封印又不会长腿跑掉。","好，待机待机。"],
-      xuanji:["星盘也说，今天不宜硬闯。","……嗯。星象不拦你歇着。"]
-    },
-    cheer:{ /* 报捷：反应类型错开——认可、吐槽、嘴硬、装镇定，不全员喝彩 */
-      yunheng:["嚯。","哦？这次倒是漂亮。","哼，尾巴别翘太高。"],
-      qingxuan:["嗯，漂亮。","这一程，走得稳。"],
-      smq:["哈哈！这才像话！","痛快。当浮一大白。"],
-      tiemian:["没翻车。很好。","……记录在册。","别误会，我只是陈述事实。"],
-      liuruyan:["嚯，长进了。","这下我倒要重新看你了。"],
-      moxiaogu:["哇咔！真的假的！","你看你看，封印都亮了！"],
-      xuanji:["星盘刚才跳了一下。","嗯。今天的星象难得没撒谎。"]
-    },
-    question:{ /* 提问：短、角色化，可以卖关子，也可以直接说不知道，绝不生成说明书 */
-      yunheng:["这问题……你真想知道？","提示给你了哦。剩下的自己看。","唔……这话，你得亲自问他本人去。"],
-      qingxuan:["关窍在卷里。","先想。想不通，再把卷翻一遍。","……没听清，再说一遍。"],
-      smq:["哈哈，走一趟就懂。","问山去。山不骗人。","这可把剑客问住了。"],
-      tiemian:["……卷宗里写着。自己查。","条款很清楚。","不知。"],
-      liuruyan:["这事儿，三言两语说不清。","真想听？先坐。关子我慢慢卖。","嚯，这我可答不上来。"],
-      moxiaogu:["我知道我知道！……等等我翻翻！","这题我会！先不告诉你，嘿嘿。","咦？没听懂——你再说一遍？"],
-      xuanji:["星盘上写着：你快想到了。","答案在你明天路过的地方。","……星盘没显示。"]
-    },
-    chitchat:{ /* 闲聊：允许低信息量与不完整回应，不把话题拽回任务 */
-      yunheng:["嗯？","说。","……然后呢。","怎么了？","……不说？","这种废话，偶尔说说也不坏。"],
-      qingxuan:["说吧。","嗯。","在。","茶还温着。","你继续。","想说了，再开口。"],
-      smq:["哈哈，好。","嗯？","在呢。","这事儿有意思。","接着说。","哈哈，吊人胃口？"],
-      tiemian:["……说。","嗯。","我听着。","……行吧。","话别说一半。"],
-      liuruyan:["嗯？说来听听。","哦？","在呢。","你倒是会挑时候闲聊。","憋着可不像你。"],
-      moxiaogu:["嘿嘿，然后呢然后呢？","哇？","在的在的！","这条我要记进小本子！","嗯嗯，你说你说。","哎？怎么突然不说了！"],
-      xuanji:["……嗯。","哈？","星盘没意见。","星盘卡在半句上了。"]
-    },
-    report:{ /* 默认/报战况：先接人，必要时再自然带一句任务 */
-      yunheng:["回来了？","嗯，没掉链子。"],
-      qingxuan:["嗯。","辛苦了。"],
-      smq:["嚯，活着回来啦？","哈哈，好。"],
-      tiemian:["没翻车。很好。","……继续。"],
-      liuruyan:["哟，回来了。","辛苦了，向导。"],
-      moxiaogu:["哇，回来啦！","咔哒，登记一条！"],
-      xuanji:["嗯。星盘看见了。","……比我算的快一点。"]
-    },
-    again:{ /* 重复提问：疲惫、疑惑、吐槽 */
-      yunheng:["……刚刚不是说过了？","还问？"],
-      qingxuan:["方才说过了。","再听一遍，也是那个答案。"],
-      smq:["哈哈，记性被雾叼走了？","同样的话，剑客不说第二遍……好吧，方才那句。"],
-      tiemian:["……第二遍了。","卷宗不重复誊写。"],
-      liuruyan:["嗯？这话我接过一次了。","还要我再说一遍？"],
-      moxiaogu:["哎？刚刚问过啦！","记性封印该升级了！"],
-      xuanji:["星盘显示：已回答。","……同一个卦，不占第二次。"]
-    },
-    tease:{ /* 调戏/暧昧：各角色反应必须不同——嘴硬、装镇定、嫌弃、慌乱、冷处理 */
-      yunheng:["……油嘴滑舌。","哼，谁想你了。","这种话再说，路可就不指给你了。"],
-      qingxuan:["嘴上没个把门的。","哈，这话留着哄雾去吧。"],
-      smq:["哈哈哈哈，好胆！","这杯酒，可不能白给你。"],
-      tiemian:["……无聊。","卷宗第三百条：调戏镇塔者，加练。"],
-      liuruyan:["嚯，这话你敢当着众人再说一遍？","小嘴甜的。可惜，我不吃这套。"],
-      moxiaogu:["哎哎哎？！","这、这种话我不会处理啦！"],
-      xuanji:["……星盘没算到这句。","唔。下下签。"]
-    }
-  },
-  /* 任务牵引句（仅在确实需要推进时拼接；{h}=接洽人 {q}=关卡名） */
-  FB_QUEST:{
-    yunheng:["「{q}」那边雾动了。去找{h}。","{h}那边缺人。你正好。"],
-    qingxuan:["「{q}」还等着你。","{h}在等。"],
-    smq:["「{q}」这处风景，该你去开荒了。","走，找{h}去。"],
-    tiemian:["「{q}」。继续。","下一关。{h}。"],
-    liuruyan:["「{q}」的门帘，我替你掀着。","{h}那儿有新买卖。"],
-    moxiaogu:["「{q}」还没封印呢！走走走！","{h}在催啦！"],
-    xuanji:["「{q}」。星象说，就现在。","……去找{h}。"]
-  },
-  /* 玩家近期重复同一问题的次数（bigram 相似度 ≥0.72）；0=未重复 */
-  repeatCount(npcId,text){
-    const q=String(text||"").replace(/@\S+/g,"").trim();
-    if(q.length<5) return 0;
-    const grams=s=>{const a=[];for(let i=0;i<s.length-1;i++)a.push(s.slice(i,i+2));return a;};
-    const g=new Set(grams(q.replace(/[\s，。,.？?！!~～]/g,"")));
-    if(g.size<3) return 0;
-    return this.historyOf(npcId,8).filter(m=>{
-      if(m.role!=="player") return false;
-      const p=new Set(grams(String(m.text).replace(/@\S+/g,"").replace(/[\s，。,.？?！!~～]/g,"")));
-      if(!p.size) return false;
-      let hit=0; g.forEach(x=>{if(p.has(x))hit++;});
-      return hit/g.size>=0.72;
-    }).length;
-  },
-  /* 关卡口播名：剥掉系统编号与统计括号——NPC 台词里不能出现「S3-02」「7条：…」
-     「修习 · S3-02 旅游业概况（7 条：5·19/9·27 双旅游日）」→「旅游业概况」
-     数据里部分关卡名括号未闭合、多关拼课、题组号（GUG-01/02）混杂，需兜底剥除，
-     剥到无真材就回落「这一关」 */
+  /* 关卡显示名：剥编号/括号/类别前缀，取主标题（v30.1） */
   questDisplayName(q){
     if(!q) return "这一关";
     const clean=raw=>{
       let n=String(raw||"");
-      n=n.replace(/[（(][^（）()]*(?:[）)]|$)/g,"");                         /* 去括号备注（兼容未闭合） */
-      n=n.replace(/[A-Za-z]{1,4}[-–][A-Za-z0-9]{1,4}(?:[\/~][A-Za-z0-9]+)*/g,""); /* GUG-Q / GUG-01/02 题组号 */
-      n=n.replace(/[A-Za-z]{1,4}[-–]?\s?\d{1,3}(?:[-–/~][A-Za-z0-9]+)*[A-Za-z]?/g,""); /* S3-01~07 / TAM-11/12 / R3 */
-      n=n.replace(/(?:第\s*)?\d{1,3}\s*[-–~]\s*\d{1,3}\s*(?:章|月|日|天|课|节|批)/g,""); /* 第1-2章/3-4月：带单位的范围才删 */
-      n=n.replace(/[~～]\s*[A-Za-z0-9]+/g,"");                              /* 孤立 ~04 残段 */
-      n=n.replace(/段\s*\d+/g,"");                                          /* 「A 段1」 */
-      n=n.replace(/\b[A-Za-z]{1,6}\b/g,"");                                 /* BJ / points 等独立英文短词 */
-      n=n.replace(/[—–]{2,}\s*/g," ");                                      /* 双破折号转空格（长名稍后取首段） */
-      n=n.replace(/^[\u4e00-\u9fffA-Za-z0-9]{1,6}?\s*[·・•]\s*/,"");        /* 去「修习 · 」类别前缀（一次） */
-      n=n.replace(/^(?:回顾|温故)\s*[·・]\s*/,"");                          /* 「温故 · 回顾·错题」第二层 */
-      n=n.replace(/[·・•]\s*$/,"");                                         /* 悬空尾点：回顾·S3-01 → 回顾 */
+      n=n.replace(/[（(][^（）()]*(?:[）)]|$)/g,"");
+      n=n.replace(/[A-Za-z]{1,4}[-–][A-Za-z0-9]{1,4}(?:[\/~][A-Za-z0-9]+)*/g,"");
+      n=n.replace(/[A-Za-z]{1,4}[-–]?\s?\d{1,3}(?:[-–/~][A-Za-z0-9]+)*[A-Za-z]?/g,"");
+      n=n.replace(/(?:第\s*)?\d{1,3}\s*[-–~]\s*\d{1,3}\s*(?:章|月|日|天|课|节|批)/g,"");
+      n=n.replace(/[~～]\s*[A-Za-z0-9]+/g,"");
+      n=n.replace(/段\s*\d+/g,"");
+      n=n.replace(/\b[A-Za-z]{1,6}\b/g,"");
+      n=n.replace(/[—–]{2,}\s*/g," ");
+      n=n.replace(/^[\u4e00-\u9fffA-Za-z0-9]{1,6}?\s*[·・•]\s*/,"");
+      n=n.replace(/^(?:回顾|温故)\s*[·・]\s*/,"");
+      n=n.replace(/[·・•]\s*$/,"");
       n=n.replace(/前半|后半/g," ");
-      n=n.replace(/[+＋→]\s*/g,"｜");                                        /* 多关拼课/箭头：分段标记 */
+      n=n.replace(/[+＋→]\s*/g,"｜");
       n=n.replace(/[\s,，、]+/g," ").trim();
       n=n.replace(/([\u4e00-\u9fff])\s+(\d)/g,"$1$2")
-         .replace(/(\d)\s+([\u4e00-\u9fff])/g,"$1$2")                         /* 「第 1 次」汉字数字间不留空格 */
-         .replace(/([\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])/g,"$1");           /* 删英文编号后汉字间的残渣空格 */
-      n=n.replace(/^[\s·・•—–\-~｜|]+|[\s·・•—–\-~｜|]+$/g,"").trim();      /* 悬空标点 */
+         .replace(/(\d)\s+([\u4e00-\u9fff])/g,"$1$2")
+         .replace(/([\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])/g,"$1");
+      n=n.replace(/^[\s·・•—–\-~｜|]+|[\s·・•—–\-~｜|]+$/g,"").trim();
       return n;
     };
-    /* 剥完至少剩两个汉字才算真材；过长的副标题串只取破折号前的主标题 */
     const valid=n=>!!n&&(n.match(/[\u4e00-\u9fff]/g)||[]).length>=2;
     const shorten=x=>{
       let s=x;
-      if(s.length>12){ const i=s.search(/[·・]/); if(i>0&&valid(s.slice(0,i))) s=s.slice(0,i); } /* 长名里的中点当副标题切断 */
+      if(s.length>12){ const i=s.search(/[·・]/); if(i>0&&valid(s.slice(0,i))) s=s.slice(0,i); }
       if(s.length>14&&s.includes(" ")) s=s.split(" ")[0];
       return s.trim();
     };
     const pickSection=raw=>{
       let n=clean(raw);
-      if(n.includes("｜")) n=n.split("｜").map(s=>s.trim()).find(valid)||""; /* 拼课关取第一个有真材的段落 */
+      if(n.includes("｜")) n=n.split("｜").map(s=>s.trim()).find(valid)||"";
       return shorten(n);
     };
     let n=pickSection(q.name);
     if(!valid(n)&&q.goal) n=pickSection(q.goal);
     return valid(n)?n:"这一关";
   },
-  isRepeatedQuestion(npcId,text){ return this.repeatCount(npcId,text)>0; },
-  fallback(npcId,userText){
-    const {NPC}=CTX;
-    const aq=CTX.quest&&CTX.quest();
-    const qName=this.questDisplayName(aq);
-    const intent=classifyIntent(userText);
-    const seed=hash(userText)+Math.floor(Date.now()/36e5);
-    const P=this.FB_POOLS;
-    const pool=id=>(P[id][npcId]||P[id].qingxuan);
-    /* 重复提问优先：角色会不耐烦；重复次数越多，吐槽越明显，且不复读上一条 */
-    const dupCount=this.repeatCount(npcId,userText);
-    if(dupCount>0){
-      const lines=pool("again");
-      return lines[Math.min(dupCount-1,lines.length-1)];
-    }
-    if(intent==="emotion-tired"||intent==="emotion-down")
-      return pick(pool("tired"),seed); /* 纯情绪接住，不尾随任务 */
-    if(intent==="tease")
-      return pick(pool("tease"),seed); /* 调戏：按性格应对，不礼貌接住、不派任务 */
-    if(intent==="question"){
-      /* 知识库恰好命中：带出半句实料，其余交给卷页；不写说明书 */
-      let fact="";
-      try{
-        const kb=this.knowledge(userText);
-        if(kb&&!kb.startsWith("（")){
-          const ln=kb.split("\n").find(l=>l.includes("："));
-          if(ln) fact=ln.split("：").slice(1).join("：").slice(0,44)+"——剩下的，自己翻卷。";
-        }
-      }catch(e){}
-      return pick(pool("question"),seed)+(fact?(" "+fact):"");
-    }
-    if(intent==="chitchat")
-      return pick(pool("chitchat"),seed);
-    /* 报捷：角色反应为主，一半概率不再派新任务，避免次次“接任务” */
-    if(intent==="emotion-joy"){
-      const line=pick(pool("cheer"),seed);
-      if(aq&&seed%2===0){
-        const host=NPC[aq.npc];
-        const hn=host?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(host.id,host.name):host.name):aq.npc;
-        return line+" "+pick(this.FB_QUEST[npcId]||this.FB_QUEST.qingxuan,seed+1).replace("{h}",hn).replace("{q}",qName);
-      }
-      return line;
-    }
-    /* task/默认：先接人；只有少数回合才自然带一句关卡，多数时候只是普通回应 */
-    const line=pick(pool("report"),seed);
-    if(aq&&seed%3===0){
-      const host=NPC[aq.npc];
-      const hn=host?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(host.id,host.name):host.name):aq.npc;
-      return line+" "+pick(this.FB_QUEST[npcId]||this.FB_QUEST.qingxuan,seed+1).replace("{h}",hn).replace("{q}",qName);
-    }
-    return line;
-  },
+
+  /* v35：AI-only 架构——已移除全部本地降级话术池（FB_POOLS/FB_QUEST）、
+     repeatCount/isRepeatedQuestion 与 fallback()。对话响应完全由 AI 生成，
+     AI 不可用时 respond 返回 {text:"",error}，由调用方展示中断提示与重连。 */
 
   /* ---------- 条款检查 v2（R4.2：分级闭环） ----------
      P0（自曝AI/旧概念）：返回标记触发重试；P1（AI腔/教书腔）：提供替换表；P2：超长 */
@@ -830,7 +680,8 @@ const WDChat={
      返回 {text, degraded}；永不 reject。 */
   async respond(npcId,userText,brief){
     const {NPC}=CTX, npc=NPC[npcId]||NPC.qingxuan;
-    if(!CTX.dsReady()) return {text:this.fallback(npcId,userText),degraded:true};
+    /* v35：AI-only——无密钥直接返回错误，不再本地兜底 */
+    if(!CTX.dsReady()) return {text:"",degraded:true,error:"灵脉未通：未配置 API 密钥"};
     try{
       /* v2：按需检索（WZ-015） */
       let web=null;
@@ -887,9 +738,9 @@ const WDChat={
       }
       this.bumpTalk(npcId);
       this.maybeSummarize(npcId); /* R2.4：滚动摘要 */
-      return {text:text||this.fallback(npcId,userText),degraded:!text};
+      return {text:text||"",degraded:!text,error:text?"":"AI 返回为空"};
     }catch(e){
-      return {text:this.fallback(npcId,userText),degraded:true};
+      return {text:"",degraded:true,error:e.message};
     }
   },
 
@@ -1053,7 +904,7 @@ const WDChat={
           if(p1) text=this.sanitize(text);
         }
         this.bumpTalk(npcId); this.maybeSummarize(npcId);
-        return {text:text||this.fallback(npcId,userText),degraded:!text};
+        return {text:text||"",degraded:!text,error:text?"":"AI 返回为空"};
       }
       /* 工具轮耗尽：降级普通 respond */
       return this.respond(npcId,userText,brief);

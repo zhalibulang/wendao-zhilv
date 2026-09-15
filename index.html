@@ -578,7 +578,7 @@ function defState(){
     done:{}, fav:Object.fromEntries(D.npcs.map(n=>[n.id,0])),
     ach:{}, notes:{}, wrong:[], cards:{}, seenHearts:{}, shop:[...D.shop],
     edits:{}, _treeExp:{},
-    personas:{}, aiBrief:{},
+    personas:{}, aiBrief:{}, questLines:{},
     dialogue:[],
     npcGrowth:{},
     hp:88, energy:24, quizOk:0, quizAttempts:{}, cutscenes:{}, dailyCtx:{}, clauseLog:[], dialogueInitDay:0, created:new Date().toISOString()};
@@ -595,6 +595,7 @@ function reconcile(){
   st.cards=st.cards||{}; st.seenHearts=st.seenHearts||{};
   st.edits=st.edits||{}; st._treeExp=st._treeExp||{};
   st.personas=st.personas||{}; st.aiBrief=st.aiBrief||{};
+  st.questLines=st.questLines||{};
   st.cutscenes=st.cutscenes||{};
   st.dailyCtx=st.dailyCtx||{};
   if(!Array.isArray(st.clauseLog)) st.clauseLog=[];
@@ -756,28 +757,41 @@ function questMetaphor(q){
   const pool=soft[q.type]||["初程"];
   return doms[hash(q.id)%doms.length]+" · "+pool[hash(q.id)%pool.length];
 }
+/* v35：任务发布/交割台词由 AI 生成并缓存到 st.questLines[q.id].pub/.done。
+   无缓存时返回占位短句并后台触发生成，下次访问即命中。 */
+const Q_TYPE_LABEL={study:"研学秘境",review:"复盘封印",drill:"演练试炼",oral:"咒文吟诵",boss:"妖王守关",clue:"线索符文",gear:"法器整备",flash:"夜巡记忆",reward:"天梯赐赏"};
 function pubLine(q,d){
-  const pool={study:["新秘境在雾中显形，进去走一遭。","这页残卷会自己说话——翻开它。","秘境之门开了。慢慢走，别急。"],
-    review:["封印松了，旧妖又探头——回去再钉一钉。","昨日走过的秘境在召唤，回望一眼。","旧卷重启：封印重临。"],
-    drill:["前方妖兽拦路——以题作剑，斩之。","谜题妖现身。接这一战。","守关的谜题妖不强，但别手抖。"],
-    oral:["咒文已备，出声吟诵——声音是你的法器。","吟游时刻：咒不成声，护罩不生。","把这段咒文念出声来，城门才应你。"],
-    boss:["守关妖王现身。全场肃静，一次过。","攻城时刻——大试炼开启。","此战即天梯。稳住，一次登阶。"],
-    clue:["雾中有一枚符文，拓下来。","线索符文现形，绣进你的山河图。"],
-    gear:["先整备法器——利其器，方能斩妖。"],
-    flash:["夜巡时刻，过几张记忆卡，驱散今夜之雾。","睡前巡一圈，雾不敢近身。"],
-    reward:["今日圆满。天梯赐赏，去领吧。"]};
-  const arr=pool[q.type]||pool.study;
-  const idx=(hash(q.id)+d.day)%arr.length;
-  return arr[idx];
+  const c=st.questLines||(st.questLines={});
+  if(c[q.id]&&c[q.id].pub) return c[q.id].pub;
+  genQuestLine(q,"pub");
+  return "新的一程，已在雾中显形……";
 }
 function doneLine(q,d){
-  const pool={study:["这页残卷，已被你收进袖中。","秘境已探，你眼里多了雾外的光。"],
-    review:["封印重新钉牢——它现在属于你了。","旧妖退散，这道封印是你的手笔。"],drill:["妖兽授首，剑感与道心俱在。","谜题破解，这一战赢得干净。"],
-    oral:["咒音很稳。回身听一遍，你会听见自己的道行在长。"],boss:["妖王授首！这一战打得漂亮。"],
-    clue:["符文入册。你的山河图又密了一分。"],gear:["法器齐整。上路吧。"],
-    flash:["夜巡完毕。雾退三里，安睡吧。"],reward:["赏已入袋。今夜无雾。"]};
-  const arr=pool[q.type]||["很好。"];
-  return arr[hash(q.id+d.day)%arr.length];
+  const c=st.questLines||(st.questLines={});
+  if(c[q.id]&&c[q.id].done) return c[q.id].done;
+  genQuestLine(q,"done");
+  return "这一程，交割了……";
+}
+async function genQuestLine(q,kind){
+  if(!dsReady()||!q) return;
+  const c=st.questLines||(st.questLines={});
+  c[q.id]=c[q.id]||{};
+  if(c[q.id][kind]) return c[q.id][kind];
+  const flag="_"+kind+"P";
+  if(c[q.id][flag]) return;
+  c[q.id][flag]=true;
+  try{
+    const label=Q_TYPE_LABEL[q.type]||q.type;
+    const sys=kind==="pub"
+      ? "你是RPG《问道之旅·四十五日》中发布任务的NPC。玩家即将接取任务。请用一句有角色感的话发布任务，≤30字，像NPC当面开口说的，不解释、不报编号、不抒情。"
+      : "你是RPG《问道之旅·四十五日》中的任务NPC。玩家刚完成任务。请用一句有角色感的话认可或交割，≤30字，像NPC当面开口说的，不解释、不报编号。";
+    const user=`任务名：${q.name}\n类型：${label}${q.desc?`\n任务简述：${String(q.desc).slice(0,80)}`:""}`;
+    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"questbrief"});
+    let t=String(raw||"").trim().replace(/^[「『"“\s]+|[」』"”\s]+$/g,"");
+    t=t.replace(/\n.*/s,"").slice(0,40);
+    if(t){ c[q.id][kind]=t; save(); }
+  }catch(e){ /* 静默：占位句已展示，下次再试 */ }
+  delete c[q.id][flag];
 }
 function lockLine(q){
   const p=q.prev&&q.prev[0]?QMAP[q.prev[0]]:null;
@@ -913,12 +927,17 @@ function npcAnswerParallel(targets,text,all){
   targets.forEach(id=>{
     aiRespond(id,text,all).then(r=>{
       const aqR=firstActiveQuest();
-      const m={role:"npc",npc:id,text:r.text,at:new Date().toISOString(),day:st.day};
-      if(!r.refs&&aqR) m.refs=[{qid:aqR.id}];   // 关联当前在途任务，流内可跳转
-      st.dialogue.push(m);
+      if(!r.text){
+        /* v35：AI 失败——推系统消息提示中断，不再本地兜底 */
+        aiHealth=(r.error&&/密钥|未配置/.test(r.error))?"error":"down";
+        st.dialogue.push({role:"sys",text:"灵脉暂时中断："+(r.error||"AI 未响应")+"。点击状态栏 ●AI 可重连。",at:new Date().toISOString(),day:st.day});
+      } else {
+        const m={role:"npc",npc:id,text:r.text,at:new Date().toISOString(),day:st.day};
+        if(!r.refs&&aqR) m.refs=[{qid:aqR.id}];
+        st.dialogue.push(m);
+      }
       if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
       save();
-      if(r.degraded) toast(dName(id)+"以本地话术接了话（AI暂不可用）");
       if(++done===targets.length){ typing(false); renderChat(); } else renderChat(true);
     }).catch(()=>{ if(++done===targets.length){ typing(false); renderChat(); } });
   });
@@ -961,6 +980,7 @@ function maybeNpcChimeIn(text,primarySpeaker){
   setTimeout(()=>{
     if(!st) return;
     aiRespond(pick.id,text,true).then(r=>{
+      if(!r.text) return; /* v35：AI 失败时插话静默取消，不推空消息 */
       const aqR=firstActiveQuest();
       const m={role:"npc",npc:pick.id,text:r.text,at:new Date().toISOString(),day:st.day};
       if(!r.refs&&aqR) m.refs=[{qid:aqR.id}];
@@ -1049,21 +1069,21 @@ function renderChat(keep){
   }
   /* 状态栏（需求4）：Lv/心气/灵力，置于流顶，不遮对话；refreshStat 每秒刷新 */
   const uavSrc=(window.WDCfg&&WDCfg.avatarURL("_player"))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL("_player"):"");
-  /* v2（R1.3b）：AI 健康徽标——绿=正常 / 黄=临时异常 / 红=密钥/额度问题 / 灰=未配置 */
-  const aiDot=(!dsReady())?`<span class="aidot off" title="AI 未配置：使用内置话术。到「存档」页配置密钥可开启 AI 对话。">○AI</span>`
-    :(aiHealth==="error")?`<span class="aidot err" title="AI 异常：密钥无效或额度不足。点击「存档」页查看。">●AI!</span>`
-    :(aiHealth==="down")?`<span class="aidot down" title="AI 暂时不可达（网络/限流），已自动降级本地话术，稍后自动恢复。">◐AI</span>`
-    :`<span class="aidot ok" title="AI 正常。">●AI</span>`;
+  /* v2（R1.3b）：AI 健康徽标——绿=正常 / 黄=临时异常 / 红=密钥/额度问题 / 灰=未配置；点击可重连 */
+  const aiDot=(!dsReady())?`<span class="aidot off" title="AI 未配置：点击配置密钥。" data-act="aiGate">○AI</span>`
+    :(aiHealth==="error")?`<span class="aidot err" title="AI 异常：密钥无效或额度不足。点击重连/重配。" data-act="aiReconnect">●AI!</span>`
+    :(aiHealth==="down")?`<span class="aidot down" title="AI 暂时不可达（网络/限流）。点击重连。" data-act="aiReconnect">◐AI</span>`
+    :`<span class="aidot ok" title="AI 正常。" data-act="aiReconnect">●AI</span>`;
   const STATBAR=`<div id="statbar" class="statbar" role="status" aria-label="玩家状态">
     ${aiDot}
     <span class="slv" data-lv>Lv.${level()}</span>
     <span class="sgroup"><i>心气</i><span class="sbar"><b data-hpf style="width:${Math.max(0,Math.min(100,st.hp/maxHP()*100))}%"></b></span><em data-hpt>${Math.round(st.hp)}/${maxHP()}</em></span>
-    <span class="sgroup" title="灵力是 AI 对话资源：每次 AI 回复消耗 1 点，每 5 分钟恢复 1 点。灵力耗尽时自动使用本地话术。"><i>灵力</i><span class="sbar en"><b data-enf style="width:${Math.max(0,Math.min(100,st.energy/maxEnergy()*100))}%"></b></span><em data-ent>${Math.round(st.energy)}/${maxEnergy()}</em></span>
+    <span class="sgroup" title="灵力是 AI 对话资源：每次 AI 回复消耗 1 点，每 5 分钟恢复 1 点。灵力耗尽时仍可对话，不消耗。"><i>灵力</i><span class="sbar en"><b data-enf style="width:${Math.max(0,Math.min(100,st.energy/maxEnergy()*100))}%"></b></span><em data-ent>${Math.round(st.energy)}/${maxEnergy()}</em></span>
   </div>`;
   /* v2（R1.3c）：灵力不足内联提示条（仅 AI 可用且灵力 <5 时显示） */
   let html=STATBAR;
   if(dsReady()&&(st.energy|0)<5){
-    html+=`<div class="energyhint">灵力将尽（${Math.round(st.energy)}/${maxEnergy()}）——每 5 分钟恢复 1 点；灵力耗尽期间 AI 对话自动改用本地话术，不影响修行。</div>`;
+    html+=`<div class="energyhint">灵力将尽（${Math.round(st.energy)}/${maxEnergy()}）——每 5 分钟恢复 1 点；灵力耗尽期间仍可对话，不消耗。</div>`;
   }
   html+=allMsgs.map(r=>{
     if(r.t==="sysday") return `<div class="sys daysep">${esc(r.x)}</div>`;
@@ -1100,7 +1120,7 @@ function renderChat(keep){
   }).join("");
   if(TYPING){
     html+=`<div class="msg"><div class="avatar">…</div><div class="body">
-      <div class="name"><b>${TYPING.multi?"诸位 NPC":"NPC"}</b> 接话中</div>
+      <div class="name"><b>${TYPING.multi?"诸位 NPC":"NPC"}</b> 正在思考…</div>
       <div class="bubble typing"><span></span><span></span><span></span></div></div></div>`;
   }
   /* 置底当前任务卡（需求2a）：最新任务信息始终在流最下端，保持视觉优先可见 */
@@ -1375,74 +1395,16 @@ function openQuest(qid){
   </div>`;
   document.body.appendChild(ov);
   ov.onpointerdown=e=>{ if(e.target===ov) ov.remove(); };  // 点击遮罩背景关闭
-  // NPC 任务说明（统一模块）：AI 可用时由 NPC 智能生成游戏隐喻叙事；未配置/离线时以内置内容降级
+  // NPC 任务说明（统一模块）：AI 生成游戏隐喻叙事；v35 移除本地兜底池，AI 失败则提示重连
   (function loadAiBrief(){
     const host=$("#aiBriefHost",ov); if(!host) return;
-    function fallback(){
-      const d0=byDay[q.day];
-      const opening=pubLine(q,d0)||"这一程，交给你了。";
-      /* v33：本地兜底也走轻小说语感——有画面、有温度，不喊口号、不堆黑话 */
-      const actN=curActN();
-      const actLabel=["山河游学","律法塔","行会风云","遗迹探秘","金榜台"][actN-1]||"试炼";
-      const totalDone=Object.keys(st.done).length;
-      const totalQ=D.quests.length;
-      const powerPct=Math.min(100,Math.floor((q.day/45)*100)+5);
-      const dateStr=(d0&&d0.date)?d0.date:("第"+q.day+"日");
-      /* 场景画面池：一件具体的小事，不概述世界观 */
-      const scenePool=[
-        `雾贴着城墙根走了一夜。${dateStr}的晨色里，${esc(dName(npc.id))}替你留着一份还没摊开的卷册。`,
-        `第${q.day}日，窗纸刚泛白。${esc(dName(npc.id))}正把今日的物事一件件摆开，听见脚步，抬起头。`,
-        `圣殿的钟敲过${q.day}下，余音还挂在梁上。${esc(dName(npc.id))}合上册子：来了？这一程，我替你先看过。`,
-        `今日是第${q.day}日，全程已破 ${totalDone}/${totalQ}。雾还没散，但${esc(dName(npc.id))}望见你时笑了一下——时候到了。`
-      ];
-      /* 此行为何：就职仪式只认域外之人，但不复读标签 */
-      const necPool=[
-        `就职仪式的阵心只认域外之人。这一程，旁人踏不进来——你走，路才算数。`,
-        `这是仪式的第${q.day}程修行。整座导游次元里，能走完它的外来者，只有你。`,
-        `云蘅的圣女之力要靠仪式一程程唤醒，而仪式只应你的脚步。此程空着，后面的路便不会显形。`,
-        `这不是谁分派的差事——是只有你能推开的门。`
-      ];
-      /* 雾散之后：圣女之力复苏的进展 */
-      const impPool=[
-        `此程走完，云蘅的圣女之力又会醒一分（如今约${powerPct}%）。等她重新握住圣器，雾会退，灯会一盏盏亮回来。`,
-        `封印一枚枚亮起，她的光一寸寸回来（约${powerPct}%）。你多走一程，雾就少一分吞没这座城的底气。`,
-        `你斩开的不只是这一程关卡——云蘅复苏的圣女之力（约${powerPct}%），是将来让雾退散的凭据。`,
-        `此程交割，她离重新驾驭圣器又近一步（约${powerPct}%）。那一天到了，整座次元都会想起来。`
-      ];
-      /* 此行所得：本地界面公开奖励数值，保留数字但叙事化 */
-      const rewPool=[
-        `此行可得 +${q.xp} 修行、+${q.coin} 铜钱。道力渐长，盘缠渐足——都是将来推开界门的底气。`,
-        `交割之后：+${q.xp} 修行、+${q.coin} 铜钱。修行长力，铜钱攒着，回家的路由它们一程程铺。`,
-        `+${q.xp} 修行入身，+${q.coin} 铜钱入袋。力量与归途的本钱，都在这一程里。`,
-        `赏格 +${q.xp} 修行、+${q.coin} 铜钱。雾中行路，每一分所得，都作数。`
-      ];
-      const h=(s)=>{let v=0;for(let i=0;i<s.length;i++)v=(v*31+s.charCodeAt(i))>>>0;return v;};
-      const scene=scenePool[h(q.id)%scenePool.length];
-      const necessity=necPool[h(q.id+"n")%necPool.length];
-      const impact=impPool[h(q.id+"i")%impPool.length];
-      const reward=rewPool[h(q.id+"r")%rewPool.length];
-      let body="";
-      if(q.wow){ body=q.wow; }
-      else if(q.desc&&q.desc.bg){
-        body=`<div class="descbox" style="margin:8px 0 0">
-          <div class="dbg">${esc(q.desc.bg)}</div>
-          <div class="dgl"><b>目标</b>${esc(q.goal)}</div>
-          ${q.desc.steps?`<div class="dst"><b>步骤</b><ul style="margin:2px 0 2px 16px;padding:0">${q.desc.steps.map(s2=>`<li style="font-size:13px">${esc(s2)}</li>`).join("")}</ul></div>`:""}
-          ${q.desc.accept?`<div class="dac">验收：${esc(q.desc.accept)}</div>`:""}
-        </div>`;
-      } else {
-        body=`<div style="font-size:13.5px;color:var(--ink2);margin-top:6px"><b style="color:var(--neon)">目标 · </b>${esc(q.goal)}</div>`;
-      }
-      host.innerHTML=`<div class="descbox" style="border-left-color:var(--cyber);margin-bottom:10px">
-        <div style="font-size:11px;color:var(--gold);margin-bottom:4px;letter-spacing:.08em">关卡 · ${esc(questMetaphor(q))}</div>
-        <div style="font-size:12px;color:var(--dim);margin-bottom:6px;line-height:1.6">${esc(scene)}</div>
-        <div style="font-size:13px;color:var(--cyber);margin-bottom:4px">✦ ${esc(dName(npc.id))}${dTitle(npc.id)?"（"+esc(dTitle(npc.id))+"）":""}：<span style="color:var(--fg)">${esc(opening)}</span></div>
-        <div style="font-size:12px;color:var(--gold);margin:6px 0;font-style:italic">「此程 · ${esc(actLabel)}」</div>
-        <div style="font-size:12.5px;color:var(--fg2);line-height:1.7;margin-bottom:4px"><b style="color:var(--neon)">此行为何 · </b>${esc(necessity)}</div>
-        <div style="font-size:12.5px;color:var(--fg2);line-height:1.7;margin-bottom:4px"><b style="color:var(--neon)">雾散之后 · </b>${esc(impact)}</div>
-        <div style="font-size:12.5px;color:var(--fg2);line-height:1.7;margin-bottom:4px"><b style="color:var(--neon)">此行所得 · </b>${esc(reward)}</div>
-        ${body}
+    function failUi(msg){
+      host.innerHTML=`<div class="descbox" style="border-left-color:var(--err);margin-bottom:10px">
+        <div style="font-size:12px;color:var(--err);margin-bottom:6px">✦ 灵脉未通：${esc(msg||"AI 暂不可用")}</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:8px">任务说明需由 AI 生成。请检查密钥与网络后重试。</div>
+        <button class="btn sm primary" id="briefRetry" type="button">↻ 重连并重试</button>
       </div>`;
+      const rb=$("#briefRetry",host); if(rb) rb.onpointerdown=()=>{ host.innerHTML=`<div class="note" style="font-size:12px;color:var(--dim)">✦ 正在重连灵脉…</div>`; tryGen(); };
     }
     function render(o){
       /* 新 schema 渲染：scene(一页画面) → line(NPC当面说) → 三要素 → metaphor */
@@ -1469,13 +1431,15 @@ function openQuest(qid){
         <div style="font-size:10.5px;color:var(--dim);margin-top:4px">✦ 灵脉拟稿 · 试炼以界面点选为准</div>
       </div>`;
     }
-    if(!dsReady()){ fallback(); return; }
-    /* v33：仅命中 v2 轻小说 schema 的缓存才直接使用；旧 prompt 缓存一律重新生成 */
-    const cached=st.aiBrief[q.id];
-    if(cached&&cached.v===2){ render(cached); return; }
-    host.innerHTML=`<div class="note" style="font-size:12px;color:var(--dim)">✦ ${esc(dName(npc.id))} 正在斟酌开场…</div>`;
-    genQuestBrief(q).then(o=>{ st.aiBrief[q.id]=o; save(); if(ov.isConnected) render(o); })
-      .catch(()=>{ if(ov.isConnected) fallback(); });   // 失败时降级到内置 NPC 叙事
+    function tryGen(){
+      if(!dsReady()){ failUi("未配置 API 密钥"); return; }
+      const cached=st.aiBrief[q.id];
+      if(cached&&cached.v===2){ render(cached); return; }
+      host.innerHTML=`<div class="note" style="font-size:12px;color:var(--dim)">✦ ${esc(dName(npc.id))} 正在斟酌开场…</div>`;
+      genQuestBrief(q).then(o=>{ st.aiBrief[q.id]=o; save(); if(ov.isConnected) render(o); })
+        .catch(e=>{ if(ov.isConnected) failUi(e&&e.message?e.message:"生成失败"); });
+    }
+    tryGen();
   })();
   const pageHost=$("#pageHost",ov), pageNav=$("#pageNav",ov);
   function drawPage(){
@@ -1915,111 +1879,92 @@ function pickGuidanceNpcs(){
   const pair=actMap[act]||actMap[1];
   return {primary:pair[0],secondary:pair[1]};
 }
-/* 引导对话本地模板池：按NPC×互动类型×日次种子轮换，防模式化 */
-const GUIDANCE_TEMPLATES={
-  yunheng_player:(aq,act,dctx)=>[
-    aq?"你来了——"+(dctx?dctx.weatherDesc+"，":"圣殿的光正好，")+"「"+qdn(aq)+"」这一关，我正等你来商量。":"今日难得无事——"+(dctx?("天"+dctx.weather+"，"):"")+"不如我陪你走走？",
-    dctx?("我正"+dctx.activity+"——"+"你来了，心里就踏实了。"):"你来了——圣女之力又醒了一缕，像是在应你。"
-  ],
-  yunheng_npc:(npc2,aq,act)=>[
-    dName(npc2)+"，这位就是意外降临的道友——你我同门一场，你来替我掌掌眼。",
-    dName(npc2)+"，"+(aq?"这桩「"+qdn(aq)+"」的差事，我不放心交别人——你来搭把手？":"今日有空——来替我看看这位道友的底子？")
-  ],
-  npc_yunheng:(npc2,aq,act)=>[
-    dName("yunheng")+"，你放心——"+(aq?"这关我替你把着，错不了。":"这位道友的根骨，我看了，是个能走的。"),
-    "嗯——"+dName("yunheng")+"，"+(aq?"「"+qdn(aq)+"」的脉络我已理了一寸，就等他来走。":"既然你引荐了，我自然尽心。")
-  ],
-  player_npc:(npc2,aq,act)=>[
-    dName(npc2)+"，这一程我该怎么走？给指条明路。",
-    dName(npc2)+"，「"+(aq?qdn(aq):"这差事")+"」我接了——你有什么交代的？",
-    "听说"+dName(npc2)+"是这方面的行家——我正有事相求。"
-  ],
-  npc_player:(npc2,aq,act)=>[
-    "你来了——"+(aq?"「"+qdn(aq)+"」这桩事，且听我说个分明。":"没什么大事，只是"+dName("yunheng")+"托我照应你一二。"),
-    (aq?"这一程我替你先看过了——":"闲话少说，")+"你是"+dName("yunheng")+"引荐的人，我自然不藏私。"
-  ]
-};
-/* 生成并落流引导对话场景：返回生成的消息ID列表，供AI润色 */
+/* v35：AI-only——已移除 GUIDANCE_TEMPLATES。引导场景由 AI 一次性生成多角色对白；
+   生成前先推入占位消息，AI 返回后就地替换文本。AI 失败则保留占位。 */
+/* 生成并落流引导对话场景：返回生成的消息ID列表，供AI填充 */
 function generateGuidanceScene(){
   const aq=firstActiveQuest();
   const act=curActN();
   const dctx=window.WDChat?WDChat.generateDailyContext("yunheng"):null;
   const {primary:funcNpc1,secondary:funcNpc2}=pickGuidanceNpcs();
   const ids=[];
-  const seed=hash(st.day+"_"+st.unlocked+"_guidance");
-  /* 消息1：云蘅 → 玩家（引导开场，含当日情境） */
-  const yhTpl=GUIDANCE_TEMPLATES.yunheng_player(aq,act,dctx);
-  const yhText=yhTpl[seed%yhTpl.length];
-  const m1={id:"gd_"+Date.now()+"_1",role:"npc",npc:"yunheng",text:yhText,guidance:true,at:new Date().toISOString(),day:st.day};
-  st.dialogue.push(m1); ids.push(m1.id);
-  /* 消息2：玩家 → 云蘅（AI模拟的玩家回应） */
-  const playerText=aq?("嗯——"+(aq?"「"+qdn(aq)+"」":"这桩差事")+"，我心里有数了，怎么说？"):"来了——今日有什么要做的？";
-  const m2={id:"gd_"+Date.now()+"_2",role:"player",text:playerText,guidance:true,at:new Date().toISOString(),day:st.day};
-  st.dialogue.push(m2); ids.push(m2.id);
-  /* 消息3：云蘅 → 职能NPC（引荐玩家，体现云蘅-其他NPC互动） */
-  const yhNpcTpl=GUIDANCE_TEMPLATES.yunheng_npc(funcNpc1,aq,act);
-  const yhNpcText=yhNpcTpl[seed%yhNpcTpl.length];
-  const m3={id:"gd_"+Date.now()+"_3",role:"npc",npc:"yunheng",text:yhNpcText,guidance:true,at:new Date().toISOString(),day:st.day};
-  st.dialogue.push(m3); ids.push(m3.id);
-  /* 消息4：职能NPC → 云蘅（回应引荐，体现NPC间互动） */
-  const npcYhTpl=GUIDANCE_TEMPLATES.npc_yunheng(funcNpc1,aq,act);
-  const npcYhText=npcYhTpl[(seed+1)%npcYhTpl.length];
-  const m4={id:"gd_"+Date.now()+"_4",role:"npc",npc:funcNpc1,text:npcYhText,guidance:true,at:new Date().toISOString(),day:st.day};
-  st.dialogue.push(m4); ids.push(m4.id);
-  /* 消息5：玩家 → 职能NPC（玩家主动向职能NPC提问，体现玩家-其他NPC互动） */
-  const pNpcTpl=GUIDANCE_TEMPLATES.player_npc(funcNpc1,aq,act);
-  const pNpcText=pNpcTpl[(seed+2)%pNpcTpl.length];
-  const m5={id:"gd_"+Date.now()+"_5",role:"player",text:pNpcText,guidance:true,at:new Date().toISOString(),day:st.day};
-  st.dialogue.push(m5); ids.push(m5.id);
-  /* 消息6：职能NPC → 玩家（回应玩家提问，发布任务引导） */
-  const npcPlTpl=GUIDANCE_TEMPLATES.npc_player(funcNpc1,aq,act);
-  const npcPlText=npcPlTpl[(seed+3)%npcPlTpl.length];
-  const m6={id:"gd_"+Date.now()+"_6",role:"npc",npc:funcNpc1,text:npcPlText,guidance:true,refs:aq?[{qid:aq.id}]:[],at:new Date().toISOString(),day:st.day};
-  st.dialogue.push(m6); ids.push(m6.id);
-  /* 消息7（可选）：第二位职能NPC插话（体现多NPC互动） */
-  if(funcNpc2&&NPC[funcNpc2]){
-    /* 第二位职能NPC插话：顺着众人的话说，不自报姓名（自己念自己名字很违和） */
-    const m7text=(aq?"这话在理——这一程，我也替你铺一段路。":"这话在理——你既然来了，我这边也有几桩事可托。");
-    const m7={id:"gd_"+Date.now()+"_7",role:"npc",npc:funcNpc2,text:m7text,guidance:true,at:new Date().toISOString(),day:st.day};
-    st.dialogue.push(m7); ids.push(m7.id);
-  }
-  /* 裁剪对话流长度 */
+  const ts=Date.now();
+  /* 占位消息（结构与角色已定，文本随后由 AI 填充） */
+  const slots=[
+    {role:"npc",npc:"yunheng"},
+    {role:"player"},
+    {role:"npc",npc:"yunheng"},
+    {role:"npc",npc:funcNpc1},
+    {role:"player"},
+    {role:"npc",npc:funcNpc1,refs:aq?[{qid:aq.id}]:[]}
+  ];
+  if(funcNpc2&&NPC[funcNpc2]) slots.push({role:"npc",npc:funcNpc2});
+  slots.forEach((s,i)=>{
+    const m={id:"gd_"+ts+"_"+(i+1),role:s.role,text:"……",guidance:true,at:new Date().toISOString(),day:st.day};
+    if(s.npc) m.npc=s.npc;
+    if(s.refs) m.refs=s.refs;
+    st.dialogue.push(m); ids.push(m.id);
+  });
   if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-  /* 标记当日已生成引导对话 */
   st.dialogueInitDay=st.day;
   save();
   record("对话初始化","引导对话场景（第"+st.day+"日）");
-  /* AI在线时异步润色引导对话为更生动的多角色场景 */
   if(dsReady()) refineGuidanceScene(ids,aq,funcNpc1,funcNpc2,dctx);
+  else refineGuidanceSceneFail(ids);
   return ids;
 }
-/* 引导对话AI润色：就地替换本地模板为更生动的多角色互动场景 */
+/* 引导对话AI生成：直接生成全部角色对白，就地替换占位文本 */
 function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
   if(!window.WDChat||!dsReady()||!ids.length) return;
   const obsolete=(window.WDRegistry&&WDRegistry.obsoleteTerms)?WDRegistry.obsoleteTerms():["提灯","引灯","引魂灯","问道录","仙侠","仙师","封妖塔","掌灯"];
   const sys=WDChat.sysPrompt("yunheng",false)
-    +"\n\n【引导对话任务】这是玩家已经抵达之后、众人都认识他时的当日日常引导场景（不是初见：绑定仪式在序章已结束，不许重演初见、不许再问「你是谁/怎么出现的」、不许复述仪式）。请把本地模板润色为一段自然流畅的多角色互动场景，要求："
+    +"\n\n【引导对话任务】这是玩家已经抵达之后、众人都认识他时的当日日常引导场景（不是初见：绑定仪式在序章已结束，不许重演初见、不许再问「你是谁/怎么出现的」、不许复述仪式）。请生成一段自然流畅的多角色互动场景，要求："
     +"1）云蘅与玩家互动（玩家发言由你模拟，口吻像真实玩家而非NPC）；"
-    +"2）云蘅与职能NPC"+dName(npc1)+"互动（体现两人关系与各自性格）；"
-    +"3）玩家与"+dName(npc1)+"互动（玩家主动提问，NPC以角色身份回应）；"
-    +(npc2?"4）"+dName(npc2)+"可适时插话一句，体现多NPC在场感。":"")
-    +"所有发言像一群熟人在现场你一句我一句：允许短句、停顿、半句、跑题再拉回，不必每句完整、不必每句都推进什么，更不要每句都解释。整体语感接近日式轻小说的日常群像对白，有温度、有性格，禁网游黑话堆砌（新手村/刷本/开荒/掉落/扛怪）、禁江湖气装熟。≤90字/条。禁AI腔、禁教书先生口吻、禁念任务编号与数值、禁已淘汰概念（"+obsolete.join("、")+"）。";
+    +"2）云蘅与职能NPC "+dName(npc1)+" 互动（体现两人关系与各自性格）；"
+    +"3）玩家与 "+dName(npc1)+" 互动（玩家主动提问，NPC以角色身份回应）；"
+    +(npc2?"4）"+dName(npc2)+" 可适时插话一句，体现多NPC在场感。":"")
+    +"所有发言像一群熟人在现场你一句我一句：允许短句、停顿、半句、跑题再拉回，不必每句完整、不必每句都推进什么，更不要每句都解释。整体语感接近日式轻小说的日常群像对白，有温度、有性格。禁网游黑话堆砌、禁江湖气装熟、禁AI腔、禁教书先生口吻、禁念任务编号与数值、禁已淘汰概念（"+obsolete.join("、")+"）。每条≤90字。";
   const user="当日情境："+(dctx?JSON.stringify(dctx):"无")+"\n当前任务："+(aq?qdn(aq)+"（"+aq.tlabel+"）":"无在途任务")
-    +"\n出场NPC："+dName("yunheng")+"、"+dName(npc1)+(npc2?"、"+dName(npc2):"")
-    +"\n请生成6"+(npc2?7:6)+"条消息，每条以「角色名：」开头，用|||分隔。";
+    +"\n出场角色：云蘅、玩家、"+dName(npc1)+(npc2?"、"+dName(npc2):"")
+    +"\n请生成 "+ids.length+" 条消息，严格按此顺序："
+    +"\n1. 云蘅→玩家（开场，含当日情境）"
+    +"\n2. 玩家→云蘅"
+    +"\n3. 云蘅→"+dName(npc1)+"（引荐/搭话）"
+    +"\n4. "+dName(npc1)+"→云蘅"
+    +"\n5. 玩家→"+dName(npc1)+"（提问）"
+    +"\n6. "+dName(npc1)+"→玩家（回应/引导）"
+    +(npc2?"\n7. "+dName(npc2)+" 插话":"")
+    +"\n每条以「角色名：内容」格式输出，用 ||| 分隔各条。只输出消息，不要解释。";
   dsChat([{role:"system",content:sys},{role:"user",content:user}],false).then(raw=>{
-    const txt=(raw||"").trim(); if(!txt||txt.length<20) return;
+    const txt=(raw||"").trim(); if(!txt||txt.length<10){ refineGuidanceSceneFail(ids); return; }
     const parts=txt.split(/\|\|\||\n{2,}/).map(s=>s.trim()).filter(s=>s);
-    if(parts.length<ids.length) return;
+    if(parts.length<ids.length){ refineGuidanceSceneFail(ids); return; }
     for(let i=0;i<ids.length&&i<parts.length;i++){
       const idx=st.dialogue.findIndex(m=>m&&m.id===ids[i]); if(idx<0) continue;
-      let p=parts[i].replace(/^[^：:]{1,8}[：:]\s*/,"");
-      p=p.slice(0,200); if(p.length<5) continue;
-      st.dialogue[idx].text=p;
+      let p=parts[i].replace(/^[^：:]{1,10}[：:]\s*/,"").replace(/^[「『"“]+|[」』"”]+$/g,"");
+      p=p.slice(0,200);
+      st.dialogue[idx].text=p.length>=2?p:"……";
     }
     save();
     if(view==="chat") renderChat(true);
-  }).catch(()=>{});
+  }).catch(()=>{ refineGuidanceSceneFail(ids); });
+}
+/* AI 不可用/失败时的占位文本（非本地剧情模板，仅提示重连） */
+function refineGuidanceSceneFail(ids){
+  (ids||[]).forEach((id,i)=>{
+    const idx=st.dialogue.findIndex(m=>m&&m.id===id); if(idx<0) return;
+    const placeholders=[
+      "（灵脉未通，今日引导暂缺——配置密钥后可重生成）",
+      "……",
+      dName(st.dialogue[idx].npc||"yunheng")+"：（灵脉未通……）",
+      "……",
+      "……",
+      "（灵脉未通，任务引导暂缺）"
+    ];
+    st.dialogue[idx].text=placeholders[i]||"……";
+  });
+  save();
+  if(view==="chat") renderChat(true);
 }
 /* 确保引导对话已生成：进入对话视图时调用，每日仅生成一次 */
 function ensureGuidanceScene(){
@@ -2031,17 +1976,10 @@ function ensureGuidanceScene(){
   if(todayDlg.length>0){ st.dialogueInitDay=st.day; save(); return; }
   generateGuidanceScene();
 }
-/* 云蘅结算本地模板（降级兜底 + AI 润色前的即时版本）：像群里接话，短、不念数值 */
+/* v35：AI-only——云蘅结算由 refineYunheng 异步生成；此处仅返回占位，AI 失败时保留。 */
 function yunhengSettleLocal(q,nq,perfect){
   const d=byDay[q.day];
-  const parts=[];
-  parts.push((doneLine(q,d)||"干净利落。")+"「"+qdn(q)+"」这桩，算交割了。");
-  parts.push(perfect
-    ?"一式没漏。难得。"
-    :"错处星盘替你记着了——回头自己看，我不啰嗦。");
-  if(nq) parts.push("「"+qdn(nq)+"」那边雾动了。想去时再去，我不催。");
-  else parts.push("今天就到这儿。雾又不会趁你歇着多走一寸。");
-  return parts.join("");
+  return (doneLine(q,d)||"这一程，交割了。")+"「"+qdn(q)+"」——云蘅正在接话……";
 }
 /* 云蘅结算 AI 润色：就地替换本地模板；像云蘅本人在群里接话，不写总结报告 */
 function refineYunheng(id,q,nq,perfect){
@@ -2615,12 +2553,12 @@ function renderCfg(){
   </div>
 
   <div class="cfgpane" data-pane="agent">
-    <div class="note">Agent 实验特性（R3）：全部可独立开关，关闭即回到经典行为；改动实时生效。</div>
-    <div class="cfgrow" style="margin-top:8px"><button class="btn sm" type="button" data-agentflag="director">对话导演：群聊单次生成（${(c&&c.agentFlags&&c.agentFlags.director!==false)?"ON":"OFF"}）</button></div>
+    <div class="note">Agent 实验特性（R3）：全部可独立开关，关闭即回到经典行为；改动实时生效。（状态存于游戏存档）</div>
+    <div class="cfgrow" style="margin-top:8px"><button class="btn sm" type="button" data-agentflag="director">对话导演：群聊单次生成（${(st.agentFlags&&st.agentFlags.director!==false)?"ON":"OFF"}）</button></div>
     <div class="note">多人同时在场时由一次 AI 调用生成整场对话，NPC 之间互相接话（推荐开启；关闭回到逐个独立回复）。</div>
-    <div class="cfgrow" style="margin-top:8px"><button class="btn sm" type="button" data-agentflag="tools">工具调用：NPC 查真实数据（${(c&&c.agentFlags&&c.agentFlags.tools!==false)?"ON":"OFF"}）</button></div>
+    <div class="cfgrow" style="margin-top:8px"><button class="btn sm" type="button" data-agentflag="tools">工具调用：NPC 查真实数据（${(st.agentFlags&&st.agentFlags.tools!==false)?"ON":"OFF"}）</button></div>
     <div class="note">NPC 可查询真实任务链/考点库/你的学习统计后再回答，回复基于真实数据（需要 DeepSeek 密钥）。</div>
-    <div class="cfgrow" style="margin-top:8px"><button class="btn sm" type="button" data-agentflag="proactive">主动传音：NPC 主动关心（${(c&&c.agentFlags&&c.agentFlags.proactive!==false)?"ON":"OFF"}）</button></div>
+    <div class="cfgrow" style="margin-top:8px"><button class="btn sm" type="button" data-agentflag="proactive">主动传音：NPC 主动关心（${(st.agentFlags&&st.agentFlags.proactive!==false)?"ON":"OFF"}）</button></div>
     <div class="note">连续两日未复习、错题积压、关卡滞留时，NPC 会主动发消息（本地规则触发，每日最多 3 条）。</div>
   </div>
   <div class="cfgpane on" data-pane="av">
@@ -2677,7 +2615,7 @@ function renderCfg(){
   </div>
 
   <div class="cfgpane" data-pane="aidoc">
-    <div class="note">AI 接口文档——统一编辑 AI 的互动思路。此文档非空时，将完全替代系统默认的 NPC 行为约束（行为边界/语气基调/自主权限/回复结构/语言要求等）。留空 → 使用系统默认。已生成 NPC 人设和世界观背景的优先级高于内置设定，始终生效。</div>
+    <div class="note">AI 行为约束文档——统一编辑所有 NPC 的互动思路。此文档非空时，将完全替代系统默认约束。留空 → 使用系统默认。文档中可用 <b>{name}</b> 与 <b>{title}</b> 占位符，发送给 AI 前会自动替换为当前 NPC 的名字与称号，做到一人一文。已生成的 NPC 人设和世界观背景优先级始终高于内置设定。</div>
     <div class="cfgrow" style="align-items:flex-start"><textarea id="cfgAiDoc" maxlength="12000" rows="18" style="width:100%;font-size:12px;line-height:1.5;font-family:ui-monospace,Menlo,Consolas,monospace" placeholder="留空使用系统默认约束。载入系统默认后可直接编辑，保存后立即生效……">${esc(c.aiDocument||"")}</textarea></div>
     <div class="savegrid" style="margin:6px 0">
       <button class="btn sm primary" id="aiDocSave" type="button">保存</button>
@@ -2847,9 +2785,10 @@ function renderCfg(){
     const m=$("#aiDocMsg",ov); m.textContent="已清空 · 恢复系统默认约束"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
   };
   $("#aiDocLoadDefault",ov).onpointerdown=()=>{ SFX.tap();
-    const txt=WDChat.defaultAiDocument("qingxuan",WDCfg.npcName("qingxuan","青玄"),WDCfg.npcTitle("qingxuan","文脉导游"),false);
+    /* v34：defaultAiDocument 已改用 {name}/{title} 占位符，无需指定具体 NPC */
+    const txt=WDChat.defaultAiDocument(null,"{name}","{title}",false);
     $("#cfgAiDoc",ov).value=txt;
-    const m=$("#aiDocMsg",ov); m.textContent="系统默认已载入编辑器 · 直接改完保存即可"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
+    const m=$("#aiDocMsg",ov); m.textContent="系统默认模板已载入（{name}/{title} 会按 NPC 自动替换）· 直接改完保存即可"; setTimeout(()=>{if(m.isConnected)m.textContent="";},3000);
   };
   /* ---- 条款检查 ---- */
   $("#clauseCheckBtn",ov).onpointerdown=()=>{ SFX.tap();
@@ -3163,7 +3102,7 @@ async function genPersona(npcId, feedback){
       +"若用户设定了具体性格词，personality 数组必须包含该词或其近义表达。"):"")
     +(persona?("\n\n当前已有人设（供参考，若含旧概念须改写）："+JSON.stringify(persona.card)):"")
     +(feedback?("\n\n用户的修改意见（必须采纳）："+feedback):"")
-    +"\n\n【世界观硬约束】本游戏世界观是「自在世界跌入导游异次元，遗忘之雾入侵，玩家通关导游试炼以拯救世界并重返家园」。"
+    +"\n\n【世界观硬约束】本游戏世界观是「玩家意外跌入导游异次元，遗忘之雾入侵，玩家通关导游试炼以拯救世界并重返家园」。"
     +"严禁出现以下已淘汰的旧概念："+OBSOLETE_TERMS.join("、")+"。"
     +"人设须贴合导游异次元的传奇导游设定，性格鲜明、可信。"
     +"\n\n请输出JSON，字段：name(姓名)、identity(身份背景，30-50字，须体现其导游职能)、personality(性格特征，3-4个短语，必须与用户设定基准一致)、style(对话风格描述，必须与用户设定基准一致)、relations(与其他角色关系数组，每项{name,rel})。";
@@ -3560,8 +3499,8 @@ async function aiRespond(npcId,userText,brief){
   /* NPC 记忆：对话即相识（meet/talk 归档），灵力作为「御 AI」资源消耗 */
   if(window.WDMem) WDMem.talk(npcId);
   if(dsReady()){
-    if((st.energy|0)<1){ toast("灵力将尽——以本地话术接引，稍息自复"); return {text:WDChat.fallback(npcId,userText),degraded:true}; }
-    st.energy=Math.max(0,st.energy-1); refreshStat(true);
+    if((st.energy|0)<1){ toast("灵力将尽——仍可对话，稍息自复"); }
+    else { st.energy=Math.max(0,st.energy-1); refreshStat(true); }
   }
   /* v2（R3.2）：tools 开关开启时走 function calling 增强路径，失败内部回退普通 respond */
   const flags=(st.agentFlags=st.agentFlags||{director:true,tools:true,proactive:true});
@@ -3598,6 +3537,8 @@ function bindNav(){
   document.querySelectorAll(".navline button").forEach(b=>{ b.onpointerdown=()=>{ SFX.tap(); switchView(b.dataset.v); }; });
   document.querySelector('[data-act="save"]').onpointerdown=renderSave;
   document.querySelector('[data-act="cfg"]').onpointerdown=renderCfg;
+  const ag=document.querySelector('[data-act="aiGate"]'); if(ag) ag.onpointerdown=()=>{ SFX.tap(); dsKeyGate(null,{blocking:!dsReady()}); };
+  const ar=document.querySelector('[data-act="aiReconnect"]'); if(ar) ar.onpointerdown=()=>{ SFX.tap(); reconnectAi(); };
 }
 /* v2（R2.3）：序章叙事从 worldBrief 派生——用户覆写世界观后序章同步（默认世界观输出与 v1 等价文案） */
 const DEFAULT_INTRO_NARRATIVE="你意外降临「导游次元」——一个正被遗忘之雾吞噬的娘化世界。所有居民皆为女性，唯独你是男性外来者。这座次元最后的净土是北京。圣女候选云蘅正在此举行神圣导游就职仪式，却在仪式中途遭遗忘之雾侵袭——你的降临打断了仪式，却也让你与云蘅形成了绑定。记忆精灵璇玑也在混乱中与你意外建立灵魂契约。四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云蘅就能恢复圣女之力，用导游圣器驱逐遗忘之雾。";
@@ -3718,7 +3659,7 @@ function startPrologue(){
     <div class="pl-sky">${stars}</div>
     <div class="pl-bar"><div class="pl-dots">${PROLOGUE_SCRIPT.map(()=>"<i></i>").join("")}</div><button class="pl-skip" type="button">跳过序章 ⏭</button></div>
     <div class="pl-stage" id="plStage"></div>
-    <div class="pl-foot"><span class="pl-aimark" id="plAi">${dsReady()?"灵脉即兴编修中…":"内置故事 · 随时可演"}</span><button class="pl-next" id="plNext" type="button">继续 ▸</button></div>
+    <div class="pl-foot"><span class="pl-aimark" id="plAi">${dsReady()?"灵脉即兴编修中…":"序章固定脚本"}</span><button class="pl-next" id="plNext" type="button">继续 ▸</button></div>
   </div>`;
   document.body.appendChild(ov);
   plState.el=ov;
@@ -3823,26 +3764,43 @@ function refinePrologueLines(){
   }).catch(()=>{});
 }
 /* 序章前的轻量 AI 密钥配置门（无需先进入游戏主界面） */
-function dsKeyGate(after){
+function dsKeyGate(after, opts){
+  opts=opts||{};
+  const blocking=!!opts.blocking;
   const ov=panel(`<h2>灵脉 · DeepSeek 智能引擎</h2>
-    <div class="mt">配置后，序章、NPC 对话与任务卷轴将由 AI 即兴编修；未配置也有完整的内置故事，随时可玩。</div>
+    <div class="mt">${blocking
+      ? "本作所有对话、序章与任务叙事均由 AI 实时生成。<b style='color:var(--neon)'>未配置有效密钥无法进入游戏</b>。"
+      : "配置后，序章、NPC 对话与任务卷轴将由 AI 即兴编修。本作依赖 AI，未配置密钥无法进入游戏。"}</div>
     <div class="note">密钥仅保存在本浏览器（localStorage），直连 DeepSeek，不经过任何第三方。</div>
+    ${blocking?`<div class="note" style="margin-top:6px;color:#f0c674">如何获取：访问 <a href="https://platform.deepseek.com/" target="_blank" rel="noopener">platform.deepseek.com</a>，注册后在「API Keys」中创建。密钥以 sk- 开头。</div>`:""}
     <div class="cardsearch" style="margin-top:10px">
       <input id="gkKey" type="password" placeholder="粘贴 DeepSeek API Key（sk-…）" value="${esc(dsKeyGet())}" autocomplete="off">
-      <button class="btn sm primary" id="gkSave" type="button">保存</button>
+      <button class="btn sm primary" id="gkSave" type="button">保存并连通</button>
     </div>
-    <div class="estatus ${dsReady()?"saved":"dirty"}" id="gkStatus">${dsReady()?"● 已配置 · AI 可用":"○ 未配置 · 将使用内置故事"}</div>
-    <div class="note" style="margin-top:8px">暂时没有密钥也没关系——关闭此窗，直接降临即可。</div>`);
+    <div class="estatus ${dsReady()?"saved":"dirty"}" id="gkStatus">${dsReady()?"● 已配置 · 点击「保存并连通」测试":"○ 未配置"}</div>
+    <div class="note" style="margin-top:8px">${blocking?"连通成功后即可进入游戏。":"暂时没有密钥也没关系——关闭此窗，直接降临即可。"}</div>`);
   const s=$("#gkStatus",ov);
+  if(blocking){
+    /* 阻塞模式：禁止关闭（× 与遮罩点击均无效） */
+    $(".close",ov).style.display="none";
+    ov.onpointerdown=e=>{ if(e.target===ov){ toast("请先配置灵脉密钥"); } };
+  }
   $("#gkSave",ov).onpointerdown=()=>{
     const v=$("#gkKey",ov).value.trim();
     dsKeySet(v); SFX.tap();
     if(dsReady()){
       s.className="estatus saved"; s.textContent="● 已保存 · 灵脉连通测试中…";
       dsChat([{role:"user",content:"只回复：ok"}],{kind:"polish"}).then(()=>{
-        s.className="estatus saved"; s.textContent="● 已配置并连通 · 序章将由 AI 编修"; toast("密钥有效"); if(after)after();
-      }).catch(e=>{ s.className="estatus dirty"; s.textContent="● 已保存，但连通失败："+e.message+"（离线仍可玩）"; if(after)after(); });
-    } else { s.className="estatus dirty"; s.textContent="○ 未配置 · 将使用内置故事"; toast("已清除密钥"); if(after)after(); }
+        aiHealth="ok";
+        s.className="estatus saved"; s.textContent="● 已连通 · 灵脉已通"; toast("密钥有效，灵脉已通");
+        if(blocking) ov.remove();
+        if(after)after();
+      }).catch(e=>{
+        aiHealth="error";
+        s.className="estatus dirty"; s.textContent="● 连通失败："+(e.message||e)+"（请检查密钥/网络/额度）";
+        if(!blocking && after) after();
+      });
+    } else { s.className="estatus dirty"; s.textContent="○ 未配置"; toast("已清除密钥"); if(!blocking && after) after(); }
   };
 }
 function intro(){
@@ -3863,11 +3821,41 @@ function intro(){
     </div>
   </div>`;
   document.body.appendChild(ov);
-  const refresh=()=>{ const b=$("#gateAi",ov); if(b) b.textContent=dsReady()?"灵脉已通 · AI 将即兴编修序章（点击修改密钥）":"配置灵脉 · 让 AI 编修序章与对话（可选）"; };
+  const begin=$("#begin",ov);
+  const refresh=()=>{
+    const b=$("#gateAi",ov);
+    if(!dsReady()){
+      /* v35：AI-only——未配置密钥时隐藏「降临」按钮，强制先配置 */
+      begin.style.display="none";
+      if(b){ b.className="btn sm primary"; b.textContent="⚙ 配置灵脉密钥（必须）"; }
+    } else {
+      begin.style.display="";
+      if(b){ b.className="btn sm ghost"; b.textContent="灵脉已通 · 点击修改密钥"; }
+    }
+  };
   refresh();
-  $("#gateAi",ov).onpointerdown=()=>{ SFX.tap(); dsKeyGate(refresh); };
+  $("#gateAi",ov).onpointerdown=()=>{
+    SFX.tap();
+    dsKeyGate(()=>{ refresh(); if(dsReady()){ /* 连通成功后显示降临按钮 */ } },{blocking:!dsReady()});
+  };
   /* 序章播放器完整演完后，才渲染第1日引导与任务发放 */
-  $("#begin",ov).onpointerdown=()=>{ ov.remove(); save(); startPrologue(); };
+  begin.onpointerdown=()=>{
+    if(!dsReady()){ toast("请先配置灵脉密钥"); return; }
+    ov.remove(); save(); startPrologue();
+  };
+}
+/* v35：AI 连接重连——发起一次连通性测试，成功则 aiHealth=ok 并刷新状态栏 */
+async function reconnectAi(){
+  if(!dsReady()){ dsKeyGate(null,{blocking:true}); return; }
+  aiHealth="down";
+  toast("正在重连灵脉…");
+  try{
+    await dsChat([{role:"user",content:"只回复：ok"}],{kind:"polish"});
+    aiHealth="ok"; toast("灵脉已通");
+  }catch(e){
+    aiHealth="error"; toast("重连失败："+(e.message||e));
+  }
+  if(view==="chat") renderChat(true); else refreshStat();
 }
 function record(ev, x){ st.log=st.log||[]; st.log.push({at:new Date().toISOString(), ev, x}); }
 function boot(){
@@ -3879,7 +3867,16 @@ function boot(){
   WDChat.init({D,NPC,getSt:()=>st,save,dsChat,dsReady,level,actTopic:npcActTopic,quest:firstActiveQuest});
   const has=load();
   if(!has){ st=defState(); save(); intro(); }
-  else{ if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,45); if(st.day>st.unlocked) st.unlocked=st.day; save(); render(); checkAch(); }
+  else{
+    if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,45); if(st.day>st.unlocked) st.unlocked=st.day; save();
+    /* v35：AI-only——有存档但未配置密钥时，弹阻塞式密钥门，连通后才渲染 */
+    if(!dsReady()){
+      aiHealth="off";
+      dsKeyGate(()=>{ render(); checkAch(); },{blocking:true});
+    } else {
+      render(); checkAch();
+    }
+  }
   /* 状态栏刷新 ≥1 次/秒（需求4）；refreshStat 在非对话视图/无存档时静默返回 */
   setInterval(()=>{ if(view==="chat") refreshStat(); },1000);
   /* 配置中心变更：心气/灵力新上限即时钳制，对话流头像实时跟随，无需重启 */

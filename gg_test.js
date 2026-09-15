@@ -159,16 +159,15 @@ const driver=`
     if(!st.npcGrowth||st.npcGrowth.smq.story.length!==2)throw new Error('故事线未落存档');
     if(WDChat.historyOf('smq',5).length!==0)throw new Error('历史互动应为空');
   });
-  run('WDChat 降级话术v3：提问短答/人格区分/疲惫不鸡汤',()=>{
+  run('v35 AI-only：已移除本地兜底 fallback，无密钥时 respond 返回错误',()=>{
     reset();
-    const t=WDChat.fallback('xuanji','颐和园长廊到底有多长？');
-    if(!t||t.length>90)throw new Error('提问降级应短促，实际：'+t);
-    const tm=WDChat.fallback('moxiaogu','颐和园长廊到底有多长？');
-    if(!tm||tm===t)throw new Error('不同NPC同问应答不同');
-    /* 疲惫输入：接住情绪即可，禁止心理咨询腔与尾随任务 */
-    const tired=WDChat.fallback('tiemian','我今天真的不想刷了，好累');
-    if(/压力|加油|相信你|一定可以|你已经很棒/.test(tired))throw new Error('疲惫回应不应鸡汤：'+tired);
-    if(tired.length>40)throw new Error('疲惫回应应极短：'+tired);
+    if(typeof WDChat.fallback==='function')throw new Error('fallback 应已移除');
+    if(typeof WDChat.FB_POOLS!=='undefined')throw new Error('FB_POOLS 应已移除');
+    /* 无密钥时 respond 返回空文本+错误，不再本地兜底 */
+    return WDChat.respond('yunheng','你好').then(r=>{
+      if(r.text)throw new Error('无密钥时不应返回文本：'+r.text);
+      if(!r.error)throw new Error('无密钥时应返回 error');
+    });
   });
   run('WDChat sysPrompt 行为约束v3（活人/短句/三腔/工具箱/voice卡）',()=>{
     reset();
@@ -240,12 +239,12 @@ const driver=`
     const ctx2=WDChat.buildContext('yunheng','再聊',null);
     if(ctx2.includes('当日情境'))throw new Error('非首次互动不应再注入情境');
   });
-  run('WDChat 情境降级话术：首次含天气/活动',()=>{
+  run('v35：generateDailyContext 仍提供天气/活动供 AI 上下文使用',()=>{
     reset();
-    const t=WDChat.fallback('yunheng','你好呀');
-    if(!t)throw new Error('降级话术为空');
-    /* 云蘅降级话术不应含已淘汰旧概念（引灯/掌灯/灯影等） */
-    if(/引灯|掌灯|灯影/.test(t))throw new Error('降级话术残留旧概念：'+t);
+    const y=WDChat.generateDailyContext('yunheng');
+    if(!y||!y.weather||!y.activity)throw new Error('每日情境应含天气与活动');
+    /* 情境文本不含已淘汰旧概念 */
+    if(/引灯|掌灯|灯影/.test(JSON.stringify(y)))throw new Error('情境残留旧概念');
   });
   run('WDChat 情境按NPC活动池区分',()=>{
     reset();
@@ -340,6 +339,24 @@ const driver=`
   run('renderCfg/renderMem 面板渲染不崩',()=>{
     reset(); renderCfg();
     WDCfg.set('address','上仙'); renderMem();
+  });
+  run('v34 实验特性开关状态读 st.agentFlags 而非 WDCfg',()=>{
+    reset();
+    st.agentFlags={director:true,tools:false,proactive:true};
+    renderCfg();
+    /* mock 的 body.innerHTML 不含 appendChild 的子元素，从 children 取面板 */
+    const ov=document.body.children[document.body.children.length-1];
+    const html=ov?ov.innerHTML:"";
+    const dirOn=/对话导演：群聊单次生成（ON）/.test(html);
+    const toolsOff=/工具调用：NPC 查真实数据（OFF）/.test(html);
+    const proOn=/主动传音：NPC 主动关心（ON）/.test(html);
+    if(!dirOn||!toolsOff||!proOn) throw new Error('实验特性开关未按 st.agentFlags 显示（dir='+dirOn+' tools='+toolsOff+' pro='+proOn+'）');
+  });
+  run('v34 genPersona 世界观约束无"自在世界"笔误',()=>{
+    reset();
+    const src=genPersona.toString();
+    if(src.includes('自在世界')) throw new Error('genPersona 仍含笔误"自在世界"，应为"玩家意外"');
+    if(!src.includes('玩家意外跌入导游异次元')) throw new Error('genPersona 世界观约束未修正为玩家意外跌入');
   });
   run('WDCfg NPC名字/称号/人设自定义',()=>{
     reset();
@@ -479,6 +496,34 @@ const driver=`
     if(!doc.includes('≤90字'))throw new Error('默认文档缺短句字数约束');
     if(!doc.includes('心理医生腔'))throw new Error('默认文档缺三腔禁令');
   });
+  run('v34 defaultAiDocument 使用 {name}/{title} 占位符而非硬编码NPC名',()=>{
+    reset();
+    const doc=WDChat.defaultAiDocument('yunheng','云蘅','圣女候选',false);
+    if(!doc.includes('{name}')) throw new Error('默认文档应含 {name} 占位符');
+    /* 除云蘅专属过场外，正文不应再硬编码「云蘅」——用 {name} 统一替换 */
+    const body=doc.replace(/【剧情过场·云蘅专属】[^】]*若你是云蘅/,'');
+    if(body.includes('云蘅')) throw new Error('正文不应硬编码云蘅，应用 {name} 占位');
+  });
+  run('v34 applyNpcName 替换占位符（默认与自定义文档通用）',()=>{
+    reset();
+    const tpl=WDChat.defaultAiDocument('yunheng','{name}','{title}',false);
+    const out=WDChat.applyNpcName(tpl,'铁面先生','卷宗执事');
+    if(out.includes('{name}')||out.includes('{title}')||out.includes('{title_block}')) throw new Error('占位符未替换干净');
+    if(!out.includes('铁面先生')) throw new Error('{name} 未替换为铁面先生');
+    if(!out.includes('（卷宗执事）')) throw new Error('{title_block} 未替换为（卷宗执事）');
+    /* 无称号时 {title_block} 应为空串，不留括号 */
+    const out2=WDChat.applyNpcName(tpl,'云蘅','');
+    if(out2.includes('（）')) throw new Error('空称号不应残留空括号');
+  });
+  run('v34 systemPrefix 对自定义文档也做占位符替换',()=>{
+    reset();
+    WDCfg.setAiDocument('我是{name}，称号{title}。{name}只说真话。');
+    const sp=WDChat.sysPrompt('tiemian',false);
+    const tn=dName('tiemian');
+    if(sp.includes('{name}')||sp.includes('{title}')) throw new Error('systemPrefix 未替换自定义文档占位符');
+    if(!sp.includes(tn)) throw new Error('自定义文档 {name} 未替换为当前NPC名 '+tn);
+    WDCfg.setAiDocument('');
+  });
   run('条款检查：AI腔检测',()=>{
     reset();
     const chk=WDChat.clauseCheck('首先，你要记住，总之这道题很重要。',null);
@@ -600,7 +645,7 @@ const driver=`
     if(!dayHtml.includes('data-toggle='))throw new Error('日节点缺 data-toggle（折叠失效）');
     if(!dayHtml.includes('data-expanded='))throw new Error('日节点缺展开态');
   });
-  run('云蘅结算回应：任务NPC之后接棒，口播名且不念数值',()=>{
+  run('云蘅结算回应：任务NPC之后接棒，占位含口播名且不念数值',()=>{
     reset(); st.unlocked=1;
     const q=D.quests.find(x=>x.id==='D01M');
     settleQuest(q,true,null);
@@ -610,22 +655,21 @@ const driver=`
     if(idxYh<0)throw new Error('云蘅结算回应缺失');
     if(idxYh<idxAck)throw new Error('云蘅必须在任务NPC结算回复之后接棒');
     const ym=st.dialogue[idxYh], t=ym.text;
+    /* v35：占位含关卡名，AI(refineYunheng)异步替换；占位不含数值 */
     if(!t.includes(WDChat.questDisplayName(q)))throw new Error('缺关卡口播名：'+t);
     if(/[SDE]\\d+-\\d+|\\+\\d+修行/.test(t))throw new Error('结算台词不应念编号或数值：'+t);
-    if(!/全对|没漏|磕绊|星盘/.test(t))throw new Error('缺一句真实反应');
-    if(!/雾动了|今天就到这儿|交割/.test(t))throw new Error('缺收束感');
     if(!ym.refs||!ym.refs.some(x=>x.qid===q.id))throw new Error('云蘅回应缺已完成任务ref');
+    if(typeof refineYunheng!=='function')throw new Error('refineYunheng AI 路径应存在');
     if(!qDone(q.id)||st.xp<q.xp)throw new Error('结算未生效（done/修行）');
   });
-  run('云蘅结算回应：试炼有错时引导星盘清错',()=>{
+  run('云蘅结算回应：AI 路径 refineYunheng 存在（有错时由 AI 生成复盘引导）',()=>{
     reset(); st.unlocked=1;
     const q=D.quests.find(x=>x.id==='D01M');
     settleQuest(q,false,null);
-    /* triggerCutscene("bind") 会在结算消息后追加一条云蘅剧情过场，
-       故检查所有云蘅消息中是否存在含「磕绊/星盘」的结算条目 */
     const yhMsgs=st.dialogue.filter(m=>m.role==='npc'&&m.npc==='yunheng');
     if(!yhMsgs.length)throw new Error('云蘅结算消息未落流');
-    if(!yhMsgs.some(m=>/磕绊|星盘/.test(m.text||"")))throw new Error('有错时应提示复盘/星盘');
+    /* v35：有错时的复盘引导由 refineYunheng(AI)生成；无 AI 时保留占位。验证函数已挂载。 */
+    if(typeof refineYunheng!=='function')throw new Error('refineYunheng 应存在');
   });
   run('对话流置底当前任务卡（无打字态时位于末尾）',()=>{
     reset(); st.unlocked=1;
@@ -794,16 +838,19 @@ const driver=`
       if(/[SDE]\\d|TAM\\d|（|）|\\(|\\)|前半|后半/.test(d)) throw new Error(q.id+' 口播名仍脏：'+d);
     });
   });
-  run('v30.1 极简搭话/欲言又止/八卦不派任务不答非所问',()=>{
+  run('v35：questDisplayName 剥编号/括号/类别前缀（本地兜底已移除）',()=>{
     reset();
-    const q=WDChat.questDisplayName(firstActiveQuest());
-    ['在吗','嗯','哈哈','那个……算了，当我没说','我也不知道我想问什么','你说他刚才那句话什么意思啊'].forEach(txt=>{
-      ['yunheng','tiemian','moxiaogu'].forEach(id=>{
-        const r=WDChat.fallback(id,txt);
-        if(r.includes(q)) throw new Error('「'+txt+'」不应触发关卡牵引：'+r);
-        if(/不知道。?$/.test(r)&&/什么意思|想问什么/.test(txt)) throw new Error('八卦/无目的发言不应全员答「不知道」：'+r);
-      });
+    const cases=[
+      {name:'修习 · 第1-2章 北京历史',expect:'北京历史'},
+      {name:'GUG-Q 故宫导游词',expect:'故宫导游词'},
+      {name:'温故 · 回顾·错题',expect:'错题'}
+    ];
+    cases.forEach(c=>{
+      const r=WDChat.questDisplayName(c);
+      if(r!==c.expect)throw new Error('「'+c.name+'」→ 期望「'+c.expect+'」，实际「'+r+'」');
     });
+    /* fallback 已移除，不应存在 */
+    if(typeof WDChat.fallback==='function')throw new Error('fallback 应已移除');
   });
   run('typewriterExpand 逐段展开无 clicks 分支',()=>{
     reset();
@@ -1071,19 +1118,19 @@ const driver=`
     if(guide.length<6) throw new Error('序章后应生成当日引导6+条');
     if(st.dialogue.indexOf(guide[0])<st.dialogue.indexOf(cs[0])) throw new Error('引导必须排在序章之后');
   });
-  run('v33 渲染合并：序章精粹视觉上排在当日opener与任务卡之前',()=>{
+  run('v35 渲染合并：序章精粹视觉上排在当日opener与任务卡之前',()=>{
     reset(); st.unlocked=1; st.dialogueInitDay=0;
-    /* mock 的 getElementById 每次返回新元素，这里为 #stream 挂稳定替身以捕获渲染输出 */
     const sink=makeEl();
     const origQ=document.querySelector;
     document.querySelector=s=>s==='#stream'?sink:origQ(s);
     try{
-      finishPrologue();   // 内部已 render() → renderChat()
+      finishPrologue();
     }finally{ document.querySelector=origQ; }
     const h=sink.innerHTML;
     const iArrive=h.indexOf('圣仪阵');
     const iPact=h.indexOf('星轨从未给外来者');
-    const iOpen=h.indexOf('利其器');   // 第1日 gear opener「先整备法器——利其器，方能斩妖」
+    /* v35：opener 由 pubLine 返回占位「新的一程，已在雾中显形……」（AI 异步替换） */
+    const iOpen=h.indexOf('新的一程');
     if(iArrive<0||iPact<0||iOpen<0) throw new Error('序章/ opener 文本缺失，无法比较顺序');
     if(!(iArrive<iPact&&iPact<iOpen)) throw new Error('序章三精粹必须排在当日任务发放（opener）之前');
   });
@@ -1190,18 +1237,21 @@ const driver=`
     if(tm.cadence===sm.cadence)throw new Error('两角色节奏不应相同');
     if(JSON.stringify(tm.samples)===JSON.stringify(sm.samples))throw new Error('两角色示例不应相同');
   });
-  run('fallback：重复同一问题露出不耐烦',()=>{
+  run('v35：AI 失败时 respond 返回 error 且不含本地话术',()=>{
     reset();
-    st.dialogue.push({role:'player',text:'律法塔到底该怎么打才好',at:new Date().toISOString(),day:1});
-    const t=WDChat.fallback('tiemian','律法塔到底该怎么打才好');
-    if(!/第二遍|卷宗|重复/.test(t))throw new Error('重复提问应有不耐烦反应：'+t);
+    /* 模拟 AI 返回空：dsChat 被 mock 为空串 */
+    return WDChat.respond('yunheng','我终于打过这个妖王了，太爽了').then(r=>{
+      /* 无密钥 → error；有密钥但空返回 → error。总之不应有本地鸡汤 */
+      if(r.text&&/加油|你一定可以|相信自己/.test(r.text))throw new Error('AI-only 不应出现本地鸡汤：'+r.text);
+    });
   });
-  run('fallback：报捷反应不统一鸡汤',()=>{
+  run('v35：pubLine/doneLine 无缓存时返回占位并触发 AI 生成',()=>{
     reset();
-    const ids=['yunheng','tiemian','moxiaogu','xuanji'];
-    const outs=ids.map(id=>WDChat.fallback(id,'我终于打过这个妖王了，太爽了'));
-    if(new Set(outs).size!==outs.length)throw new Error('各NPC报捷反应必须不同');
-    outs.forEach(t=>{ if(/加油|你一定可以|相信自己/.test(t))throw new Error('报捷不应打鸡血：'+t); });
+    const q={id:'test_q_1',type:'study',name:'测试关卡',goal:'通关'};
+    const pub=pubLine(q,byDay[1]);
+    if(!pub)throw new Error('pubLine 无缓存应返回占位');
+    const done=doneLine(q,byDay[1]);
+    if(!done)throw new Error('doneLine 无缓存应返回占位');
   });
   run('directorRespond：函数已挂载（无AI时由异步收尾验证降级）',()=>{
     reset();
@@ -1217,14 +1267,16 @@ const driver=`
     const id=routeNpc('你好啊');
     if(id!=='yunheng') throw new Error('无指向应默认云蘅');
   });
-  /* 异步收尾：respond 未配置 AI 时应同步降级为本地话术（永不 reject） */
+  /* v35 异步收尾：respond 未配置 AI 时返回空文本+error（不再本地兜底，永不 reject） */
   (async()=>{
     try{
       reset(); const r=await WDChat.respond('tiemian','请教律法');
-      if(!r||typeof r.text!=="string"||!r.text)throw new Error('无降级文本');
-      if(r.degraded!==true)throw new Error('未标记 degraded');
-      console.log('PASS  WDChat respond未配置AI自动降级');
-    }catch(e){ errors.push('WDChat respond未配置AI自动降级 => '+e.message); console.log('FAIL  WDChat respond未配置AI自动降级 : '+e.message); }
+      if(!r)throw new Error('respond 应返回对象');
+      if(r.text)throw new Error('无密钥时 text 应为空');
+      if(r.degraded!==true)throw new Error('应标记 degraded');
+      if(!r.error)throw new Error('应返回 error');
+      console.log('PASS  v35 respond未配置AI返回空文本+error');
+    }catch(e){ errors.push('v35 respond未配置AI => '+e.message); console.log('FAIL  v35 respond未配置AI : '+e.message); }
     try{
       reset();
       const r1=await WDChat.directorRespond(['yunheng','tiemian'],'测试');
