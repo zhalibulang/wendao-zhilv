@@ -66,58 +66,62 @@ function analyzeBio(text){
           humor:pick("humor","serious","humor","serious"),
           depth:pick("deep","basic","deep","basic")};
 }
-/* 图片管线：JPG/PNG ≤5MB、≥200px → 居中裁剪+缩放(默认240px JPEG) → dataURL（重编码抹除 EXIF/GPS）
-   zoom: 裁剪缩放系数(1=cover)——配置中心的简易裁剪。失败 reject Error(E_CFG_*) */
-function processImageFile(file,opt){
+/* v58b 统一读图：校验 → FileReader 读成 data: URL → Image 解码（全程 30s 超时）。
+   不用 URL.createObjectURL(blob:)——老 WebKit/WKWebView 中 file input 分离或照片处于
+   安全作用域/iCloud 占位时，blob: URL 解码会永久挂起（按钮一直“处理中”）；
+   data: URL 数据内联、无生命周期绑定，兼容性最稳。onStage(s) 回报 read/decode 阶段。 */
+function loadImageFile(file,opt){
   opt=opt||{};
   return new Promise((res,rej)=>{
     if(!file) return rej(new Error("E_CFG_NOFILE"));
     if(!/image\/(png|jpe?g)/.test(file.type)) return rej(new Error("E_CFG_TYPE"));
     if(file.size>MAX_BYTES) return rej(new Error("E_CFG_SIZE"));
-    const url=URL.createObjectURL(file), img=new Image();
-    const timer=setTimeout(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_DECODE_TIMEOUT")); },DECODE_TIMEOUT);
-    const finish=(fn)=>{ clearTimeout(timer); fn(); };
-    img.onload=()=>{
-      try{
-        const side=Math.min(img.naturalWidth,img.naturalHeight);
-        if(side<MIN_SIDE){ return finish(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_SMALL")); }); }
-        const out=OUT, zoom=Math.max(1,Math.min(3,opt.zoom||1));
-        const cv=document.createElement("canvas"); cv.width=out; cv.height=out;
-        const g=cv.getContext("2d");
-        const k=(out/side)*zoom, w=img.naturalWidth*k, h=img.naturalHeight*k;
-        g.imageSmoothingEnabled=true;
-        g.drawImage(img,(out-w)/2,(out-h)/2,w,h);
-        const url2=cv.toDataURL("image/jpeg",QUALITY);
-        finish(()=>{ URL.revokeObjectURL(url); res({url:url2, w:img.naturalWidth, h:img.naturalHeight, kb:Math.round(url2.length/1024)}); });
-      }catch(e){ finish(()=>{ URL.revokeObjectURL(url); rej(e); }); }
+    const stage=opt.onStage||function(){};
+    let timer=setTimeout(failTimeout,DECODE_TIMEOUT);
+    function failTimeout(){ try{console.warn("[立绘上传] 读取/解码超时",file.name,file.type,file.size);}catch(e){} rej(new Error("E_CFG_DECODE_TIMEOUT")); }
+    function done(fn){ clearTimeout(timer); fn(); }
+    stage("read");
+    const fr=new FileReader();
+    fr.onerror=()=>done(()=>rej(new Error("E_CFG_READ")));
+    fr.onload=()=>{
+      stage("decode");
+      const img=new Image();
+      img.onload=()=>done(()=>res(img));
+      img.onerror=()=>done(()=>rej(new Error("E_CFG_DECODE")));
+      img.src=String(fr.result);
     };
-    img.onerror=()=>{ finish(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_DECODE")); }); };
-    img.src=url;
+    fr.readAsDataURL(file);
+  });
+}
+/* 图片管线：JPG/PNG ≤5MB、≥200px → 居中裁剪+缩放(默认240px JPEG) → dataURL（重编码抹除 EXIF/GPS）
+   zoom: 裁剪缩放系数(1=cover)——配置中心的简易裁剪。失败 reject Error(E_CFG_*) */
+function processImageFile(file,opt){
+  opt=opt||{};
+  return loadImageFile(file,opt).then(img=>{
+    const side=Math.min(img.naturalWidth,img.naturalHeight);
+    if(side<MIN_SIDE) throw new Error("E_CFG_SMALL");
+    const out=OUT, zoom=Math.max(1,Math.min(3,opt.zoom||1));
+    const cv=document.createElement("canvas"); cv.width=out; cv.height=out;
+    const g=cv.getContext("2d");
+    const k=(out/side)*zoom, w=img.naturalWidth*k, h=img.naturalHeight*k;
+    g.imageSmoothingEnabled=true;
+    g.drawImage(img,(out-w)/2,(out-h)/2,w,h);
+    const url2=cv.toDataURL("image/jpeg",QUALITY);
+    return {url:url2, w:img.naturalWidth, h:img.naturalHeight, kb:Math.round(url2.length/1024)};
   });
 }
 /* 立绘管线：JPG/PNG ≤5MB、≥200px → 等比缩放到高≤900px（不裁剪，保全身构图）→ dataURL（重编码抹除 EXIF） */
-function processPortraitFile(file){
-  return new Promise((res,rej)=>{
-    if(!file) return rej(new Error("E_CFG_NOFILE"));
-    if(!/image\/(png|jpe?g)/.test(file.type)) return rej(new Error("E_CFG_TYPE"));
-    if(file.size>MAX_BYTES) return rej(new Error("E_CFG_SIZE"));
-    const url=URL.createObjectURL(file), img=new Image();
-    const timer=setTimeout(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_DECODE_TIMEOUT")); },DECODE_TIMEOUT);
-    const finish=(fn)=>{ clearTimeout(timer); fn(); };
-    img.onload=()=>{
-      try{
-        const w0=img.naturalWidth, h0=img.naturalHeight;
-        if(Math.min(w0,h0)<MIN_SIDE){ return finish(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_SMALL")); }); }
-        const k=Math.min(1, 900/h0, 720/w0), w=Math.round(w0*k), h=Math.round(h0*k);
-        const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
-        const g=cv.getContext("2d"); g.imageSmoothingEnabled=true;
-        g.drawImage(img,0,0,w,h);
-        const url2=cv.toDataURL("image/jpeg",0.85);
-        finish(()=>{ URL.revokeObjectURL(url); res({url:url2, w:w0, h:h0, kb:Math.round(url2.length/1024)}); });
-      }catch(e){ finish(()=>{ URL.revokeObjectURL(url); rej(e); }); }
-    };
-    img.onerror=()=>{ finish(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_DECODE")); }); };
-    img.src=url;
+function processPortraitFile(file,opt){
+  opt=opt||{};
+  return loadImageFile(file,opt).then(img=>{
+    const w0=img.naturalWidth, h0=img.naturalHeight;
+    if(Math.min(w0,h0)<MIN_SIDE) throw new Error("E_CFG_SMALL");
+    const k=Math.min(1, 900/h0, 720/w0), w=Math.round(w0*k), h=Math.round(h0*k);
+    const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+    const g=cv.getContext("2d"); g.imageSmoothingEnabled=true;
+    g.drawImage(img,0,0,w,h);
+    const url2=cv.toDataURL("image/jpeg",0.85);
+    return {url:url2, w:w0, h:h0, kb:Math.round(url2.length/1024)};
   });
 }
 function load(){
@@ -160,9 +164,9 @@ const WDCfg={
   /* 属性派生上限（预览与状态栏共用） */
   attrCaps(){ const a=cfg.attr; return {hp:80+a.str*4, energy:20+a.agi*2, xpBonus:a.int*3}; },
   avatarURL(id){ return id==="_player"?(cfg.userAvatar||null):(cfg.npcAvatar[id]||null); },
-  setAvatar(id,file,zoom){
+  setAvatar(id,file,zoom,onStage){
     const self=this;
-    return processImageFile(file,{zoom:zoom||1}).then(r=>{
+    return processImageFile(file,{zoom:zoom||1,onStage:onStage}).then(r=>{
       if(id==="_player") self.set("userAvatar",r.url,"我的头像");
       else self.set("npcAvatar."+id,r.url,"NPC头像");
       return r;
@@ -171,9 +175,9 @@ const WDCfg={
   clearAvatar(id){ if(id==="_player") this.set("userAvatar",null,"移除我的头像"); else this.set("npcAvatar."+id,null,"移除NPC头像"); },
   /* NPC 立绘：等比缩放不裁剪（保全身构图），用于任务对话页左侧立绘位 */
   portraitURL(id){ return cfg.npcPortrait[id]||null; },
-  setPortrait(id,file){
+  setPortrait(id,file,onStage){
     const self=this;
-    return processPortraitFile(file).then(r=>{ self.set("npcPortrait."+id,r.url,"NPC立绘"); return r; });
+    return processPortraitFile(file,{onStage:onStage}).then(r=>{ self.set("npcPortrait."+id,r.url,"NPC立绘"); return r; });
   },
   clearPortrait(id){ this.set("npcPortrait."+id,null,"移除NPC立绘"); },
   /* NPC 名字/人设自定义：用户可覆写 NPC 名称并提供基准描述供 AI 生成角色设定 */

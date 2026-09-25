@@ -589,7 +589,7 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 <script src="game-data.js?v53"></script>
 <script src="exam-2026-data.js?v53"></script>
 <script src="npc-registry.js"></script>
-<script src="wd-cfg.js"></script>
+<script src="wd-cfg.js?v58b"></script>
 <script src="wd-terms.js?v55"></script>
 <script src="wd-mem.js"></script>
 <script src="wd-quiz.js"></script>
@@ -5998,6 +5998,7 @@ function cfgErrText(e){
   return {E_CFG_TYPE:"仅支持 JPG / PNG 格式",E_CFG_SIZE:"文件超过 5MB 上限",
     E_CFG_SMALL:"分辨率不足 200×200",E_CFG_DECODE:"图片解码失败（可换用 JPG 或截图后重试）",
     E_CFG_DECODE_TIMEOUT:"图片读取超时——格式可能不受支持，请转存为 JPG/PNG 后重试",
+    E_CFG_READ:"文件读取失败（可能在 iCloud 未下载或无权限），请先在相册/访达中打开原图再选",
     E_CFG_NOFILE:"未选择文件",
     E_CFG_JSON:"不是合法的 JSON 文件",E_CFG_SHAPE:"配置结构不符，已拒绝导入",
     E_CFG_QUOTA:"本地存储空间已满，未保存——请先移除几张立绘/头像后重试",
@@ -6021,6 +6022,7 @@ function pickFile(accept,cb){
      不返回时（裁剪 UI 场景）由调用方通过返回值自行释放，10 分钟兜底回收。 */
   inp.onchange=()=>{
     const f=inp.files&&inp.files[0]; if(!f) return;
+    try{ console.log("[立绘上传] 已选文件:",f.name,f.type,Math.round(f.size/1024)+"KB"); }catch(e){}
     let ret;
     try{ ret=cb(f); }
     catch(e){ setTimeout(()=>{ throw e; },0); ret=Promise.reject(e);
@@ -6246,8 +6248,9 @@ function renderCfg(){
     g.querySelectorAll("[data-pt]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
       const pid=b.dataset.pt;
       pickFile("image/png,image/jpeg",f=>{
-        b.disabled=true; b.textContent="处理中…";
-        return WDCfg.setPortrait(pid,f).then(r=>{
+        b.disabled=true; b.textContent="读取中…";
+        const onStage=s=>{ b.textContent=(s==="read"?"读取中…":"生成中…"); };
+        return WDCfg.setPortrait(pid,f,onStage).then(r=>{
           toast("立绘已更新（原图 "+r.w+"×"+r.h+"，存储约 "+r.kb+"KB）");
           ov.remove(); renderCfg();
         }).catch(e=>{ b.disabled=false; b.textContent="上传立绘"; toast(cfgErrText(e)); throw e; });
@@ -6262,24 +6265,29 @@ function renderCfg(){
     cropInp=pickFile("image/png,image/jpeg",f=>{
       cropFile=f;
       const box=$("#avCrop",ov); box.style.display="block";
-      if(cropURL) URL.revokeObjectURL(cropURL);
-      cropURL=URL.createObjectURL(f);
-      const im=$("#cropImg",ov); im.src=cropURL; im.style.transform="scale(1)";
+      cropURL="";
+      const im=$("#cropImg",ov); im.removeAttribute("src"); im.style.transform="scale(1)";
       const zr=$("#cropZoom",ov); zr.value="1";
-      $("#cropMsg",ov).textContent=(f.type.includes("png")?"PNG":"JPEG")+" · "+Math.round(f.size/1024)+"KB";
+      $("#cropMsg",ov).textContent=(f.type.includes("png")?"PNG":"JPEG")+" · "+Math.round(f.size/1024)+"KB · 读取中…";
       $("#cropMsg",ov).style.color="var(--dim)";
+      /* v58b：裁剪预览同样走 FileReader dataURL，不用 blob: URL（WebKit 安全作用域挂起） */
+      const fr=new FileReader();
+      fr.onload=()=>{ cropURL=String(fr.result); im.src=cropURL;
+        $("#cropMsg",ov).textContent=(f.type.includes("png")?"PNG":"JPEG")+" · "+Math.round(f.size/1024)+"KB"; };
+      fr.onerror=()=>{ $("#cropMsg",ov).textContent="文件读取失败，请换图重试"; $("#cropMsg",ov).style.color="var(--danger)"; box.style.display="none"; cropFile=null; };
+      fr.readAsDataURL(f);
       zr.oninput=()=>{ im.style.transform="scale("+zr.value+")"; };
       $("#cropOk",ov).onpointerdown=()=>{
-        const btn=$("#cropOk",ov); btn.disabled=true; btn.textContent="处理中…";
-        WDCfg.setAvatar(id,cropFile,+zr.value).then(r=>{
+        const btn=$("#cropOk",ov); btn.disabled=true; btn.textContent="读取中…";
+        WDCfg.setAvatar(id,cropFile,+zr.value,s=>{ btn.textContent=(s==="read"?"读取中…":"生成中…"); }).then(r=>{
           toast("头像已更新（原图 "+r.w+"×"+r.h+"，存储约 "+r.kb+"KB）");
-          if(cropURL){ URL.revokeObjectURL(cropURL); cropURL=""; }
+          cropURL="";
           if(cropInp){ cropInp.remove(); cropInp=null; }
           ov.remove(); renderCfg();
         }).catch(e=>{ btn.disabled=false; btn.textContent="确认上传";
           const msg=$("#cropMsg",ov); msg.textContent=cfgErrText(e); msg.style.color="var(--danger)"; });
       };
-      $("#cropNo",ov).onpointerdown=()=>{ box.style.display="none"; if(cropURL){URL.revokeObjectURL(cropURL);cropURL="";} cropFile=null;
+      $("#cropNo",ov).onpointerdown=()=>{ box.style.display="none"; cropURL=""; cropFile=null;
         if(cropInp){ cropInp.remove(); cropInp=null; } };
     });
   }
