@@ -2763,13 +2763,17 @@ function ensureGdMilestone(day){
     }
     st._gdBf=1;
   }
-  if(!st.gdIssued[gd]){
+  /* 防重双保险：gdIssued 丢失（旧档/异常）时，若对话流已有该 gd 里程碑也不重复落 */
+  const exists=st.dialogue.some(m=>m&&m.kind==="gdmilestone"&&(m.gd===gd||m.id==="gd_"+gd));
+  if(!st.gdIssued[gd]&&!exists){
     st.gdIssued[gd]=new Date().toISOString();
-    st.dialogue.push({id:"gd_"+gd,role:"npc",npc:"yunting",kind:"gdmilestone",
+    st.dialogue.push({id:"gd_"+gd,gd,role:"npc",npc:"yunting",kind:"gdmilestone",
       text:gdMilestoneText(day,gi),at:new Date().toISOString(),day});
     if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
     save();
     if(typeof view!=="undefined"&&view==="chat") renderChat(true);
+  }else if(!st.gdIssued[gd]){
+    st.gdIssued[gd]=new Date().toISOString(); /* 消息已在，仅补发布标记 */
   }
 }
 /* 纪日 cue 生成：云汀以「派发手札」口吻说一小段，过同套红线/跨稿去重/双稿重拟。
@@ -3132,9 +3136,16 @@ function qindexHtml(day,gi){
     <div class="qilist">${rows}</div>
   </div>`;
 }
+let _gdMilestoneBusy=false;
 function renderChat(keep){
   const view=$("#stream");
   if(!view) return; // 非对话视图（任务/星盘/弹层中触发行动报等）时静默跳过，下次进入对话视图重渲染
+  /* v58c：进对话兜底——确保当前纪日手札已发布（幂等；防重入，push 后的重渲染第二次直接 return） */
+  if(!_gdMilestoneBusy){
+    _gdMilestoneBusy=true;
+    try{ ensureGdMilestone(st.day); }catch(e){}
+    _gdMilestoneBusy=false;
+  }
   const stream=buildStream();
   // 进程感：全链路中第一个「已解锁未完成」的任务即当前关卡
   let firstActive=null;
@@ -3143,9 +3154,14 @@ function renderChat(keep){
     for(const q of d.quests){ if(!qDone(q.id)&&questUnlocked(q)){ firstActive=q.id; break; } }
   }
   // Append persisted dialogue (player questions + NPC AI responses)
-  // 最新一条 NPC 回复打 _cur 标记：无显式 refs 时渲染层自动补「当前任务」关联 chip（需求2b）
+  // 最新一条「普通」NPC 回复打 _cur 标记：无显式 refs 时渲染层自动补「当前任务」关联 chip（需求2b）。
+  // v58c：过场/纪日里程碑/剧情消息是独立叙事，不挂任务 chip（否则会在云汀开场句下错挂任务入口）。
   const dlgMsgs=st.dialogue.map(d=>({t:d.role,npc:d.npc,x:filterNpcText(d.text),qid:d.qid,refs:d.refs,cutscene:d.cutscene,kind:d.kind}));
-  let lastNpc=-1; dlgMsgs.forEach((m,i)=>{ if(m.t==="npc") lastNpc=i; });
+  let lastNpc=-1;
+  for(let i=dlgMsgs.length-1;i>=0;i--){
+    const m=dlgMsgs[i];
+    if(m.t==="npc"&&!m.cutscene&&m.kind!=="gdmilestone"&&m.kind!=="plot"){ lastNpc=i; break; }
+  }
   if(lastNpc>=0&&!dlgMsgs[lastNpc].refs) dlgMsgs[lastNpc]._cur=true;
   /* v33：序章三节点（初见绑定/灵魂契约/启程）发生在第1日任何任务发放之前，
      渲染时必须插到第1日分隔之后、当日 opener 与任务卡之前，杜绝"任务先发、序章在后"的视觉倒叙 */
@@ -4684,6 +4700,26 @@ function refineCutscene(id,node){
     if(view==="chat") renderChat(true);
   }).catch(()=>{});
 }
+/* v58c 旧档迁移：把已落流的纯省略号引导消息替换为自然短句（AI 曾少给台词留下的空槽） */
+function migrateGuidanceDots(){
+  if(st._gdDotCleanV===1) return;
+  const SAFE_NPC={yunting:["嗯，人到了就好。","今天的雾薄一些。"],tina:["叮——我在呢。","星盘亮着呢。"],
+    shenzhao:["……进来吧。","书在这儿。"],chengxiu:["哟，稀客。","坐，茶刚沏上。"],wantang:["嘿，你来啦。","这段一起练。"]};
+  const SAFE_PLAYER=["嗯，我在。","行，听你的。","好，那就这么办。"];
+  const used={player:[]};
+  let changed=false;
+  (st.dialogue||[]).forEach(m=>{
+    if(!m.guidance||!/^[.…。]{1,3}$/.test(String(m.text||"").trim())) return;
+    if(m.role==="player"){
+      const x=SAFE_PLAYER.find(s=>!used.player.includes(s))||"嗯。"; used.player.push(x); m.text=x; changed=true;
+    }else if(m.npc){
+      const pool=SAFE_NPC[m.npc]||["……嗯。"]; used[m.npc]=used[m.npc]||[];
+      const x=pool.find(s=>!used[m.npc].includes(s))||pool[0]; used[m.npc].push(x); m.text=x; changed=true;
+    }
+  });
+  st._gdDotCleanV=1;
+  if(changed) save();
+}
 /* ==================== 对话初始化机制 ====================
    用户每次进入对话系统时，若当日尚未生成引导对话，系统自动编创一段
    完整的引导对话场景，包含三类互动：云汀-玩家、云汀-其他NPC、玩家-其他NPC。
@@ -4807,12 +4843,13 @@ function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
       unlabeled.push(line.replace(/^[「『"“]+|[」』"”]+$/g,"").trim());
     });
     const GUIDANCE_SAFE={
-      yunting:["……你来了。","今天的雾，看着薄一些。"],
-      tina:["叮——我在呢。","有错题我会喊你的。"],
-      shenzhao:["……进来吧。","书在这儿，自己翻。"],
-      chengxiu:["哟，稀客。","坐，茶刚沏上。"],
-      wantang:["嘿，你来啦。","这段，我们一起练。"]
+      yunting:["……你来了。","今天的雾，看着薄一些。","嗯，人到了就好。","路上还顺吗？"],
+      tina:["叮——我在呢。","有错题我会喊你的。","唔，今天星盘也亮着。"],
+      shenzhao:["……进来吧。","书在这儿，自己翻。","先坐，喝口热的。"],
+      chengxiu:["哟，稀客。","坐，茶刚沏上。","今儿想聊点什么？"],
+      wantang:["嘿，你来啦。","这段，我们一起练。","正好，我也想找你对对词。"]
     };
+    const PLAYER_SAFE=["嗯，我在。","行，听你的。","好，那就这么办。","我先看看。"];
     let ui=0;
     const take=speaker=>{
       const q=(buckets[speaker]||[]).shift();
@@ -4825,13 +4862,17 @@ function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
       const speaker=slotMsg.role==="player"?"player":slotMsg.npc;
       let p=take(speaker).slice(0,200);
       if(speaker!=="player"){
-        const fl=cueRedFlags(p,dn2(speaker));
-        if(fl.length){ console.warn("[引导场景] 台词未过红线，换安全短句：",fl,p);
-          const pool=GUIDANCE_SAFE[speaker]||["……"];
-          p=pool[hash(ids[i])%pool.length];
+        const fl=p?cueRedFlags(p,dn2(speaker)):["空台词"];
+        if(fl.length){ console.warn("[引导场景] 台词缺失/未过红线，换安全短句：",fl,p);
+          const pool=GUIDANCE_SAFE[speaker]||["……嗯。"];
+          /* 同角色多槽取不同句，避免两条安全短句撞车 */
+          p=pool.filter(x=>!st.dialogue.slice(0,idx).some(m=>m.npc===speaker&&m.text===x))[0]||pool[hash(ids[i])%pool.length];
         }
+      }else if(!p||p.length<2){
+        /* 玩家槽空内容：用自然短句，不留「……」占位（占位会被反复重生成） */
+        p=PLAYER_SAFE.filter(x=>!st.dialogue.slice(0,idx).some(m=>m.role==="player"&&m.text===x))[0]||PLAYER_SAFE[hash(ids[i])%PLAYER_SAFE.length];
       }
-      st.dialogue[idx].text=p.length>=2?p:"……";
+      st.dialogue[idx].text=p;
     }
     save();
     if(view==="chat") renderChat(true);
@@ -8267,6 +8308,8 @@ function boot(){
     /* v54 批 1：运行时排程安装（必须在 render 之前重建 DAYS/QMAP） */
     installRuntimePlan();
     syncGameDay();
+    migrateGuidanceDots(); /* v58c：清理旧版落流的「……」空引导句 */
+    ensureGdMilestone(st.day); /* v58c：旧档/同日再进也要补发当前纪日手札（advanceNaturalDay 同日会提前 return） */
     /* v48：三套时钟——离线按自然日推进游戏日/雾涌日，恢复心气灵力 */
     ensureClocks();
     const elapsed=advanceNaturalDay();

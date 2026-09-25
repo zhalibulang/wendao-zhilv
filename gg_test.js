@@ -1202,7 +1202,8 @@ const driver=`
   run('对话初始化：引导对话消息标记guidance=true',()=>{
     reset(); st.unlocked=1;
     ensureGuidanceScene();
-    if(!st.dialogue.every(m=>m.guidance===true)) throw new Error('引导对话消息应标记guidance=true');
+    /* v58c：纪日里程碑（gdmilestone）是独立叙事，由 renderChat 兜底补发，不计入引导批次 */
+    if(!st.dialogue.filter(m=>m.kind!=="gdmilestone").every(m=>m.guidance===true)) throw new Error('引导对话消息应标记guidance=true');
   });
   run('对话初始化：已有当日对话时不重复生成',()=>{
     reset(); st.unlocked=1;
@@ -1218,7 +1219,7 @@ const driver=`
     ensureGuidanceScene();
     if(st.dialogue.length<7) throw new Error('过场之外仍应生成当日引导，实际'+st.dialogue.length);
     if(st.dialogue[0].cutscene!=='arrive') throw new Error('初见过场必须位于对话流最前');
-    if(!st.dialogue.slice(1).every(m=>m.guidance===true)) throw new Error('过场之后应全部是当日引导消息');
+    if(!st.dialogue.slice(1).filter(m=>m.kind!=="gdmilestone").every(m=>m.guidance===true)) throw new Error('过场之后应全部是当日引导消息（里程碑除外）');
   });
   /* ===== v56：序章播放器已整段移除（旧版对白与新版人设不符），启程改为直接触发云汀「arrive」过场 ===== */
   run('v56 启程入口：intro 直接触发 arrive 过场',()=>{
