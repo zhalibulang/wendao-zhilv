@@ -14,9 +14,12 @@ const PRESET_SELF=["我","在下","本座","贫道"];
 const ATTR_BUDGET=12, ATTR_MIN=1;
 
 let cfg=null;
+/* v58：图片解码超时——个别浏览器/WebView 对特定格式（HEIC 伪装、损坏图）会出现
+   img 既不 onload 也不 onerror 的永久挂起，导致界面一直停在“处理中…” */
+const DECODE_TIMEOUT=30000;
 
 function defaults(){
-  return {ver:VER, npcAvatar:{}, userAvatar:null,
+  return {ver:VER, npcAvatar:{}, userAvatar:null, npcPortrait:{},
     address:"", addressHist:[], selfName:"", bio:"",
     style:{tone:"",humor:"",depth:""},
     attr:{str:2,agi:2,int:2}, hist:[], rejected:0,
@@ -25,6 +28,7 @@ function defaults(){
 }
 function sanitize(recount){
   if(!cfg.npcAvatar||typeof cfg.npcAvatar!=="object"){ if(recount&&cfg.npcAvatar!==undefined)cfg.rejected++; cfg.npcAvatar={}; }
+  if(!cfg.npcPortrait||typeof cfg.npcPortrait!=="object"){ if(recount&&cfg.npcPortrait!==undefined)cfg.rejected++; cfg.npcPortrait={}; }
   if(!Array.isArray(cfg.addressHist)){ if(recount)cfg.rejected++; cfg.addressHist=[]; }
   if(!cfg.style||typeof cfg.style!=="object"){ if(recount&&cfg.style!==undefined)cfg.rejected++; cfg.style={tone:"",humor:"",depth:""}; }
   if(!cfg.attr||typeof cfg.attr!=="object"){ if(recount&&cfg.attr!==undefined)cfg.rejected++; cfg.attr={str:2,agi:2,int:2}; }
@@ -40,7 +44,8 @@ function sanitize(recount){
   if(typeof cfg.aiDocument!=="string")cfg.aiDocument="";
   if(typeof cfg.directorDoc!=="string")cfg.directorDoc="";
 }
-function save(){ try{ localStorage.setItem(KEY,JSON.stringify(cfg)); }catch(e){} }
+/* v58：配额失败必须上抛——旧实现 try/catch 静默吞错，会导致“提示上传成功但刷新后立绘丢失” */
+function save(){ localStorage.setItem(KEY,JSON.stringify(cfg)); }
 function emit(keys){ try{ window.dispatchEvent(new CustomEvent("wd:cfg",{detail:{keys:keys||[]}})); }catch(e){} }
 function summ(v){ const s=typeof v==="string"?v:JSON.stringify(v); return s==null?"":String(s).slice(0,40); }
 function histPush(k,from,to,reason){
@@ -70,10 +75,12 @@ function processImageFile(file,opt){
     if(!/image\/(png|jpe?g)/.test(file.type)) return rej(new Error("E_CFG_TYPE"));
     if(file.size>MAX_BYTES) return rej(new Error("E_CFG_SIZE"));
     const url=URL.createObjectURL(file), img=new Image();
+    const timer=setTimeout(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_DECODE_TIMEOUT")); },DECODE_TIMEOUT);
+    const finish=(fn)=>{ clearTimeout(timer); fn(); };
     img.onload=()=>{
       try{
         const side=Math.min(img.naturalWidth,img.naturalHeight);
-        if(side<MIN_SIDE){ URL.revokeObjectURL(url); return rej(new Error("E_CFG_SMALL")); }
+        if(side<MIN_SIDE){ return finish(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_SMALL")); }); }
         const out=OUT, zoom=Math.max(1,Math.min(3,opt.zoom||1));
         const cv=document.createElement("canvas"); cv.width=out; cv.height=out;
         const g=cv.getContext("2d");
@@ -81,11 +88,35 @@ function processImageFile(file,opt){
         g.imageSmoothingEnabled=true;
         g.drawImage(img,(out-w)/2,(out-h)/2,w,h);
         const url2=cv.toDataURL("image/jpeg",QUALITY);
-        URL.revokeObjectURL(url);
-        res({url:url2, w:img.naturalWidth, h:img.naturalHeight, kb:Math.round(url2.length/1024)});
-      }catch(e){ URL.revokeObjectURL(url); rej(e); }
+        finish(()=>{ URL.revokeObjectURL(url); res({url:url2, w:img.naturalWidth, h:img.naturalHeight, kb:Math.round(url2.length/1024)}); });
+      }catch(e){ finish(()=>{ URL.revokeObjectURL(url); rej(e); }); }
     };
-    img.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_DECODE")); };
+    img.onerror=()=>{ finish(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_DECODE")); }); };
+    img.src=url;
+  });
+}
+/* 立绘管线：JPG/PNG ≤5MB、≥200px → 等比缩放到高≤900px（不裁剪，保全身构图）→ dataURL（重编码抹除 EXIF） */
+function processPortraitFile(file){
+  return new Promise((res,rej)=>{
+    if(!file) return rej(new Error("E_CFG_NOFILE"));
+    if(!/image\/(png|jpe?g)/.test(file.type)) return rej(new Error("E_CFG_TYPE"));
+    if(file.size>MAX_BYTES) return rej(new Error("E_CFG_SIZE"));
+    const url=URL.createObjectURL(file), img=new Image();
+    const timer=setTimeout(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_DECODE_TIMEOUT")); },DECODE_TIMEOUT);
+    const finish=(fn)=>{ clearTimeout(timer); fn(); };
+    img.onload=()=>{
+      try{
+        const w0=img.naturalWidth, h0=img.naturalHeight;
+        if(Math.min(w0,h0)<MIN_SIDE){ return finish(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_SMALL")); }); }
+        const k=Math.min(1, 900/h0, 720/w0), w=Math.round(w0*k), h=Math.round(h0*k);
+        const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+        const g=cv.getContext("2d"); g.imageSmoothingEnabled=true;
+        g.drawImage(img,0,0,w,h);
+        const url2=cv.toDataURL("image/jpeg",0.85);
+        finish(()=>{ URL.revokeObjectURL(url); res({url:url2, w:w0, h:h0, kb:Math.round(url2.length/1024)}); });
+      }catch(e){ finish(()=>{ URL.revokeObjectURL(url); rej(e); }); }
+    };
+    img.onerror=()=>{ finish(()=>{ URL.revokeObjectURL(url); rej(new Error("E_CFG_DECODE")); }); };
     img.src=url;
   });
 }
@@ -105,6 +136,9 @@ const WDCfg={
   all(){ return cfg; },
   get(path){ return path.split(".").reduce((o,x)=>o&&o[x],cfg); },
   set(path,val,reason){
+    /* v58：先留整态快照——save() 若因 localStorage 配额等失败，整体回滚并抛出 E_CFG_QUOTA，
+       杜绝“提示上传成功，重载后立绘/头像消失”的内存态/落盘态背离。 */
+    const bak=JSON.stringify(cfg);
     const keys=path.split("."), last=keys.pop();
     let o=cfg; keys.forEach(x=>{ o=o[x]=o[x]||{}; });
     const from=o[last];
@@ -112,7 +146,10 @@ const WDCfg={
       cfg.addressHist.unshift(cfg.address); if(cfg.addressHist.length>8)cfg.addressHist.length=8;
     }
     o[last]=val;
-    histPush(path,from,val,reason); save(); emit([path]);
+    histPush(path,from,val,reason);
+    try{ save(); }
+    catch(e){ cfg=JSON.parse(bak); throw new Error("E_CFG_QUOTA"); }
+    emit([path]);
   },
   addressPresets:PRESET_ADDR,
   selfPresets:PRESET_SELF,
@@ -132,6 +169,13 @@ const WDCfg={
     });
   },
   clearAvatar(id){ if(id==="_player") this.set("userAvatar",null,"移除我的头像"); else this.set("npcAvatar."+id,null,"移除NPC头像"); },
+  /* NPC 立绘：等比缩放不裁剪（保全身构图），用于任务对话页左侧立绘位 */
+  portraitURL(id){ return cfg.npcPortrait[id]||null; },
+  setPortrait(id,file){
+    const self=this;
+    return processPortraitFile(file).then(r=>{ self.set("npcPortrait."+id,r.url,"NPC立绘"); return r; });
+  },
+  clearPortrait(id){ this.set("npcPortrait."+id,null,"移除NPC立绘"); },
   /* NPC 名字/人设自定义：用户可覆写 NPC 名称并提供基准描述供 AI 生成角色设定 */
   npcName(id,original){ return (cfg.npcNames&&cfg.npcNames[id])||original||""; },
   npcTitle(id,original){ return (cfg.npcTitles&&cfg.npcTitles[id])||original||""; },
@@ -158,8 +202,10 @@ const WDCfg={
     let o; try{ o=JSON.parse(text); }catch(e){ throw new Error("E_CFG_JSON"); }
     const c=o&&(o.cfg||o);
     if(!c||typeof c!=="object") throw new Error("E_CFG_SHAPE");
+    const bak=JSON.stringify(cfg);
     cfg=Object.assign(defaults(),c); cfg.ver=VER; sanitize(true);
-    save(); emit(["*"]); return true;
+    try{ save(); }catch(e){ cfg=JSON.parse(bak); throw new Error("E_CFG_QUOTA"); }
+    emit(["*"]); return true;
   },
   _testGet:()=>cfg
 };

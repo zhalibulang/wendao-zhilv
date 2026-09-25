@@ -130,7 +130,7 @@ const WDMem={
     if(doneIds.length){
       let one=0, best=1e9;
       doneIds.forEach(q=>{ const d=r.done[q]; if(d.onePass)one++; if(d.durS>0&&d.durS<best)best=d.durS; });
-      parts.push("已共同封印"+doneIds.length+"个任务"+(one?("（"+one+"次一次通关）"):"")+(best<1e9?("·最快"+fmtDur(best)):""));
+      parts.push("已共同净化"+doneIds.length+"个任务"+(one?("（"+one+"次一次通关）"):"")+(best<1e9?("·最快"+fmtDur(best)):""));
     }
     const ent=Object.keys(r.entered);
     if(ent.length) parts.push("在途"+ent.length+"个未完成");

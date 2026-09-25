@@ -121,6 +121,20 @@ const SPR={
     "..BBBBBBBB..",
     "..BBBBBBBB..",
     "...B....B...",
+    "............"]},
+  /* 紫宸 · 故宫镇殿精灵：乌发金步摇，朱红宫装，琉璃绿袖缘（占位像素画） */
+  gugong:{c:{H:"#1f1428",F:"#f2d5b0",E:"#1a0f2e",V:"#ffd23f",B:"#a83232",T:"#3df0a0",L:"#ffd23f"},p:[
+    "....HHHH....",
+    "...HHHHHH...",
+    "..HHFFFFHH..",
+    "..HFEFFEFH..",
+    "..HFFFFFFH..",
+    "..HVFFFFVH..",
+    "...BBBBBB...",
+    "..BBBBBBBB..",
+    "..BTBBBBTB..",
+    "..BBBBBBBB..",
+    "...BB..BB...",
     "............"]}
 };
 

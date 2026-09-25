@@ -66,7 +66,7 @@ const WDFx={
     setTimeout(()=>{ try{ d.remove(); }catch(e){} },2400);
   },
 
-  /* 任务交付：完成印章 + 修行/铜钱飘字 + 金粒子 */
+  /* 任务交付：完成印章 + 修行/灵铢飘字 + 金粒子 */
   questDone(xp,coin){
     const l=layer(), s=document.createElement("div");
     s.className="fxseal";
@@ -75,13 +75,13 @@ const WDFx={
     setTimeout(()=>{ try{ s.remove(); }catch(e){} },1700);
     this.burst(["#ffd23f","#7fff7f"],14);
     this.float("+"+(xp||0)+" 修行","gold",50,30);
-    this.float("+"+(coin||0)+" 铜钱","cy",56,42);
+    this.float("+"+(coin||0)+" 灵铢","cy",56,42);
   },
 
-  /* 铜钱变动（集市买入为负数） */
+  /* 灵铢变动（集市买入为负数） */
   coinGain(n){
     if(!n) return;
-    this.float((n>0?"+":"")+n+" 铜钱",n>0?"gold":"",50,34);
+    this.float((n>0?"+":"")+n+" 灵铢",n>0?"gold":"",50,34);
   }
 };
 
