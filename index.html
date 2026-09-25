@@ -97,6 +97,20 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .plotcorridor .msg{margin:6px 0 2px}
 /* v52 R3：任务开场 cue 气泡（状态/安排/余量/预告/激励五行） */
 .cue-banner{white-space:pre-line;line-height:1.7;border-left:3px solid var(--neon);background:rgba(185,138,63,.10);font-size:13px}
+/* v58c：纪日索引卡（云汀手札，一纪日一张，逐任务点选） */
+.qindex{border:2px solid var(--neon);background:var(--bg);margin-top:6px;padding:10px 12px;max-width:100%;box-shadow:0 3px 0 rgba(60,45,25,.18)}
+.qindex .qihd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px}
+.qindex .qititle{font-weight:600;font-size:14px;color:var(--neon);letter-spacing:.06em}
+.qindex .qiprog{font-size:12px;color:var(--gold);white-space:nowrap}
+.qindex .qicue{font-size:12.5px;line-height:1.7;color:var(--fg2);border-left:3px solid var(--gold);background:rgba(185,138,63,.08);padding:4px 8px;margin-bottom:8px}
+.qindex .qirow{display:flex;align-items:center;gap:10px;padding:7px 2px;border-top:1px dashed var(--border)}
+.qindex .qirow.done{opacity:.6}
+.qindex .qirow.done .qin::after{content:" ✓";color:var(--ok)}
+.qindex .qidot{width:18px;text-align:center;color:var(--gold);flex:none}
+.qindex .qiinfo{flex:1;min-width:0}
+.qindex .qin{font-size:13.5px;color:var(--fg)}
+.qindex .qim{font-size:11.5px;color:var(--dim);margin-top:1px}
+.qindex .qibtn{flex:none}
 /* v52 R6：吟游修习室 站/段/句 三层 */
 .osec{border:1px solid var(--border);border-radius:4px;margin:6px 0;background:var(--bg2)}
 .osec.passed{border-color:var(--ok)}
@@ -441,6 +455,16 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 .loadmeter.heavy .lmfill{background:linear-gradient(90deg,var(--gold),var(--danger))}
 .boardgroup{margin:14px 0}
 .boardgroup>h3{font-size:14px;color:var(--cyber);margin:0 0 6px;letter-spacing:.1em;text-shadow:0 1px 0 rgba(60,45,25,.35);border-left:3px solid var(--neon);padding-left:8px}
+/* v58c：本周任务·纪日分组 */
+.gdgroup{border:1px solid var(--border);border-radius:6px;margin:8px 0;background:var(--bg2)}
+.gdgroup.cur{border-color:var(--neon);box-shadow:0 0 10px rgba(185,138,63,.18)}
+.gdgroup.done{opacity:.7}
+.gdgroup.empty{opacity:.55;border-style:dashed}
+.gdhead{display:flex;align-items:baseline;justify-content:space-between;padding:7px 10px;font-size:13px}
+.gdgroup.cur .gdname{color:var(--neon);font-weight:600;letter-spacing:.08em}
+.gdgroup .gdprog{font-size:11.5px;color:var(--gold)}
+.gdgroup.empty .gdkind{font-size:11.5px;color:var(--dim)}
+.gdgroup .qrow{margin:0;border-width:0;border-top:1px solid var(--border);background:transparent}
 .qrow{display:flex;align-items:center;gap:10px;border:1px solid var(--border);background:var(--bg);padding:8px 10px;margin:6px 0;flex-wrap:wrap}
 .qrow.done{opacity:.6;border-color:var(--border)}
 .qrow.active{border-color:var(--neon);box-shadow:0 2px 0 rgba(60,45,25,.16)}
@@ -1073,7 +1097,8 @@ function advanceNaturalDay(){
   const oldDay=st.day||1;
   st.day=Math.min(45, oldDay+natAdv);
   st.fogDay=Math.max(1, (st.fogDay||45)-natAdv);
-  st.gameDay=((st.day-1)*5)+1;
+  /* v58c：跨自然日后按完成度对齐当前纪日，不再恒置周一 */
+  syncGameDay();
   /* v53 修复：离线推进自然日时，同步推进任务解锁自然日——现实时间已流逝，
      玩家不能再被"未做前置任务"锁死在昨天，任务链应解锁到当前自然日 */
   if((st.unlocked||1) < st.day) st.unlocked=st.day;
@@ -1088,6 +1113,8 @@ function advanceNaturalDay(){
       addPlotPoints("naturalDay", d.toISOString().slice(0,10));
     }
   }catch(e){}
+  /* v58c：推进到新的一周后，补发当前纪日手札开场（更早纪日静默回填） */
+  try{ ensureGdMilestone(st.day); }catch(e){}
   /* v55 批3-⑦⑧：跨阶段时触发 R1 群聊指导与传译出题（异步，不阻塞） */
   try{ r1StageTrigger(oldDay, st.day); }catch(e){}
   save();
@@ -2307,6 +2334,45 @@ function checkLevelUp(){ const lv=level(); if(lv>lastLv){ record("等级提升",
 function title(){ return st.unlocked>=45?"金榜引路人":st.unlocked>=42?"问道行者·终章":st.unlocked>=31?"遗迹探索者":st.unlocked>=21?"行会行者":st.unlocked>=9?"藏经阁学徒":"结界巡礼者"; }
 const qDone=id=>!!st.done[id];
 function dayProg(d){ let n=0; d.quests.forEach(q=>{if(qDone(q.id))n++;}); return {n,all:d.quests.length}; }
+/* ==================== v58c：纪日（游戏日）工具层 ====================
+   时间模型：1 自然日（界面的「第X周」）= 5 纪日 = 周一~周五；
+   周一/二/三正修、周四轻修（多为空）、周五验界。任务以纪日为单位分配。 */
+const GD_LABELS=["周一","周二","周三","周四","周五"];
+function gdAbs(day,gi){ return (day-1)*5+gi+1; }          /* 纪日绝对编号 1~225 */
+function gdKind(day,gi){
+  const d=byDay[day]; const g=d&&d.gameDays&&d.gameDays[gi];
+  return g?g.kind:(gi<=2?"study":"rest");
+}
+/* 某纪日任务：优先 d.gameDays 回填的 id 表（含 BOSS/GB），缺数据时按 q.gd/id 前缀兜底 */
+function gdQuests(day,gi){
+  const d=byDay[day]; if(!d) return [];
+  const g=d.gameDays&&d.gameDays[gi];
+  let ids=(g&&Array.isArray(g.quests))?g.quests.slice():null;
+  if(!ids){
+    const gd=gdAbs(day,gi), pre="R"+day+"-"+gi+"-";
+    ids=(d.quests||[]).filter(q=>(q.gd===gd)||(typeof q.id==="string"&&q.id.indexOf(pre)===0)).map(q=>q.id);
+  }
+  return ids.map(id=>QMAP[id]).filter(Boolean);
+}
+function gdProg(day,gi){ const qs=gdQuests(day,gi); let n=0; qs.forEach(q=>{if(qDone(q.id))n++;}); return {n,all:qs.length,quests:qs}; }
+function gdAllDone(day,gi){ const p=gdProg(day,gi); return p.all>0&&p.n===p.all; }
+/* 本周当前纪日：第一个「有任务且未全清」的 gi；全周完成返回 null（空周四自动跳过） */
+function curGiOfDay(day){
+  const d=byDay[day]; if(!d) return null;
+  for(let gi=0;gi<5;gi++){ const p=gdProg(day,gi); if(p.all>0&&p.n<p.all) return gi; }
+  return null;
+}
+/* 当前应处于的纪日绝对编号（HUD 用）；本周全清则停在周五 gd */
+function curGameDay(day){
+  day=day||st.day||1;
+  const gi=curGiOfDay(day);
+  return gi==null?day*5:gdAbs(day,gi);
+}
+function syncGameDay(saveNow){
+  const g=curGameDay(st.day||1);
+  if(st.gameDay!==g){ st.gameDay=g; if(saveNow) save(); }
+  return g;
+}
 function totals(){ let a=0,c=0; DAYS.forEach(d=>{const p=dayProg(d); a+=p.all; c+=p.n;}); return {c,a}; }
 /* v53：本地配比算法——把 784 卡按学习性质分配到当日各游戏日。
    输出当日（自然日=周）5 个游戏日的配比，供 cue 对白与任务单使用。
@@ -2383,26 +2449,27 @@ function buildStream(){
     out.push({t:"sysday",x:`次元内 第 ${d.day} 周（纪日 ${(d.day-1)*5+1}~${(d.day-1)*5+5}）· ${(function(){try{return stageOfDay(d.day).name}catch(e){return ""}})()}阶段`});
     /* v52 R6e：当日吟游学习安排（仅当前自然日显示，整合入每日任务流） */
     if(day===(st.day||1)){
-      try{ out.push({t:"sys",x:"🎙️ 今日吟游："+oralPlanOf(day).label}); }catch(e){}
-      try{ const est=rtDayEstimate(day); if(est>0) out.push({t:"sys",x:"⏳ 今日预估约 "+est+" 分钟——量力而行，随时可歇。"}); }catch(e){}
+      try{ out.push({t:"sys",x:"🎙️ 本周吟游："+oralPlanOf(day).label}); }catch(e){}
+      try{ const gi=curGiOfDay(day); const est=gi==null?0:rtGdEstimate(day,gi);
+        if(est>0) out.push({t:"sys",x:"⏳ "+(gi!=null?GD_LABELS[gi]+"预估约 ":"本周剩余约 ")+est+" 分钟——量力而行，随时可歇。"});
+      }catch(e){}
     }
     if(hasUndone) out.push({t:"npc",npc:d.npc,x:d.line});
-    d.quests.forEach(q=>{
-      const un=questUnlocked(q), done=qDone(q.id);
-      if(done){
-        out.push({t:"sys",x:`✓ ${q.name} 已完成 · +${q.xp}修行 +${q.coin}灵铢`,qid:q.id});
-        return;
-      }
-      if(un){
-        /* v58b：开场 cue 只挂「当前第一件待办」——同日十几张卡各挂一条既轰炸对话流，
-           还会触发十几次后台 AI 预热；其余卡只显示任务卡本身。下一件待办随完成自然顶上。 */
-        const aq=firstActiveQuest();
-        if(aq&&aq.id===q.id){
-          out.push({t:"npc",npc:q.npc,x:pubLine(q,d),kind:"cue"});
-          genQuestCue(q,d); /* 仅为当前待办预热一次（_cueP/缓存幂等），不随每张卡连发生成 */
+    /* v58c：任务以纪日为单位发放——每周只在对话流放「当前纪日」一张索引卡，
+       卡内逐任务点选进入、进度实时更新；不再一次性铺开当周 18 张卡。 */
+    if(day===(st.day||1)){
+      const gi=curGiOfDay(day);
+      if(gi!=null){
+        const gd=gdAbs(day,gi);
+        if(st.gdIssued&&st.gdIssued[gd]){
+          genGdCue(day,gi); /* 仅当前纪日单点预热（幂等） */
+          out.push({t:"qindex",day,gi});
         }
-        out.push({t:"quest",qid:q.id});
       }
+    }
+    /* 已完成任务保留可折叠回执行（回看入口）；未完成任务不再逐条上信息流 */
+    d.quests.forEach(q=>{
+      if(qDone(q.id)) out.push({t:"sys",x:`✓ ${q.name} 已完成 · +${q.xp}修行 +${q.coin}灵铢`,qid:q.id});
     });
     if(prog.n===prog.all&&prog.all>0){
       out.push({t:"sys",x:`次元内第 ${d.day} 周修行圆满（${prog.all}/${prog.all}）`});
@@ -2658,11 +2725,92 @@ async function genQuestCue(q,d){
   delete c[q.id]._cueP;
 }
 function pubLine(q,d){
-  /* FIX-P4：任务流气泡只播一句激励（完整 cue 由 stage 0 开场对话逐行讲，避免弹窗横幅/气泡/开场对话三遍重复）。
-     v58b：本函数不再触发 AI 预热——预热由 buildStream 对当前待办单点触发、进任务时再兜一次，
-     避免每张卡渲染都连发 API。 */
+  /* v58c：对话流已改为纪日索引卡，单任务 cue 不再上主信息流；保留函数供其它入口复用。 */
   const c=buildQuestCue(q,d);
   return filterNpcText("「"+c.motivate+"」");
+}
+/* ==================== v58c：纪日（游戏日）开场 cue 与里程碑 ==================== */
+const GD_CUE_FALLBACK=[
+  "这一环的事我都誊在手札上了，你挑顺手的先来。",
+  "雾还没散透——这几件，我们一件件来。",
+  "手札在这儿。不急，你想从哪件开始都行。",
+  "今天的活儿不多不少，够我们忙一阵的。",
+  "新的一环。签我理好了，就等你落笔。"
+];
+function gdRec(day,gi){ const gd=gdAbs(day,gi); const c=st.questLines||(st.questLines={}); const k="gd:"+gd; c[k]=c[k]||{}; return {rec:c[k],key:k,gd}; }
+function gdCueOf(day,gi){
+  const {rec}=gdRec(day,gi);
+  return (rec.cueV===CUE_V&&rec.cue)||GD_CUE_FALLBACK[gdAbs(day,gi)%GD_CUE_FALLBACK.length];
+}
+function gdMilestoneText(day,gi){
+  const kind=gdKind(day,gi);
+  const boss=gdQuests(day,gi).some(q=>q.type==="boss");
+  if(boss) return "五日一验——守关大阵起雾了。手札最后一栏，留给你。";
+  if(kind==="rest") return "这一环轻些，走累了就回来坐坐，雾我替你看着。";
+  return "纪日翻到"+GD_LABELS[gi]+"——这一环的事，都在我手札上了。";
+}
+/* 新纪日首次成为当前纪日时，云汀在对话流落一条持久开场（幂等，按 gd 绝对编号）。
+   旧存档首次加载：更早的纪日静默回填，不补发一串历史。 */
+function ensureGdMilestone(day){
+  day=day||st.day||1;
+  const gi=curGiOfDay(day); if(gi==null) return;
+  const gd=gdAbs(day,gi);
+  st.gdIssued=st.gdIssued||{};
+  if(!st._gdBf){
+    for(let dd=1;dd<=day;dd++) for(let k=0;k<5;k++){
+      if(dd===day&&k>=gi) break;
+      const g2=gdAbs(dd,k); if(gdQuests(dd,k).length) st.gdIssued[g2]=1;
+    }
+    st._gdBf=1;
+  }
+  if(!st.gdIssued[gd]){
+    st.gdIssued[gd]=new Date().toISOString();
+    st.dialogue.push({id:"gd_"+gd,role:"npc",npc:"yunting",kind:"gdmilestone",
+      text:gdMilestoneText(day,gi),at:new Date().toISOString(),day});
+    if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+    save();
+    if(typeof view!=="undefined"&&view==="chat") renderChat(true);
+  }
+}
+/* 纪日 cue 生成：云汀以「派发手札」口吻说一小段，过同套红线/跨稿去重/双稿重拟。
+   内容边界按该纪日任务构成（验界/修诵/理经/传译/问契），不报数量。 */
+async function genGdCue(day,gi){
+  if(!dsReady()) return;
+  const {rec,gd}=gdRec(day,gi);
+  if(rec._cueP||(rec.cueV===CUE_V&&rec.cue)) return;
+  if(rec.cueV!==CUE_V) delete rec.cue;
+  rec._cueP=true;
+  const clean=raw=>String(raw||"").trim().replace(/^[「『"“\s]+|[」』"”\s]+$/g,"").replace(/\s*\n+\s*/g," ").slice(0,90);
+  try{
+    const npcName="云汀";
+    const qs=gdQuests(day,gi);
+    const kinds=[...new Set(qs.map(q=>({c:"修诵",d:"传译",b:"问契",rev:"消印",exam:"验界"}[q.rtCat]||"理经")))];
+    const isBoss=qs.some(q=>q.type==="boss");
+    const recent=Object.keys(st.questLines||{}).filter(k=>k.indexOf("gd:")===0)
+      .map(k=>st.questLines[k]).filter(r=>r.cueV===CUE_V&&r.cue).slice(-6).map(r=>r.cue);
+    const sys="你是日式RPG《问道之旅·四十五日》里的圣女「云汀」，你把这一纪日要做的事誊在手札上，当面递给同伴。"
+      +"请说一小段开场白（1-2句，≤60字）：先一个画面或此刻状态，再说「今天这一环有这些事，你挑顺手的来」，不催促、不命令。"
+      +"自称只用「我」，台词里不许出现「云汀」二字；禁止报数量、耗时、任务编号；不要每条都写「能陪我…吗/你在我就…」；"
+      +"请求/陈述/自言自语换着来。雾怪只用侵蚀/蚕食，禁「咬/啃/撕」。禁AI腔、教师腔、客服腔、半文半白。";
+    const scene=isBoss
+      ?"今天是周五验界：守关大阵起雾，她（云汀）把手札最后一栏递给他，语气比平时郑重，但不许喊口号、不许说「你一定可以」。"
+      :"这一环包含的事类（心里有数即可，不许原样报类别清单和数量）："+kinds.join("、")+"。";
+    const user="纪日：第"+day+"周 · "+GD_LABELS[gi]+"（纪日总序号"+gd+"）。\n"+scene
+      +(recent.length?("\n最近的开场（开头/说法/收尾不许撞）：\n"+recent.map((x,i)=>"〔"+(i+1)+"〕"+x).join("\n")):"")
+      +"\n只输出这一小段（≤60字），不要解释。";
+    const gate=t=>cueRedFlags(filterNpcText(t),npcName,recent);
+    let t=clean(await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"questcue"}));
+    let fl=t?gate(t):[];
+    if(t&&fl.length){
+      console.warn("[gd cue] 红线未过，重拟一次：",fl,t);
+      const t2=clean(await dsChat([{role:"system",content:sys},{role:"user",
+        content:user+"\n\n上一稿触犯红线：「"+fl.join("、")+"」。换一个完全不同的开头、说法和收尾，重写（≤60字）。"}],{kind:"questcue"}));
+      const f2=t2?gate(t2):[];
+      if(t2&&!f2.length) t=t2; else { console.warn("[gd cue] 两次未过，用本地兜底：",f2); t=""; }
+    }
+    if(t){ rec.cue=t; rec.cueV=CUE_V; save(); }
+  }catch(e){ /* 本地兜底 */ }
+  delete rec._cueP;
 }
 function doneLine(q,d){
   const c=st.questLines||(st.questLines={});
@@ -2702,6 +2850,7 @@ function hash(s){ let h=0; for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>
 const game=$("#game");
 /* v57：主渲染外层保护——任一子 render 抛错时不再白屏，落「雾气迷眼」兜底面板，可一键重聚 */
 function render(){
+  try{ syncGameDay(false); }catch(e){} /* v58c：HUD 纪日号随完成度对齐（不落盘，写路径另有 save） */
   try{ _renderGame(); }
   catch(e){
     console.error('[render]',e);
@@ -2922,6 +3071,28 @@ function refineAction(id,q,extra){
     m.text=t; save(); renderChat();
   }).catch(()=>{});
 }
+/* v58c：玩家从纪日索引卡「接取」任务——幂等落一条玩家行动（模拟玩家机制保留），
+   AI 在线时异步润色为第一人称接取语，≤30字，不装腔、不喊口号。 */
+function acceptQuestLine(q){
+  st.accepted=st.accepted||{};
+  if(st.accepted[q.id]||qDone(q.id)) return;
+  st.accepted[q.id]=new Date().toISOString();
+  const id=pushAction("我接了「"+qdn(q)+"」，这就去。");
+  save();
+  if(dsReady()){
+    dsChat([
+      {role:"system",content:"你是游戏『问道之旅·四十五日』的玩家本人，刚从云汀的纪日手札上点选接下一环。用一句第一人称口语表达你接下这件事，≤30字，像顺手在群里回的话；不装腔、不喊口号、不发誓、不向NPC喊话、不感谢、不念编号与类型术语。只输出这句话本身，不要引号。"},
+      {role:"user",content:"接下的事：「"+qdn(q)+"」（"+q.tlabel+"）。参考：我接了「"+qdn(q)+"」，这就去。"}
+    ],{kind:"polish"}).then(t=>{
+      t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,50);
+      if(!t) return;
+      const fl=cueRedFlags(filterNpcText(t),""); /* 玩家语不查自呼姓名，但拦命令/考试词等 */
+      if(fl.length) return;
+      const m=st.dialogue.find(x=>x.id===id); if(!m) return;
+      m.text=t; save(); if(typeof view!=="undefined"&&view==="chat") renderChat(true);
+    }).catch(()=>{});
+  }
+}
 /* 任务卡 HTML 构建器：流内任务卡与置底当前任务卡共用同一渲染 */
 function qcardHtml(q,firstActiveId){
   const done=qDone(q.id); const un=questUnlocked(q);
@@ -2931,6 +3102,34 @@ function qcardHtml(q,firstActiveId){
     <div class="qg">${esc(q.goal)}</div>
     <div class="qr"><span>+${q.xp} 修行</span><span>+${q.coin} 灵铢</span><span class="dur">${fmtDur(q.dur)}</span>
     <span style="margin-left:auto">${done?"<span class='donetag'>✓ 已完成</span><button class='btn sm ghost' data-open='"+q.id+"'>回看</button>":un?`<button class="btn sm primary" data-open="${q.id}">进入</button>`:"🔒 前序未完"}</span></div>
+  </div>`;
+}
+/* v58c：纪日索引卡——云汀手札，一纪日一张，卡内逐任务点选，进度实时现算 */
+function qindexHtml(day,gi){
+  const p=gdProg(day,gi), qs=p.quests;
+  const gd=gdAbs(day,gi), isBoss=qs.some(q=>q.type==="boss");
+  const cue=filterNpcText(gdCueOf(day,gi));
+  const rows=qs.map(q=>{
+    const done=qDone(q.id), un=questUnlocked(q);
+    const dot=done?"✓":un?"▶":"🔒";
+    const btn=done
+      ?`<button class="btn sm ghost" data-qenter="${q.id}">回看</button>`
+      :un?`<button class="btn sm primary" data-qenter="${q.id}">进入</button>`
+      :`<span style="font-size:11px;color:var(--dim)">前序未完</span>`;
+    return `<div class="qirow ${done?"done":""}${un&&!done?" active":""}">
+      <span class="qidot">${dot}</span>
+      <div class="qiinfo"><div class="qin">${esc(q.name)}</div>
+      <div class="qim">${esc(q.tlabel)} · +${q.xp}修行 +${q.coin}灵铢 · ${fmtDur(q.dur)}</div></div>
+      <span class="qibtn">${btn}</span>
+    </div>`;
+  }).join("");
+  return `<div class="qindex now" data-gd="${gd}">
+    <div class="qihd">
+      <span class="qititle">云汀的手札 · ${GD_LABELS[gi]}${isBoss?" · 验界":""}</span>
+      <span class="qiprog">${p.n}/${p.all}</span>
+    </div>
+    <div class="qicue">「${esc(cue)}」</div>
+    <div class="qilist">${rows}</div>
   </div>`;
 }
 function renderChat(keep){
@@ -3011,6 +3210,13 @@ function renderChat(keep){
       return `<div class="msg cuemsg"><div class="avatar">${av}</div><div class="body">
       <div class="name"><span class="nl" data-npc="${r.npc}" title="点击与${esc(dn)}对话">${esc(dn)}</span>${dt?" · "+esc(dt):""} <span style="color:var(--neon);font-size:.85em">· 开场 cue</span></div>
       <div class="bubble cue-banner">${esc(filterNpcText(r.x))}</div></div></div>`; }
+    if(r.t==="npc"&&r.kind==="gdmilestone"){ const n=resolveNpc(r.npc)||NPC.yunting;
+      const dn=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(r.npc,n.name):n.name;
+      const navSrc=(window.WDCfg&&WDCfg.avatarURL(r.npc))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):"");
+      const av=navSrc?`<img class="pixav" src="${navSrc}" alt="">`:esc(dn[0]);
+      return `<div class="msg plotmsg"><div class="avatar">${av}</div><div class="body">
+      <div class="name" style="color:var(--gold)"><span class="nl" data-npc="${r.npc}">${esc(dn)} · 新纪日</span></div>
+      <div class="bubble" style="border-color:var(--neon)">${esc(filterNpcText(r.x))}</div></div></div>`; }
     if(r.t==="npc"){ const n=resolveNpc(r.npc)||Object.values(WD_NEW_ROLES)[0];
       const dn=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(r.npc,n.name):n.name;
       const dt=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(r.npc,n.title||""):(n.title||"");
@@ -3029,6 +3235,13 @@ function renderChat(keep){
       <div class="bubble">${esc(r.x)}</div></div><div class="avatar uav">${uav}</div></div>`; }
     if(r.t==="quest"){ const q=QMAP[r.qid]; if(!q) return "";
       return `<div class="msg"><div class="avatar">　</div><div class="body" style="max-width:100%">${qcardHtml(q,firstActive)}</div></div>`; }
+    /* v58c：纪日索引卡——云汀手札（头像 + 名称行 + 索引卡主体） */
+    if(r.t==="qindex"){
+      const navSrc=(window.WDCfg&&WDCfg.avatarURL("yunting"))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL("yunting"):"");
+      const av=navSrc?`<img class="pixav" src="${navSrc}" alt="" onerror="this.onerror=null;this.src=''">`:"云";
+      return `<div class="msg cuemsg"><div class="avatar">${av}</div><div class="body" style="max-width:100%">
+      <div class="name"><span class="nl" data-npc="yunting" title="点击与云汀对话">云汀</span> · 圣女 <span style="color:var(--neon);font-size:.85em">· ${GD_LABELS[r.gi]}任务手札</span></div>
+      ${qindexHtml(r.day,r.gi)}</div></div>`; }
     return "";
   }).join("");
   if(TYPING){
@@ -3036,14 +3249,13 @@ function renderChat(keep){
       <div class="name"><b>${TYPING.multi?"诸位 NPC":"NPC"}</b> 正在思考…</div>
       <div class="bubble typing"><span></span><span></span><span></span></div></div></div>`;
   }
-  /* 置底当前任务卡（需求2a）：最新任务信息始终在流最下端，保持视觉优先可见 */
+  /* v58c：置底单任务卡已由对话流中的「纪日索引卡」取代（一纪日一张，含全部任务与进度）；
+     仅当本周无待办（索引卡不渲染）时，保留一个轻量提示条。 */
   const aqPin=QMAP[firstActive];
-  if(aqPin){
-    html+=`<div class="pinwrap" id="pinQuest"><div class="pinhead">⬇ 当前任务</div>${qcardHtml(aqPin,firstActive)}</div>`;
-  }else{
+  if(!aqPin){
     const pd=byDay[st.day]||byDay[1], pp=dayProg(pd);
-    html+=`<div class="pinwrap idle" id="pinQuest"><div class="pinhead">⬇ 当前无在途关卡</div>
-      <div class="pintip">${pp.all>0&&pp.n===pp.all?"今日 "+pp.n+"/"+pp.all+" 圆满——去巡夜温故，或上星盘清错题。":"此刻没有可进入的关卡——去「任务」页纵览全程，先破前序解锁下一环。"}</div></div>`;
+    html+=`<div class="pinwrap idle" id="pinQuest"><div class="pinhead">⬇ 本周无在途关卡</div>
+      <div class="pintip">${pp.all>0&&pp.n===pp.all?"本周 "+pp.n+"/"+pp.all+" 圆满——去巡夜温故，或上星盘清错题。":"此刻没有可进入的关卡——去「任务」页纵览全程，先破前序解锁下一环。"}</div></div>`;
   }
   /* v52 R4：剧情回廊——独立折叠区，从 st.plotLines 渲染剧情流（与行为流分离） */
   const plotStream=buildPlotStream();
@@ -3068,6 +3280,10 @@ function renderChat(keep){
 function bindChat(){
   document.querySelectorAll("[data-open]").forEach(b=>{
     b.onpointerdown=e=>{ e.stopPropagation(); openQuest(b.dataset.open); };
+  });
+  /* v58c：纪日索引卡行按钮 → 进入任务（接取对白在 openQuest 内幂等落流） */
+  document.querySelectorAll("[data-qenter]").forEach(b=>{
+    b.onpointerdown=e=>{ e.stopPropagation(); SFX.tap(); openQuest(b.dataset.qenter); };
   });
   document.querySelectorAll(".qcard:not(.done)").forEach(c=>{
     if(c.dataset.q&&questUnlocked(QMAP[c.dataset.q])) c.onpointerdown=()=>openQuest(c.dataset.q);
@@ -3265,7 +3481,7 @@ function openQuest(qid){
   if(window.WDMem&&!readonly){ WDMem.enter(q.npc,q.id); if(questTimer)clearInterval(questTimer);
     questTimer=setInterval(()=>WDMem.tick(0.5),30000); }
   /* v29（FIX-B/D-6）：主动触发器埋点——进入未完成任务时记录关卡进入时间（供滞留催办规则） */
-  if(!readonly){ st.questEnterAt=new Date().toISOString(); save(); }
+  if(!readonly){ st.questEnterAt=new Date().toISOString(); acceptQuestLine(q); /* v58c：首次接取幂等落流 */ save(); }
   let quizPerfect=(quiz.length===0);   // 本次试炼是否全对（无题任务视为一次通关）
   const ov=document.createElement("div"); ov.className="ov";
   let pageIdx=0;
@@ -3359,17 +3575,25 @@ function openQuest(qid){
      编进"残页念名字、封印贴回去"套路，主题跑偏。现改为：场景心境 → 今日安排 →
      余量·预告 → 一句激励，与任务卡顶部 cue banner 同源（buildQuestCue）。 */
   let dialogShown=0, dialogTotal=0, dialogTimer=null;
+  /* v58c：任务所属纪日（q.gd 优先，其次从 id R{day}-{gi}- 解析） */
+  function questGdGi(){
+    if(q.gd) return {day:q.day, gi:Math.max(0,Math.min(4,q.gd-((q.day||st.day||1)-1)*5-1))};
+    const m=/^R\d+-(\d+)-/.exec(q.id||"");
+    return {day:q.day, gi:m?+m[1]:0};
+  }
   function renderStageDialog(){
     dialogDone=false; dialogShown=0; dialogTotal=0;
     if(dialogTimer){ clearTimeout(dialogTimer); dialogTimer=null; }
     const cue=buildQuestCue(q);
-    genQuestCue(q); /* 后台预热 AI 整段 cue，下一轮进关即命中缓存 */
+    const {day:gdDay,gi:gdGi}=questGdGi();
+    genGdCue(gdDay,gdGi); /* 纪日 cue 后台预热（幂等） */
+    const gdLine=gdCueOf(gdDay,gdGi);
     const lines=[
       {html:`<div style="color:var(--dim);font-size:12px;margin-bottom:12px;line-height:1.7;font-style:italic">${esc(cue.status)}</div>`},
       {html:dialNpcLine(cue.overview)},
       {html:dialNpcLine(cue.plan)},
       {html:dialNpcLine(cue.remain+" · "+cue.next)},
-      {html:dialNpcLine("「"+cue.motivate+"」")},
+      {html:dialNpcLine("「"+gdLine+"」")},
     ];
     dialogTotal=lines.length;
     stageHost.innerHTML=`<div class="qdial" style="padding:6px;display:flex;flex-direction:column;height:100%">
@@ -4329,6 +4553,8 @@ async function _settleQuestInner(q,quizPerfect,ov){
   SFX.win();
   if(ov) ov.remove();
   installRuntimePlan(); /* v54：任务完成后重排后续日程（游标前进、幂等，已完成槽位快照不动） */
+  syncGameDay();       /* v58c：纪日指针随完成度推进（HUD 纪日号） */
+  ensureGdMilestone(st.day); /* 新纪日首次成为当前纪日时，云汀落一条持久开场 */
   checkAch(); checkLevelUp(); save(); render();
   toast(doneLine(q,byDay[q.day])||"完成");
   /* —— 第二阶段（异步，不阻塞 UI）：导演编排 NPC 反应 + 云汀润色 + 剧情过场 ——
@@ -5397,6 +5623,11 @@ function buildRuntimePlan(day){
 function rtDayEstimate(day){
   const d=byDay[day||st.day||1]; if(!d) return 0;
   let m=0; (d.quests||[]).forEach(q=>{ if(!qDone(q.id)) m+=(q.dur||0); });
+  return m;
+}
+/* v58c：某纪日未完成部分时间预估（对话流/任务页当前纪日口径） */
+function rtGdEstimate(day,gi){
+  let m=0; gdQuests(day,gi).forEach(q=>{ if(!qDone(q.id)) m+=(q.dur||0); });
   return m;
 }
 function installRuntimePlan(){
@@ -7995,7 +8226,9 @@ function intro(){
   };
   begin.onpointerdown=()=>{
     if(!dsReady()) aiHealth="off"; /* 离线模式：本地兜底链全程可通关 */
-    ov.remove(); save();
+    ov.remove();
+    syncGameDay(); ensureGdMilestone(st.day); /* v58c：进入游戏即发周一纪日手札 */
+    save();
     render(); /* 先建主界面骨架（旧流程由 finishPrologue 负责渲染） */
     /* v56：删除旧版序章播放器，降临后直接触发云汀「arrive」过场进入游戏 */
     triggerCutscene("arrive");
@@ -8028,11 +8261,12 @@ function boot(){
   if(window.WDQuiz) WDQuiz.init();
   WDChat.init({D,NPC,getSt:()=>st,save,dsChat,dsReady,level,actTopic:npcActTopic,quest:firstActiveQuest});
   const has=load();
-  if(!has){ st=defState(); reconcile(); installRuntimePlan(); save(); intro(); }
+  if(!has){ st=defState(); reconcile(); installRuntimePlan(); syncGameDay(); save(); intro(); }
   else{
     if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,45); if(st.day>st.unlocked) st.unlocked=st.day; save();
     /* v54 批 1：运行时排程安装（必须在 render 之前重建 DAYS/QMAP） */
     installRuntimePlan();
+    syncGameDay();
     /* v48：三套时钟——离线按自然日推进游戏日/雾涌日，恢复心气灵力 */
     ensureClocks();
     const elapsed=advanceNaturalDay();
@@ -8163,26 +8397,43 @@ function renderBoard(){
   const totalMin=qs.reduce((s,q)=>s+q.dur,0);
   const memPts=dayMemoryPoints(st.day);
   const prog=dayProg(d);
-  // 负载指数：时长 60%（基准 180 分钟）+ 记忆体量 40%（基准 25 考点）
-  const load=Math.min(160, Math.round(totalMin/180*60 + memPts/25*40));
+  /* v58c：负荷/预估以当前纪日为口径（整周总量另在纪日组头汇总） */
+  const curGi=curGiOfDay(st.day);
+  const curGdMin=curGi==null?0:rtGdEstimate(st.day,curGi);
+  const load=Math.min(160, Math.round(curGdMin/60*60 + memPts/25*40));
   const heavy=load>100;
-  const active=qs.find(q=>qStage(q).key==="active");
+  const active=curGi==null?null:gdQuests(st.day,curGi).find(q=>qStage(q).key==="active");
   const oral=qs.find(q=>q.type==="oral");
 
-  // 今日任务行
-  const rows=qs.map(q=>{
-    const stg=qStage(q);
-    const enter = stg.key==="active"
-      ? `<button class="btn sm primary" data-enter="${q.id}">进入</button>`
-      : stg.key==="done"
-      ? `<button class="btn sm ghost" data-enter="${q.id}">回看</button>`
-      : `<span style="font-size:11px;color:var(--dim)">前序未完</span>`;
-    return `<div class="qrow ${stg.key}">
-      <span class="qstage">${stg.label}</span>
-      <div class="qinfo"><div class="qn">${esc(q.name)}</div>
-      <div class="qmeta">${esc(q.tlabel)} · ${fmtDur(q.dur)}${q.type==="oral"?" · 含英文导游词背诵":""}</div></div>
-      <span class="qrew">+${q.xp}修行 +${q.coin}灵铢</span>
-      ${enter}
+  /* 本周任务：按周一~周五（纪日）分组；当前纪日高亮，空纪日灰显 */
+  const gdGroups=[0,1,2,3,4].map(gi=>{
+    const gqs=gdQuests(st.day,gi), gp=gdProg(st.day,gi);
+    const kind=gdKind(st.day,gi), isCur=gi===curGi;
+    const isBoss=gqs.some(q=>q.type==="boss");
+    if(!gqs.length){
+      return `<div class="gdgroup empty">
+        <div class="gdhead"><span class="gdname">${GD_LABELS[gi]}</span><span class="gdkind">${kind==="rest"?"轻修 · 可约会回访":"无安排"}</span></div>
+      </div>`;
+    }
+    const rows=gqs.map(q=>{
+      const stg=qStage(q);
+      const enter = stg.key==="active"
+        ? `<button class="btn sm primary" data-enter="${q.id}">进入</button>`
+        : stg.key==="done"
+        ? `<button class="btn sm ghost" data-enter="${q.id}">回看</button>`
+        : `<span style="font-size:11px;color:var(--dim)">前序未完</span>`;
+      return `<div class="qrow ${stg.key}">
+        <span class="qstage">${stg.label}</span>
+        <div class="qinfo"><div class="qn">${esc(q.name)}</div>
+        <div class="qmeta">${esc(q.tlabel)} · ${fmtDur(q.dur)}${q.type==="oral"?" · 含英文导游词背诵":""}</div></div>
+        <span class="qrew">+${q.xp}修行 +${q.coin}灵铢</span>
+        ${enter}
+      </div>`;
+    }).join("");
+    return `<div class="gdgroup${isCur?" cur":""}${gp.n===gp.all?" done":""}">
+      <div class="gdhead"><span class="gdname">${GD_LABELS[gi]}${isBoss?" · 验界":kind==="rest"?" · 轻修":" · 正修"}</span>
+      <span class="gdprog">${gp.n}/${gp.all}${isCur?" · 当前":gp.n===gp.all?" · ✓ 已清":""}</span></div>
+      ${rows}
     </div>`;
   }).join("");
 
@@ -8211,16 +8462,16 @@ function renderBoard(){
   stream.innerHTML=`
   <div class="sys daysep">行者手札 · 任务卷 · 次元内第${st.day}周 · 纪日${(st.day-1)*5+1}~${(st.day-1)*5+5}</div>
   <div class="loadmeter ${heavy?"heavy":""}">
-    <div class="lmrow"><span>今日负荷（时长 ${totalMin} 分钟 · 记忆点 ${memPts} 个）</span><span>${heavy?"偏重，可拆两段":"适中"} ${load}%</span></div>
+    <div class="lmrow"><span>${curGi!=null?GD_LABELS[curGi]+"负荷":"本周已圆满"}（剩余约 ${curGdMin} 分钟 · 记忆点 ${memPts} 个）${totalMin!==curGdMin?` · 全周 ${totalMin} 分钟`:""}</span><span>${heavy?"偏重，可拆两段":"适中"} ${load}%</span></div>
     <div class="lmtrack"><div class="lmfill" style="width:${Math.min(100,load)}%"></div></div>
-    <div class="ad">任务量按时长与记忆体量综合估算 · 完成进度 ${prog.n}/${prog.all}</div>
+    <div class="ad">任务按纪日（周一~周五）发放 · 本周完成 ${prog.n}/${prog.all}</div>
   </div>
   <div class="boardgroup"><h3>快捷入口</h3>
     <div class="entrygrid">${entryHtml}</div>
     <div class="ad">不必拘于一条线索——从任一法器切入，系统据你所选指引后续内容。</div>
   </div>
-  <div class="boardgroup"><h3>今日任务（${prog.n}/${prog.all}）</h3>${rows}</div>
-  <div class="boardgroup"><h3>任务树 · 全程（阶段 / 周日 / 任务，点击三角折叠）</h3>
+  <div class="boardgroup"><h3>本周任务 · 周一~周五（${prog.n}/${prog.all}）</h3>${gdGroups}</div>
+  <div class="boardgroup"><h3>任务树 · 全程（阶段 / 周 / 纪日 / 任务，点击三角折叠）</h3>
     ${treeHtml}
   </div>`;
 

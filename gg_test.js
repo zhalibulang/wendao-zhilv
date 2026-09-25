@@ -826,28 +826,30 @@ const driver=`
     /* v35：有错时的复盘引导由 refineYunheng(AI)生成；无 AI 时保留占位。验证函数已挂载。 */
     if(typeof refineYunheng!=='function')throw new Error('refineYunheng 应存在');
   });
-  run('对话流置底当前任务卡（无打字态时位于末尾）',()=>{
-    reset(); st.unlocked=1;
+  run('v58c：对话流当前纪日索引卡（取代旧置底单卡）',()=>{
+    reset(); st.unlocked=1; reconcile(); installRuntimePlan();
+    st.gdIssued={}; st._gdBf=1; st.gdIssued[gdAbs(1,0)]=1;
     let captured=null; const oqs=document.querySelector;
     document.querySelector=function(s,el){ const r=oqs.call(document,s,el); if(s==='#stream') captured=r; return r; };
     try{ renderChat(); }finally{ document.querySelector=oqs; }
     if(!captured)throw new Error('未捕获#stream');
     const h=captured.innerHTML;
-    if(!h.includes('pinwrap')||!h.includes('当前任务'))throw new Error('置底任务卡缺失');
+    if(!h.includes('qindex')||!h.includes('任务手札'))throw new Error('纪日索引卡缺失');
     const aq=firstActiveQuest();
     if(!aq)throw new Error('首日应有在途任务');
-    if(!h.includes('data-q="'+aq.id+'"'))throw new Error('置底卡未指向当前在途任务');
-    if(h.lastIndexOf('pinwrap')<h.lastIndexOf('statbar'))throw new Error('置底卡应位于流末尾');
+    if(!h.includes('data-qenter="'+aq.id+'"'))throw new Error('索引卡未含当前在途任务进入行');
+    if(h.lastIndexOf('qindex')<h.lastIndexOf('statbar'))throw new Error('索引卡应在状态栏之后的流中');
+    if(h.includes('pinQuest'))throw new Error('旧置底单任务卡应已移除');
   });
-  run('无在途任务时置底卡显示引导',()=>{
+  run('v58c：本周全清时显示无在途提示（保留轻量置底条）',()=>{
     reset();
     for(let day=1;day<=45;day++)for(const q of byDay[day].quests)st.done[q.id]=new Date().toISOString();
     let captured=null; const oqs=document.querySelector;
     document.querySelector=function(s,el){ const r=oqs.call(document,s,el); if(s==='#stream') captured=r; return r; };
     try{ renderChat(); }finally{ document.querySelector=oqs; }
     const h=captured?captured.innerHTML:'';
-    if(!h.includes('当前无在途关卡'))throw new Error('无在途任务时应显示引导置底卡');
-    if(!/巡夜|星盘/.test(h.slice(h.lastIndexOf('pinwrap'))))throw new Error('引导缺巡夜/星盘去向');
+    if(!h.includes('本周无在途关卡'))throw new Error('全清时应显示无在途提示');
+    if(!/巡夜|星盘/.test(h.slice(h.lastIndexOf('pinwrap'))))throw new Error('提示缺巡夜/星盘去向');
   });
   run('已完成任务折叠/展开',()=>{
     reset(); st.unlocked=1;
@@ -1524,7 +1526,7 @@ const driver=`
       ['index.html','wd-chat.js','wd-terms.js','npc-registry.js'].forEach(f=>{
         try{ cnt+=(fs.readFileSync(f,'utf8').match(/啃/g)||[]).length; }catch(e){}
       });
-      if(cnt!==7) throw new Error("源文本「啃」计数异常(期望7处防御性定义): "+cnt);
+      if(cnt!==8) throw new Error("源文本「啃」计数异常(期望8处防御性定义): "+cnt);
       const cueSrc=genQuestCue.toString();
       if(!cueSrc.includes("cueV===CUE_V")) throw new Error("cue 缓存未走版本常量 CUE_V");
       if(!cueSrc.includes("cueRedFlags")) throw new Error("cue 生成缺红线扫描/重拟闭环");
@@ -1590,16 +1592,70 @@ const driver=`
       console.log('PASS  v53 buildQuestCue 六要素完整且无违禁词');
     }catch(e){ errors.push('v53 buildQuestCue => '+e.message); console.log('FAIL  v53 buildQuestCue : '+e.message); }
 
-    /* v58b：对话流开场 cue 只挂当前第一件待办（首日十余张卡不得各挂一条） */
+    /* v58c：对话流按纪日发放——每周仅一张 qindex 索引卡，不再逐任务铺卡 */
     try{
       reset(); reconcile(); installRuntimePlan();
+      st.gdIssued={}; st._gdBf=1; st.gdIssued[gdAbs(1,0)]=1; /* 模拟周一已发布 */
       const stream=buildStream();
       const cues=stream.filter(r=>r&&r.kind==="cue");
-      if(cues.length!==1) throw new Error("当日 cue 气泡应为 1 条（仅当前待办），实际 "+cues.length);
-      const aq=firstActiveQuest();
-      if(!aq||cues[0].npc!==aq.npc) throw new Error("唯一 cue 不属于当前待办 NPC");
-      console.log('PASS  v58b buildStream cue 仅挂当前待办（密度收敛）');
-    }catch(e){ errors.push('v58b cue密度 => '+e.message); console.log('FAIL  v58b cue密度 : '+e.message); }
+      const qi=stream.filter(r=>r&&r.t==="qindex");
+      const questCards=stream.filter(r=>r&&r.t==="quest");
+      if(cues.length!==0) throw new Error("旧版逐任务 cue 应已移除，实际 "+cues.length);
+      if(questCards.length!==0) throw new Error("未完成任务不应再逐条上信息流，实际 "+questCards.length);
+      if(qi.length!==1) throw new Error("当周应有 1 张纪日索引卡，实际 "+qi.length);
+      if(qi[0].day!==1||qi[0].gi!==0) throw new Error("首张索引卡应为周一纪日");
+      /* 卡内 6 个任务行（首日周一 6 环） */
+      const html=qindexHtml(1,0);
+      gdQuests(1,0).forEach(q=>{ if(html.indexOf('data-qenter="'+q.id+'"')<0) throw new Error("索引卡缺任务行 "+q.id); });
+      console.log('PASS  v58c buildStream 纪日索引卡（每周一张·逐任务点选）');
+    }catch(e){ errors.push('v58c qindex => '+e.message); console.log('FAIL  v58c qindex : '+e.message); }
+
+    /* v58c：纪日推导——完成周一全部→指针到周二；全周→null；HUD gameDay 对齐 */
+    try{
+      reset(); reconcile(); installRuntimePlan();
+      if(curGiOfDay(1)!==0) throw new Error("首日当前纪日应为周一(0)");
+      const mon=gdQuests(1,0);
+      mon.forEach(q=>{ st.done[q.id]=new Date().toISOString(); });
+      if(curGiOfDay(1)!==1) throw new Error("周一全清后当前纪日应到周二(1)，实际 "+curGiOfDay(1));
+      if(curGameDay(1)!==gdAbs(1,1)) throw new Error("HUD gameDay 应对齐周二="+gdAbs(1,1));
+      /* 索引卡随完成推进到周二且进度实时 */
+      st.gdIssued={}; st.gdIssued[gdAbs(1,0)]=1; st.gdIssued[gdAbs(1,1)]=1;
+      const s2=buildStream().filter(r=>r.t==="qindex");
+      if(s2.length!==1||s2[0].gi!==1) throw new Error("周一清后索引卡应切到周二");
+      const progHtml=qindexHtml(1,1);
+      if(!["0/6","1/6","2/6","3/6","4/6","5/6","6/6"].some(x=>progHtml.includes(x))) throw new Error("索引卡缺实时进度");
+      /* 全周完成→无索引卡 */
+      gdQuests(1,1).forEach(q=>{st.done[q.id]=new Date().toISOString();});
+      gdQuests(1,2).forEach(q=>{st.done[q.id]=new Date().toISOString();});
+      /* 空周四由 curGi 自动跳过：周三清完、周五未做时当前应停周五(4) */
+      if(gdQuests(1,4).length&&curGiOfDay(1)!==4) throw new Error("周五未做时当前应停周五(4)，实际 "+curGiOfDay(1));
+      gdQuests(1,4).forEach(q=>{st.done[q.id]=new Date().toISOString();});
+      if(curGiOfDay(1)!==null) throw new Error("全周完成后当前纪日应为 null");
+      console.log('PASS  v58c 纪日指针推进/空周四跳过/索引卡切换');
+    }catch(e){ errors.push('v58c curGi => '+e.message); console.log('FAIL  v58c curGi : '+e.message); }
+
+    /* v58c：接取幂等 + 新纪日里程碑幂等 */
+    try{
+      reset(); reconcile(); installRuntimePlan();
+      window.dsReady=()=>false; /* 离线，避免异步 API 干扰断言 */
+      const q=gdQuests(1,0)[0];
+      const n0=st.dialogue.length;
+      openQuest(q.id); /* 首次接取：落玩家行动 */
+      const n1=st.dialogue.length;
+      document.querySelectorAll('.ov').forEach(o=>o.remove());
+      openQuest(q.id); /* 二次进入：不再落 */
+      const n2=st.dialogue.length;
+      if(n1!==n0+1) throw new Error("首次接取应落 1 条玩家行动："+n0+"→"+n1);
+      if(n2!==n1) throw new Error("重复进入不应再落接取："+n1+"→"+n2);
+      if(!st.accepted[q.id]) throw new Error("accepted 未记录");
+      /* 里程碑幂等 */
+      st.dialogue=st.dialogue.filter(m=>m.kind!=="gdmilestone");
+      st.gdIssued={}; st._gdBf=1;
+      ensureGdMilestone(1); const m1=st.dialogue.filter(m=>m.kind==="gdmilestone").length;
+      ensureGdMilestone(1); const m2=st.dialogue.filter(m=>m.kind==="gdmilestone").length;
+      if(m1!==1||m2!==1) throw new Error("里程碑应幂等 1 条："+m1+"/"+m2);
+      console.log('PASS  v58c 接取幂等/纪日里程碑幂等');
+    }catch(e){ errors.push('v58c accept => '+e.message); console.log('FAIL  v58c accept : '+e.message); }
 
     /* v52 R6：ORAL_ORDER 故宫首位 + 六篇齐全 */
     try{
