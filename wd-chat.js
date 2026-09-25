@@ -742,7 +742,8 @@ const WDChat={
        [1..n-2] 历史 turns（原生多轮，120 字×8）
        [n-1] user  = 动态上下文 + 玩家输入 + post-history 禁则
      返回 {text, degraded}；永不 reject。 */
-  async respond(npcId,userText,brief,directorHint){
+  async respond(npcId,userText,brief,directorHint,opts){
+    opts=opts||{};
     const {NPC}=CTX, npc=NPC[npcId]||NPC.qingxuan;
     /* v35：AI-only——无密钥直接返回错误，不再本地兜底 */
     if(!CTX.dsReady()) return {text:"",degraded:true,error:"灵脉未通：未配置 API 密钥"};
@@ -751,7 +752,8 @@ const WDChat={
       let web=null;
       if(this.shouldSearch(userText)) web=await this.webSearch(userText.replace(/@[^\s，。,,]+/g,"").trim());
       const sys=this.sysPrompt(npcId,brief);
-      const hist=this.historyOf(npcId,8);
+      /* v62：私聊窗口传入专属历史（玩家↔该 NPC 的完整私聊流），群聊则取公共流 */
+      const hist=Array.isArray(opts.privateTurns)?opts.privateTurns.slice(-10):this.historyOf(npcId,8);
       const tail=this.buildContext(npcId,userText,web,directorHint);
       const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
       const hasCustomWorld=!!((window.WDCfg&&WDCfg.customWorldBrief)?WDCfg.customWorldBrief():"").trim();

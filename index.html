@@ -325,6 +325,54 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .shoprow{display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--border);padding:7px 2px}
 .shoprow input{flex:1;border:none;background:none;font:inherit;border-bottom:1px dashed var(--border);font-size:14px;color:var(--fg)}
 .shoprow .cost{width:64px;text-align:right;font-variant-numeric:tabular-nums;color:var(--gold)}
+/* v59：踏春行 Gal 式店面——左道具网格 / 右程绣立绘台 / 底部对话框 */
+.shopgal{display:flex;gap:14px;margin-top:10px;min-height:420px}
+.shopgridwrap{flex:1;min-width:0;display:flex;flex-direction:column}
+.shopcoin{font-size:13px;color:var(--gold);margin-bottom:8px}
+.shopgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-content:start;overflow-y:auto;max-height:430px;padding-right:4px}
+.shopitem{position:relative;border:1px solid var(--border);border-radius:10px;padding:8px 6px;text-align:center;cursor:pointer;background:rgba(255,255,255,0.03);transition:border-color .15s,transform .1s;user-select:none}
+.shopitem:hover{border-color:var(--gold)}
+.shopitem.sel{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset;background:rgba(255,215,0,0.07)}
+.shopitem.owned{opacity:.45;cursor:default}
+.shopitem .siic{width:56px;height:56px;border-radius:8px;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;background:linear-gradient(135deg,#3a2c12,#241a08)}
+.shopitem .siic img{width:100%;height:100%;object-fit:cover}
+.shopitem .sin{font-size:12.5px;line-height:1.3;color:var(--fg);word-break:break-all}
+.shopitem .sip{font-size:11.5px;color:var(--gold);margin-top:3px;font-variant-numeric:tabular-nums}
+.shopitem .sit{position:absolute;top:3px;left:5px;font-size:9.5px;color:var(--dim)}
+.shopitem .sibadge{position:absolute;top:3px;right:5px;font-size:9.5px;color:var(--ok)}
+.shopstage{width:270px;flex-shrink:0;border-radius:22px;background:linear-gradient(180deg,#2b2438,#1d1826);border:1px solid var(--border);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:420px}
+.shopstage .shav{position:absolute;top:12px;right:12px;width:56px;height:56px;border-radius:14px;overflow:hidden;border:2px solid var(--gold);background:var(--cyber);display:flex;align-items:center;justify-content:center;font-size:22px;color:#000;font-weight:bold;z-index:2}
+.shopstage .shav img{width:100%;height:100%;object-fit:cover}
+.shopstage .shpt{width:100%;height:100%;display:flex;align-items:flex-end;justify-content:center}
+.shopstage .shpt img{max-width:100%;max-height:100%;object-fit:contain;object-position:bottom center}
+.shopstage .shph{color:var(--dim);font-size:14px;letter-spacing:.2em;writing-mode:vertical-rl;margin-bottom:40px}
+.shopdlg{margin-top:12px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,0.04);padding:12px 14px}
+.shopdlg .sdn{font-size:12.5px;color:var(--gold);font-weight:600;margin-bottom:4px}
+.shopdlg .sdtext{font-size:14px;line-height:1.75;color:var(--fg);min-height:44px}
+.shopopts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.shopopts button{font-size:13px}
+/* v62：私聊窗口 */
+.pchat{display:flex;flex-direction:column;height:74vh;max-height:74vh}
+.pchat-hd{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--border);flex-shrink:0}
+.pchat-hd .pav{width:46px;height:46px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--cyber);display:flex;align-items:center;justify-content:center;font-weight:bold;color:#000;font-size:19px}
+.pchat-hd .pav img{width:100%;height:100%;object-fit:cover}
+.pchat-hd .pnm{font-size:15px;font-weight:600;color:var(--cyber)}
+.pchat-hd .ptt{font-size:11.5px;color:var(--dim);margin-top:2px}
+.pchat-duty{margin:10px 0 0;padding:8px 12px;border-radius:8px;background:rgba(255,215,0,0.06);border:1px solid var(--gold);font-size:12px;line-height:1.7;color:var(--fg2);flex-shrink:0}
+.pchat-duty b{color:var(--gold);font-weight:600}
+.pchat-list{flex:1;min-height:180px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 4px;display:flex;flex-direction:column;gap:10px}
+.pmsg{display:flex;gap:8px;align-items:flex-end;max-width:86%}
+.pmsg .pma{width:30px;height:30px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--cyber);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;color:#000}
+.pmsg .pma img{width:100%;height:100%;object-fit:cover}
+.pmsg .pmb{padding:8px 12px;border-radius:4px 12px 12px 12px;background:rgba(61,240,255,0.08);border:1px solid var(--cyber);font-size:13.5px;line-height:1.75;color:var(--fg);white-space:pre-wrap;word-break:break-word}
+.pmsg .pmt{font-size:10px;color:var(--dim);margin-top:3px}
+.pmsg.me{align-self:flex-end;flex-direction:row-reverse}
+.pmsg.me .pmb{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.25);border-radius:12px 4px 12px 12px}
+.pmsg.sys{max-width:100%;align-self:center}
+.pmsg.sys .pmb{background:none;border:none;color:var(--dim);font-size:12px;text-align:center;padding:2px}
+.pchat-input{display:flex;gap:8px;padding-top:10px;border-top:1px solid var(--border);flex-shrink:0}
+.pchat-input input{flex:1;min-width:0}
+.pchat-typing{font-size:12px;color:var(--dim);padding:2px 4px}
 .flashcard{border:2px solid var(--border-lit);padding:22px 18px;text-align:center;margin:12px 0;min-height:150px;background:var(--bg3);box-shadow:0 3px 0 rgba(60,45,25,.15)}
 .flashcard .fc-id{font-size:12px;color:var(--dim);letter-spacing:.1em}
 .flashcard .fc-main{font-size:16px;margin-top:10px;color:var(--fg);white-space:pre-wrap}
@@ -623,6 +671,8 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 <script src="wd-chat.js"></script>
 <script src="wd-avatar.js"></script>
 <script src="wd-fx.js"></script>
+<script src="qrcode.js"></script>
+<script src="wd-sync.js?v64"></script>
 <script>
 
 "use strict";
@@ -1181,6 +1231,41 @@ const REWARD_ITEMS=[
   {id:"yehua_zhu",name:"夜话烛",day:35,plot:35,cost:500},
 ];
 function plotTriggered(day){ return !!(st.plotDone&&st.plotDone[day]); }
+/* v59 剧情工坊：内置剧情的前台覆写访问器——演出/回顾/忆境/集市统一走它，永不直读 PLOT_THEMES */
+function plotThemeOf(day){
+  const t=PLOT_THEMES[day];
+  const ov=st.storyThemeOV&&st.storyThemeOV[day];
+  if(!ov) return t||null;
+  const base=t||{chars:[],type:"small"};
+  const chars=typeof ov.charsStr==="string"&&ov.charsStr.trim()
+    ?ov.charsStr.split(/[,，、\s]+/).map(s=>s.trim()).filter(Boolean):base.chars;
+  return {
+    id:base.id, day:+day,
+    title:ov.title||base.title,
+    chars:chars,
+    type:ov.type||base.type,
+    cg:(ov.cg===undefined?base.cg:(ov.cg||null)),
+    item:(ov.item===undefined?base.item:(ov.item||""))
+  };
+}
+/* v59：过场台词覆写访问器 */
+function cutsceneText(node){
+  const cs=CUTSCENE_NODES[node]; if(!cs) return "";
+  const ov=st.cutsceneOV&&st.cutsceneOV[node];
+  return (ov&&ov.trim())?ov.trim():cs.local;
+}
+/* v59：CG 总表（内置剧情 CG＋福利 CG＋自定义 CG），忆境与工坊共用 */
+function cgAllList(){
+  const list=[];
+  Object.keys(PLOT_THEMES).forEach(d=>{
+    const t=plotThemeOf(+d);
+    if(t&&t.cg) list.push({id:t.cg,name:"剧情·第"+d+"日 "+t.title,type:"剧情"});
+  });
+  ["yunting","shenzhao","wantang","tina","chengxiu"].forEach(id=>list.push({id:"welfare_"+id,name:({yunting:"云汀",shenzhao:"沈昭",wantang:"晚棠",tina:"缇娜",chengxiu:"程绣"})[id]+"福利图",type:"福利"}));
+  (st.customCgs||[]).forEach(c=>list.push({id:c.id,name:c.name,type:"自定义"}));
+  /* 去重（自定义 CG 不得与内置 id 撞） */
+  const seen={}; return list.filter(c=>seen[c.id]?false:(seen[c.id]=true));
+}
 /* v52 R2：剧情点累积机制（双奖励）
    - 游戏日点（byDay）：完成当日指定任务（当日任务全清）→ +1，主线剧情以此触发
    - 自然日奖励点（byNaturalDay）：每推进 1 个现实自然日 → 额外 +1，用于 REWARD_ITEMS 联动解锁
@@ -1217,7 +1302,7 @@ function checkPlotTrigger(){
      自然日奖励点不提前触发主线（防止纯登录跳过剧情），仅联动 REWARD_ITEMS。 */
   const day=st.day||1;
   if(plotTriggered(day)) return null;
-  if(!PLOT_THEMES[day]) return null;
+  if(!plotThemeOf(day)) return null;
   /* 结算时补发当日游戏日点（幂等） */
   if(dayQuestsAllDone(day)) addPlotPoints("gameDay", day);
   const pp=st.plotPoints||(st.plotPoints={total:0,byDay:{},byNaturalDay:{},triggered:{}});
@@ -1226,7 +1311,7 @@ function checkPlotTrigger(){
     st.plotDone[day]=new Date().toISOString();
     pp.triggered[day]=new Date().toISOString();
     save();
-    return PLOT_THEMES[day]||null;
+    return plotThemeOf(day);
   }
   return null;
 }
@@ -1706,10 +1791,10 @@ if(window.WDChat){
     return orig.call(this, newId, brief);
   }; })(chat.systemPrefix);
 
-  /* 5) 修复 respond 方法里的 NPC[npcId]||NPC.qingxuan fallback */
-  chat.respond = (function(orig){ return async function(npcId,userText,brief,directorHint){
+  /* 5) 修复 respond 方法里的 NPC[npcId]||NPC.qingxuan fallback（v62：透传第 5 参 opts，保私聊历史） */
+  chat.respond = (function(orig){ return async function(npcId,userText,brief,directorHint,opts){
     const newId = NPC_REMAP[npcId]||npcId;
-    return orig.call(this, newId, userText, brief, directorHint);
+    return orig.call(this, newId, userText, brief, directorHint, opts);
   }; })(chat.respond);
 
   /* 6) 修复 directorFlow / directorRespond / directorPlan 里的 npcId remap */
@@ -2169,12 +2254,20 @@ function defState(){
     srs:{}, rtPlan:{}, recTimes:{}, myOral:[],
     /* 批5：演界试炼（全真演练）——clears=通关次数，day=最近一次奖励日，best=历史最佳点亮率 */
     arenaClears:0, arenaDay:"", arenaBest:null,
+    /* v59 剧情工坊：内置剧情覆写/过场台词覆写/自定义道具（随存档导出） */
+    storyThemeOV:{}, cutsceneOV:{}, customItems:[], customCgs:[],
+    /* v61：任务内进度（暂离续关）——{stage:阶段id,book:书页idx,qi:题序}，完成/跳过后清除 */
+    questProg:{},
+    /* v62：NPC 私聊档案——以 NPC 为中心的完整私聊流 {npcId:[{role,text,at,day}]} */
+    privateChat:{},
     ver:PLAN_VERSION};
 }
 let st=null, view="chat", questTimer=0;
 /* v57：存档失败不再静默——记日志并 10 秒节流提示一次（自动存档频繁，避免刷屏） */
 let _lastSaveErrAt=0;
-function save(){ try{ localStorage.setItem(KEY,JSON.stringify(st)); }catch(e){ console.error('[save]',e); const now=Date.now(); if(now-_lastSaveErrAt>10000){ _lastSaveErrAt=now; try{ toast("修行未能落进星盘……本机存储空间或许已满，请留意"); }catch(_){} } } }
+function save(){ try{ localStorage.setItem(KEY,JSON.stringify(st)); if(window.WDSync) WDSync.schedulePush(); }catch(e){ console.error('[save]',e); const now=Date.now(); if(now-_lastSaveErrAt>10000){ _lastSaveErrAt=now; try{ toast("修行未能落进星盘……本机存储空间或许已满，请留意"); }catch(_){} } } }
+/* v64：云端推送后回写时间戳到内存存档，保证下次 save 不把它抹掉（合并时间线依据） */
+window.markSaveSyncAt=function(ts){ try{ if(st) st._syncAt=ts; }catch(e){} };
 function load(){
   try{
     const r=localStorage.getItem(KEY);
@@ -2201,6 +2294,15 @@ function reconcile(){
   if(typeof st.arenaClears!=="number") st.arenaClears=0;
   if(typeof st.arenaDay!=="string") st.arenaDay="";
   if(st.arenaBest!==null&&typeof st.arenaBest!=="number") st.arenaBest=null;
+  /* v59 剧情工坊字段兜底 */
+  if(!st.storyThemeOV||typeof st.storyThemeOV!=="object") st.storyThemeOV={};
+  if(!st.cutsceneOV||typeof st.cutsceneOV!=="object") st.cutsceneOV={};
+  if(!Array.isArray(st.customItems)) st.customItems=[];
+  if(!Array.isArray(st.customCgs)) st.customCgs=[];
+  if(!st.questProg||typeof st.questProg!=="object") st.questProg={};
+  if(!st.privateChat||typeof st.privateChat!=="object") st.privateChat={};
+  /* v60：清洗旧版「——云汀正在接话……」加载态穿帮消息（幂等） */
+  migrateSettlePlaceholders();
   /* v53：清除旧出题算法留在错题本里的碎段形式题（选项含 * 或 choice 选项不足 6 字）。
      知识点记录（pid/topic/seen）保留，forms 清空后下次进入按完整句新题重造（上限 5） */
   if(Array.isArray(st.wrong)){
@@ -2339,12 +2441,15 @@ const qDone=id=>!!st.done[id];
 function dayProg(d){ let n=0; d.quests.forEach(q=>{if(qDone(q.id))n++;}); return {n,all:d.quests.length}; }
 /* ==================== v58c：纪日（游戏日）工具层 ====================
    时间模型：1 自然日（界面的「第X周」）= 5 纪日 = 周一~周五；
-   周一/二/三正修、周四轻修（多为空）、周五验界。任务以纪日为单位分配。 */
+   v63：周一/三/五正修（学新），周二/四休息（轻修·复习回访），周五验界。任务以纪日为单位分配。 */
 const GD_LABELS=["周一","周二","周三","周四","周五"];
+/* v63：周历——周一/三/五正修（学新，8 槽），周二/四休息（轻修·复习回访，3 槽）。
+   此为唯一真源：game-data.js 旧烘焙的 kind（旧周一二三学新）在运行时被它覆盖。 */
+const GD_WORK_GI=[0,2,4], GD_REST_GI=[1,3];
+function isStudyGi(gi){ return GD_WORK_GI.indexOf(gi)>=0; }
 function gdAbs(day,gi){ return (day-1)*5+gi+1; }          /* 纪日绝对编号 1~225 */
 function gdKind(day,gi){
-  const d=byDay[day]; const g=d&&d.gameDays&&d.gameDays[gi];
-  return g?g.kind:(gi<=2?"study":"rest");
+  return isStudyGi(gi)?"study":"rest";
 }
 /* 某纪日任务：优先 d.gameDays 回填的 id 表（含 BOSS/GB），缺数据时按 q.gd/id 前缀兜底 */
 function gdQuests(day,gi){
@@ -2823,7 +2928,10 @@ function doneLine(q,d){
   const c=st.questLines||(st.questLines={});
   if(c[q.id]&&c[q.id].done) return c[q.id].done;
   genQuestLine(q,"done");
-  return "这一程，交割了……";
+  /* v60：无 AI 缓存时 toast 用角色化短句，不再用「这一程，交割了……」 */
+  if(q.npc==="yunting") return settleLocalLine(q);
+  const pool=(QUIZ_PRAISE&&QUIZ_PRAISE[q.npc])||QUIZ_INTROS_FALLBACK;
+  return pool[hash((q.id||"done")+((st&&st.day)||0))%pool.length];
 }
 async function genQuestLine(q,kind){
   if(!dsReady()||!q) return;
@@ -2918,6 +3026,37 @@ function firstActiveQuest(){
     for(const q of d.quests){ if(!qDone(q.id)&&questUnlocked(q)) return q; }
   }
   return null;
+}
+/* v62：任务三态——已接取（已发放解锁，未进入）／进行中（进入过且暂离，未完成）／已完成。
+   发放（排程解锁）=已接取；玩家进入但中途暂离（questProg 有档）=进行中；交割/略过=已完成。 */
+function questStatusOf(q){
+  if(!q) return "未接取";
+  if(qDone(q.id)||(st.skipped&&st.skipped[q.id])) return "已完成";
+  if(st.questProg&&st.questProg[q.id]) return "进行中";
+  if(questUnlocked(q)) return "已接取";
+  return "未接取";
+}
+/* v62：某 NPC 当前职守的最近任务——优先「已接取未启动」，其次「进行中」。
+   私聊窗口顶部提示用；按纪日顺序取第一件。 */
+function npcDutyQuest(npcId){
+  if(!st) return null;
+  let started=null; /* 进行中兜底 */
+  for(let day=1;day<=st.unlocked;day++){
+    const d=byDay[day]; if(!d) continue;
+    for(const q of d.quests){
+      if(q.npc!==npcId) continue;
+      const stt=questStatusOf(q);
+      if(stt==="已接取") return {q,status:stt};
+      if(stt==="进行中"&&!started) started={q,status:stt};
+    }
+  }
+  return started;
+}
+/* v62：私聊档案读写——以 NPC 为中心，完整保留（上限 1000 条防本机存储溢出） */
+function pcMsgs(npcId){ st.privateChat=st.privateChat||{}; return st.privateChat[npcId]||(st.privateChat[npcId]=[]); }
+function pcPush(npcId,m){
+  const arr=pcMsgs(npcId); arr.push(m);
+  if(arr.length>1000) st.privateChat[npcId]=arr.slice(-1000);
 }
 function inputHint(){
   return "自由发言，总会有人接话……（@云汀 可指定同道，@所有人 全员回应）";
@@ -3042,15 +3181,117 @@ function yunhengProxy(text){
 }
 /* v36：maybeNpcChimeIn 已移除——导演流 directorFlow 统一决定插话，不再需要独立插话判断 */
 
-/* 点击对话流中的 NPC 名：自动生成玩家情境开场白并触发该 NPC 的标准回应 */
+/* 点击对话流中的 NPC 名：v62 起打开与其的私聊窗口（专属档案，不再混入群聊流） */
 function talkToNpc(npcId){
-  if(!NPC[npcId]) return;
+  const n=resolveNpc(npcId);
+  if(!n) return;
   SFX.tap();
-  const text=playerOpener(npcId);
-  st.dialogue.push({role:"player",text,at:new Date().toISOString(),day:st.day});
-  if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-  save(); renderChat(true);
-  npcAnswer([npcId],text);
+  renderPrivateChat(n.id||npcId);
+}
+/* ============================================================
+   v62：私聊窗口——以 NPC 为中心的完整私聊流（st.privateChat[npcId]）。
+   人设由 WDChat.sysPrompt 保证（与群聊同一套铁律+角色卡）；
+   历史专属注入；离线本地兜底，不阻断；顶部常驻该 NPC 职守任务提示。
+   ============================================================ */
+const PC_OFFLINE_POOL={
+  yunting:["（灵脉没通，我只能说这些）我在这儿呢。想去哪一关、想问什么，等灵脉接上我们再细聊。","现在听不见你的声音——先去把今天的修行推进一些，我一直都在。"],
+  tina:["信号……咳咳，灵脉没连上。等接通了再跟你聊哦。","我在星盘这边，先去做题吧，错题我帮你看着。"],
+  wantang:["嘿，灵脉断着我也没法多聊。等接通了，英语啊导游词啊都可以问我。","先去把今天的句子读顺，我在这儿等你。"],
+  shenzhao:["……灵脉未通，不宜多言。进藏经阁读书吧。","书在这儿，随时可看。说话的事，等灵脉恢复。"],
+  chengxiu:["哟，灵脉没通，生意倒是不等人。先去挣灵铢吧，我铺子开着。","等灵脉接上再来闲聊，眼下嘛——修行要紧。"]
+};
+function pcAvatarHtml(n,sizeCls){
+  let u="";
+  try{ u=(window.WDCfg&&WDCfg.avatarURL&&WDCfg.avatarURL(n.id))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(n.id):"")||""; }catch(e){}
+  return u?`<img src="${esc(u)}" alt="">`:esc((n.name||"?")[0]);
+}
+function pcDutyBanner(npcId){
+  const duty=npcDutyQuest(npcId);
+  if(!duty) return `<div class="pchat-duty">她眼下没有未办的差事——今日该清的关卡都已交割。</div>`;
+  const tag=duty.status==="进行中"?"<b style=\"color:var(--neon)\">进行中</b>":"<b style=\"color:var(--gold)\">已接取 · 待启动</b>";
+  return `<div class="pchat-duty">📜 职守 · ${tag} <b>「${esc(qdn(duty.q))}」</b>（第 ${duty.q.day} 日 · ${esc(duty.q.tlabel)} · ${fmtDur(duty.q.dur)}）
+    <div style="margin-top:2px">${duty.status==="进行中"?"你已进到一半，随时可从「任务」里继续。":"任务已发放，随时可从「任务」面板进入。"}</div></div>`;
+}
+function renderPrivateChat(npcId){
+  const n=resolveNpc(npcId);
+  if(!n) return;
+  npcId=n.id;
+  const nm=dName(npcId), tt=dTitle(npcId);
+  const ov=panel(`<div class="pchat">
+    <div class="pchat-hd">
+      <div class="pav">${pcAvatarHtml(n)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="pnm">${esc(nm)}</div>
+        <div class="ptt">${esc(tt||"私聊")} · 一对一</div>
+      </div>
+    </div>
+    <div id="pcDuty">${pcDutyBanner(npcId)}</div>
+    <div class="pchat-list" id="pcList"></div>
+    <div class="pchat-typing" id="pcTyping" style="display:none"></div>
+    <div class="pchat-input">
+      <input id="pcInput" maxlength="300" placeholder="对${esc(nm)}说点什么……（Enter 发送）" autocomplete="off">
+      <button class="btn sm primary" id="pcSend" type="button">发送</button>
+    </div>
+  </div>`);
+  const listEl=$("#pcList",ov), inp=$("#pcInput",ov), typingEl=$("#pcTyping",ov);
+  function renderList(scroll){
+    const msgs=pcMsgs(npcId);
+    if(!msgs.length){
+      listEl.innerHTML=`<div class="pmsg sys"><div class="pmb">—— 还没有私聊记录。说句话开启你与${esc(nm)}的一对一对话吧。——</div></div>`;
+      return;
+    }
+    listEl.innerHTML=msgs.map(m=>{
+      const at=m.at?String(m.at).slice(5,16).replace("T"," "):"";
+      if(m.role==="sys") return `<div class="pmsg sys"><div class="pmb">${esc(m.text)}</div></div>`;
+      if(m.role==="player"){
+        return `<div class="pmsg me"><div class="pmb">${esc(filterNpcText(m.text))}<div class="pmt">${esc(at)}</div></div></div>`;
+      }
+      return `<div class="pmsg"><div class="pma">${pcAvatarHtml(n)}</div><div class="pmb">${esc(filterNpcText(m.text))}<div class="pmt">${esc(nm)} · ${esc(at)}</div></div></div>`;
+    }).join("");
+    if(scroll!==false) listEl.scrollTop=listEl.scrollHeight;
+  }
+  function setTyping(on){
+    typingEl.style.display=on?"block":"none";
+    typingEl.textContent=on?(nm+"正在输入……"):"";
+    if(on) listEl.scrollTop=listEl.scrollHeight;
+  }
+  renderList();
+  setTimeout(()=>{ try{ inp.focus(); }catch(e){} },120);
+  async function doSend(){
+    const v=inp.value.trim(); if(!v||setTyping._busy) return;
+    inp.value="";
+    pcPush(npcId,{role:"player",text:v,at:new Date().toISOString(),day:st.day});
+    save(); renderList();
+    setTyping(true); setTyping._busy=true;
+    try{
+      let reply="";
+      if(dsReady()&&window.WDChat&&WDChat.respond){
+        if(window.WDMem) WDMem.talk(npcId);
+        const turns=pcMsgs(npcId).slice(-11,-1).map(m=>({role:m.role==="player"?"user":"assistant",content:m.text}));
+        const r=await WDChat.respond(npcId,v,false,undefined,{privateTurns:turns});
+        if(window.WDMem) WDMem.meet(npcId);
+        reply=(r&&r.text||"").trim();
+      }
+      if(!reply){
+        /* 离线/失败兜底：角色化短句，不穿帮不硬阻断 */
+        const pool=PC_OFFLINE_POOL[npcId]||["……灵脉暂时没连上，稍后再聊。","我在，先去做今天的事吧。"];
+        reply=pool[Math.floor(Math.random()*pool.length)];
+        if(!dsReady()) pcPush(npcId,{role:"sys",text:"灵脉未通：配置 AI 密钥后，"+nm+"会按人设自由回应；当前为本地台词。",at:new Date().toISOString(),day:st.day});
+      }
+      pcPush(npcId,{role:"npc",text:filterNpcText(reply).slice(0,500),at:new Date().toISOString(),day:st.day});
+      save();
+    }catch(e){
+      pcPush(npcId,{role:"sys",text:"灵脉波动，这一句没传到——稍后再试。",at:new Date().toISOString(),day:st.day});
+      save();
+    }finally{
+      setTyping(false); setTyping._busy=false;
+      /* 任务状态可能在对话期间变化，顶部提示同步刷新 */
+      const dEl=$("#pcDuty",ov); if(dEl) dEl.innerHTML=pcDutyBanner(npcId);
+      renderList(); inp.focus();
+    }
+  }
+  $("#pcSend",ov).onpointerdown=doSend;
+  inp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); doSend(); } };
 }
 /* 跳转链接：NPC 消息指涉任务时，滚动定位到流内任务卡；不可见则直接打开任务弹层 */
 function gotoQuest(qid){
@@ -3104,11 +3345,16 @@ function acceptQuestLine(q){
 function qcardHtml(q,firstActiveId){
   const done=qDone(q.id); const un=questUnlocked(q);
   const now=!done&&un&&q.id===firstActiveId;
+  /* v62：三态标签——已接取（发放未启动）/ 进行中（进入过暂离）/ 已完成 */
+  const stt=questStatusOf(q);
+  const tag=done?'<span class="donetag">✓ 已完成</span>'
+    : stt==="进行中"?'<span class="nowtag">进行中</span>'
+    : un?'<span class="nowtag" style="color:var(--gold);background:rgba(255,215,0,.12)">已接取</span>':"";
   return `<div class="qcard${done?" done":""}${un?"":" locked"}${now?" now":""}" data-q="${q.id}">
-    <div class="qn">${esc(q.name)}<span class="rk">${q.rarity==="epic"?"✦":q.rarity==="fine"?"•":""}</span>${now?'<span class="nowtag">进行中</span>':""}</div>
+    <div class="qn">${esc(q.name)}<span class="rk">${q.rarity==="epic"?"✦":q.rarity==="fine"?"•":""}</span>${tag}</div>
     <div class="qg">${esc(q.goal)}</div>
     <div class="qr"><span>+${q.xp} 修行</span><span>+${q.coin} 灵铢</span><span class="dur">${fmtDur(q.dur)}</span>
-    <span style="margin-left:auto">${done?"<span class='donetag'>✓ 已完成</span><button class='btn sm ghost' data-open='"+q.id+"'>回看</button>":un?`<button class="btn sm primary" data-open="${q.id}">进入</button>`:"🔒 前序未完"}</span></div>
+    <span style="margin-left:auto">${done?"<button class='btn sm ghost' data-open='"+q.id+"'>回看</button>":un?`<button class="btn sm primary" data-open="${q.id}">${stt==="进行中"?"继续":"进入"}</button>`:"🔒 前序未完"}</span></div>
   </div>`;
 }
 /* v58c：纪日索引卡——云汀手札，一纪日一张，卡内逐任务点选，进度实时现算 */
@@ -3118,15 +3364,17 @@ function qindexHtml(day,gi){
   const cue=filterNpcText(gdCueOf(day,gi));
   const rows=qs.map(q=>{
     const done=qDone(q.id), un=questUnlocked(q);
-    const dot=done?"✓":un?"▶":"🔒";
+    const qstt=questStatusOf(q);
+    const dot=done?"✓":qstt==="进行中"?"▶":un?"接":"🔒";
     const btn=done
       ?`<button class="btn sm ghost" data-qenter="${q.id}">回看</button>`
-      :un?`<button class="btn sm primary" data-qenter="${q.id}">进入</button>`
+      :un?`<button class="btn sm primary" data-qenter="${q.id}">${qstt==="进行中"?"继续":"进入"}</button>`
       :`<span style="font-size:11px;color:var(--dim)">前序未完</span>`;
+    const statTxt=done?"已完成":qstt==="进行中"?"<span style='color:var(--neon)'>进行中</span>":un?"<span style='color:var(--gold)'>已接取</span>":"";
     return `<div class="qirow ${done?"done":""}${un&&!done?" active":""}">
       <span class="qidot">${dot}</span>
       <div class="qiinfo"><div class="qin">${esc(q.name)}</div>
-      <div class="qim">${esc(q.tlabel)} · +${q.xp}修行 +${q.coin}灵铢 · ${fmtDur(q.dur)}</div></div>
+      <div class="qim">${esc(q.tlabel)} · +${q.xp}修行 +${q.coin}灵铢 · ${fmtDur(q.dur)} ${statTxt?" · "+statTxt:""}</div></div>
       <span class="qibtn">${btn}</span>
     </div>`;
   }).join("");
@@ -3515,7 +3763,14 @@ function openQuest(qid){
   ov.innerHTML=`<div class="dlg gal" style="height:90vh">
   <div class="gal-left">
     <div style="text-align:center;margin-bottom:4px">
-      <div style="width:64px;height:64px;border-radius:50%;background:var(--cyber);display:flex;align-items:center;justify-content:center;font-size:28px;color:#000;font-weight:bold;margin:0 auto 6px">${esc((dName(npc.id)||"?")[0])}</div>
+      ${(function(){ try{
+        const u=(window.WDCfg&&WDCfg.avatarURL&&WDCfg.avatarURL(npc.id))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(npc.id):"");
+        const fb=(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(npc.id):"";
+        return u
+          ? `<img src="${esc(u)}" alt="" onerror="this.onerror=null;${fb?`this.src='${esc(fb)}'`:"this.style.display='none';this.nextElementSibling.style.display='flex'"}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin:0 auto 6px;display:block">
+             <div style="width:64px;height:64px;border-radius:50%;background:var(--cyber);display:none;align-items:center;justify-content:center;font-size:28px;color:#000;font-weight:bold;margin:0 auto 6px">${esc((dName(npc.id)||"?")[0])}</div>`
+          : `<div style="width:64px;height:64px;border-radius:50%;background:var(--cyber);display:flex;align-items:center;justify-content:center;font-size:28px;color:#000;font-weight:bold;margin:0 auto 6px">${esc((dName(npc.id)||"?")[0])}</div>`;
+      }catch(e){ return `<div style="width:64px;height:64px;border-radius:50%;background:var(--cyber);display:flex;align-items:center;justify-content:center;font-size:28px;color:#000;font-weight:bold;margin:0 auto 6px">${esc((dName(npc.id)||"?")[0])}</div>`; } })()}
       <div style="font-size:14px;color:var(--cyber);font-weight:600">${esc(dName(npc.id))}</div>
       <div style="font-size:11px;color:var(--dim);margin-top:2px">${esc(dTitle(npc.id))}</div>
     </div>
@@ -3615,9 +3870,9 @@ function openQuest(qid){
       {html:dialNpcLine("「"+gdLine+"」")},
     ];
     dialogTotal=lines.length;
-    stageHost.innerHTML=`<div class="qdial" style="padding:6px;display:flex;flex-direction:column;height:100%">
+    stageHost.innerHTML=`<div class="qdial" style="padding:6px;display:flex;flex-direction:column">
       <div style="font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:.12em;text-align:center;flex-shrink:0">关卡 · ${esc(questMetaphorTxt)}</div>
-      <div id="qdialList" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px"></div>
+      <div id="qdialList" style="max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px"></div>
       ${hintHtml()}
     </div>`;
     const list=$("#qdialList",stageHost);
@@ -4140,12 +4395,23 @@ function openQuest(qid){
   const STAGES=(RT_FLOWS[q.rtCat]||RT_FLOWS.a).map(id=>({
     id, render:(id==="dialog"?renderStageDialog:id==="brief"?renderStageBrief:id==="book"?renderStageBook:id==="quiz"?renderStageQuiz:id==="recite"?renderStageRecite:id==="battle"?renderStageBattle:renderStageTrans)
   }));
+  /* v61：暂离续关——任务内进度（阶段/书页/题序）随存档持久化，完成或跳过后清除 */
+  function saveProg(patch){
+    if(readonly) return;
+    st.questProg=st.questProg||{};
+    st.questProg[q.id]=Object.assign(st.questProg[q.id]||{},patch,{at:Date.now()});
+    save();
+  }
+  function curProg(){ return (st.questProg&&st.questProg[q.id])||null; }
+  const _saved0=(!readonly&&st.questProg&&st.questProg[q.id])?st.questProg[q.id]:null;
+  let resumeQi=(_saved0&&typeof _saved0.qi==="number"&&_saved0.qi>0)?_saved0.qi:null;
   function goStage(idx){
     stageIdx=Math.max(0,Math.min(STAGES.length-1,idx));
     stopTypewriter();
     if(dialogTimer){ clearTimeout(dialogTimer); dialogTimer=null; }
     SFX.tap();
     STAGES[stageIdx].render();
+    saveProg({stage:STAGES[stageIdx].id, book:(STAGES[stageIdx].id==="book"?bookPageIdx:0), qi:(STAGES[stageIdx].id==="quiz"?qi:0)});
     if(finBtn){
       const showFin=stageIdx===STAGES.length-1&&!readonly;
       finBtn.style.display=showFin?"inline-block":"none";
@@ -4185,8 +4451,13 @@ function openQuest(qid){
       if(dialogDone){
         showChoicePanel([
           {label:'翻开手记，开始读这一卷', value:'continue', primary:true},
+          {label:'说点什么……', value:'talk'},
           {label:'告辞，先退下了', value:'leave', ghost:true}
-        ], v=>{ if(v==='continue') goStage(1); else ov.remove(); });
+        ], v=>{
+          if(v==='continue') goStage(1);
+          else if(v==='talk'){ renderPrivateChat(npc.id); /* 私聊窗叠在任务弹层上，关闭即回此页，不影响任务流程 */ }
+          else ov.remove();
+        });
       }
       return;
     }
@@ -4198,7 +4469,7 @@ function openQuest(qid){
          未翻完→翻页；末页读完→自动进入试炼 */
       if(twState&&!twState.done){ typewriterExpand(); return; }
       if(twState&&twState.autoDone){ twState.autoDone=false; return; }
-      if(bookPageIdx<pages.length-1){ SFX.tap(); bookPageIdx++; renderStageBookPage(); return; }
+      if(bookPageIdx<pages.length-1){ SFX.tap(); bookPageIdx++; renderStageBookPage(); saveProg({stage:"book",book:bookPageIdx}); return; }
       if(bookDone) goStage(3);
       return;
     }
@@ -4206,7 +4477,7 @@ function openQuest(qid){
   }
   function bookPageBack(){
     if((STAGES[stageIdx]||{}).id!=="book"||bookPageIdx<=0) return false;
-    SFX.tap(); bookPageIdx=Math.max(0,bookPageIdx-1); renderStageBookPage(); return true;
+    SFX.tap(); bookPageIdx=Math.max(0,bookPageIdx-1); renderStageBookPage(); saveProg({stage:"book",book:bookPageIdx}); return true;
   }
   /* v58：翻页键——焦点不在任何文本框内时，→/↓/PgDn/空格/回车=向前推进，←/↑/PgUp=书页回翻。
      绑 document（弹窗刚打开时焦点常在 body），ov 关闭即卸载；其他弹层压在任务上时不抢键。 */
@@ -4253,6 +4524,19 @@ function openQuest(qid){
   function openQuestInit(){
     /* v53：开场即 cue 五段（离线确定性内容），AI brief 仅后台增强阶段1的引导句，不再阻塞 */
     aiBriefData={}; aiBriefReady=true;
+    /* v61：暂离续关——有存档进度则直接回到当时的阶段（书页/题序随之恢复） */
+    const saved=curProg();
+    if(!readonly&&saved&&saved.stage){
+      const idx=STAGES.findIndex(s=>s.id===saved.stage);
+      if(idx>0){
+        bookPageIdx=Math.max(0,+(saved.book||0));
+        if(saved.stage!=="quiz") resumeQi=null;
+        goStage(idx);
+        if(saved.stage==="quiz") try{ toast("已回到上次暂离的进度","dim"); }catch(e){}
+        loadAiBriefData();
+        return;
+      }
+    }
     STAGES[0].render();
     loadAiBriefData();
   }
@@ -4322,6 +4606,9 @@ function openQuest(qid){
   function basePidsOf(q){ return [...new Set(((D.quizzes[q.id]||[]).map(z=>z.pid).filter(Boolean)))]; }
   function drawQuiz(){
     answered=false;
+    /* v61：暂离续关——题序恢复（仅一次；题池重建后夹到合法范围） */
+    if(resumeQi!=null&&quiz.length){ qi=Math.min(resumeQi,quiz.length-1); okCount=qi; resumeQi=null; }
+    if(!readonly&&STAGES[stageIdx]&&STAGES[stageIdx].id==="quiz") saveProg({stage:"quiz",qi});
     const host=stageHost._quizHost; if(!host) return;
     if(!quiz.length){ host.innerHTML=`<div class="note" style="border-left-color:var(--danger)">题池暂未生成——请稍后再试。</div>`; return; }
     if(qi>=quiz.length){
@@ -4404,15 +4691,29 @@ function openQuest(qid){
         });
       };
     } else {
-      host.innerHTML=`${introHtml}<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · ${kindLabel}</span>${esc(z.q)}</div>
-        <input id="blankIn" placeholder="填入 ▁ 处的词" autocomplete="off">
+      /* v61：多空填空——题干有几个 ____ 就渲染几个输入栏，逐空判分（当前出题器同词多空，
+         accept 按空循环取用，兼容未来多答案数组） */
+      const blankN=Math.max(1,(z.q.match(/_{2,}/g)||[]).length);
+      const inputs=Array.from({length:blankN},(_,i)=>
+        `<div style="margin-bottom:8px"><label style="font-size:12px;color:var(--dim);display:block;margin-bottom:3px">第 ${i+1} 空</label>
+        <input class="blankIn" data-bi="${i}" placeholder="填入第 ${i+1} 处空缺" autocomplete="off" style="width:100%;max-width:320px"></div>`).join("");
+      host.innerHTML=`${introHtml}<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · ${kindLabel}${blankN>1?`（共 ${blankN} 空，全部填对方算通过）`:""}</span>${esc(z.q)}</div>
+        <div id="blankBox" style="margin:10px 0 4px">${inputs}</div>
         <div class="jbtns"><button class="btn sm" id="hintBtn">提示</button><button class="btn sm primary" id="subBtn">作答</button></div>
         <div class="fb" id="fb"></div>`;
-      const inp=$("#blankIn",host); inp.focus();
-      $("#hintBtn",host).onpointerdown=()=>{ inp.value=z.a[0]; inp.placeholder=`${z.a.length} 字，首字「${z.a[0]}」`; };
-      const sub=()=>answer(z.accept.some(a=>normalize(a)===normalize(inp.value))||normalize(inp.value).includes(normalize(z.a)),inp.value);
+      const inps=[...host.querySelectorAll(".blankIn")];
+      if(inps[0]) inps[0].focus();
+      /* 每空的可接受答案：accept 不足时各空共用主答案 z.a */
+      const acceptAt=i=>{ const a=(z.accept[i]||z.accept[0]||z.a); return [a].concat(z.accept).map(String); };
+      const blankOk=(v,i)=>{ const nv=normalize(v); return acceptAt(i).some(a=>normalize(a)===nv)||(nv&&nv.includes(normalize(acceptAt(i)[0]))); };
+      $("#hintBtn",host).onpointerdown=()=>{ inps.forEach((inp,i)=>{ const w=String(acceptAt(i)[0]||""); if(!inp.value) inp.value=w; inp.placeholder=`${w.length} 字，首字「${w[0]||""}」`; }); };
+      const sub=()=>{
+        const vals=inps.map(x=>x.value);
+        const allOk=inps.every((inp,i)=>blankOk(inp.value,i));
+        answer(allOk, vals.join(" / "));
+      };
       $("#subBtn",host).onpointerdown=sub;
-      inp.onkeydown=e=>{ if(e.key==="Enter") sub(); };
+      inps.forEach((inp,i)=>{ inp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); const nxt=inps[i+1]; if(nxt) nxt.focus(); else sub(); } }; });
     }
   }
   /* —— v44：答后 NPC 回复（口癖化鼓励 / 错题讲解式回复，符合全员语言最高准则）—— */
@@ -4441,7 +4742,7 @@ function openQuest(qid){
     const pt=D.pointsLib.find(p=>p.id===z.pid);
     const sameN=st.wrong.filter(w=>w.pid===z.pid).length; /* 含本次 */
     const kindTxt=z.kind==="judge"?"是非判断":z.kind==="choice"?"选择作答":"填空作答";
-    const key=(pt?pt.text.slice(0,20):String(z.pid));
+    const key=(pt?ptTitle(pt,z.pid):String(z.pid));
     const sameTail=sameN>=2?`这个考点已经 ${sameN} 次绊到你啦——这次把它彻底收进记忆里吧。`:"";
     const pool=[
       `这道${kindTxt}有点刁呀。别急——你答的「${esc(mine||"…")}」，和正解差在${key}这一处。再看一眼解析，下一题稳一些吧。`,
@@ -4463,7 +4764,8 @@ function openQuest(qid){
       +"\n玩家的回答："+(mine||"（空白）")
       +"\n正确答案："+okA
       +"\n解析："+(z.why||"")
-      +"\n考点："+(pt?pt.id+"："+pt.text.slice(0,80):String(z.pid||""))
+      +"\n判断依据/正确说法："+(quizFactOf(z)||z.a)
+      +"\n考点全文："+(pt?pt.id+"："+cleanMd(pt.text).slice(0,400):String(z.pid||""))
       +"\n该考点累计答错次数："+sameN;
     dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"}).then(t=>{
       const txt=(t||"").trim().replace(/^["「」"]|["「」"]$/g,"").slice(0,120);
@@ -4485,7 +4787,7 @@ function openQuest(qid){
     const correct = z.kind==="judge" ? (z.a?"真":"伪") : z.a;
     ["#jTrue","#jFalse","#subBtn","#hintBtn"].forEach(s=>{ const b=$(s,host); if(b) b.disabled=true; });
     host.querySelectorAll("[data-copt]").forEach(b=>b.disabled=true);
-    const inp=$("#blankIn",host); if(inp) inp.disabled=true;
+    host.querySelectorAll(".blankIn").forEach(x=>x.disabled=true);
     const fb=$("#fb",host);
     const isLast = qi>=quiz.length-1;
     if(ok){ okCount++; st.quizOk++; SFX.ok(); fb.className="fb ok"; defeatFog(qi); }
@@ -4498,7 +4800,7 @@ function openQuest(qid){
       fb.className="fb "+(ok?"ok":"no");
       fb.innerHTML=(ok?"✓ 要点齐备——收进袖中。":"✓ 已对照——未全想起也没关系，要点在上方，印记已记入回潮名册，回潮期再见分晓。");
     }
-    else fb.innerHTML=(ok?"✓ 答对了！":"✗ 答错了——")+`正确答案：<b style="color:var(--gold)">${esc(correct)}</b>。${esc(z.why)}`;
+    else fb.innerHTML=(ok?"✓ 答对了！":"✗ 答错了——")+quizExplainHtml(z,correct);
     /* v44：答案对照段下方追加 NPC 智能回复 */
     const repText=ok?praiseReply():wrongLocalReply(z,mine,correct);
     const wrap=quizReplyBubble(repText);
@@ -4513,7 +4815,16 @@ function openQuest(qid){
   }
 
   openQuestInit();
-  const closeQuest=()=>{ stopTypewriter(); closeIllusion(); if(dialogTimer){clearTimeout(dialogTimer);dialogTimer=null;} if(questTimer){clearInterval(questTimer);questTimer=0;} if(window.WDMem)WDMem.setActive(null); ov.remove(); };
+  const closeQuest=()=>{
+    /* v61：暂离前固化当前阶段进度（完成/跳过已在别处清除，此处只存未完成态） */
+    try{
+      if(!readonly&&!qDone(q.id)&&!(st.skipped&&st.skipped[q.id])){
+        const sid=STAGES[stageIdx]?STAGES[stageIdx].id:"dialog";
+        saveProg({stage:sid, book:(sid==="book"?bookPageIdx:0), qi:(sid==="quiz"?qi:0)});
+      }
+    }catch(e){}
+    stopTypewriter(); closeIllusion(); if(dialogTimer){clearTimeout(dialogTimer);dialogTimer=null;} if(questTimer){clearInterval(questTimer);questTimer=0;} if(window.WDMem)WDMem.setActive(null); ov.remove();
+  };
   $("#qx",ov).onpointerdown=closeQuest;
   const qx2=$("#qx2",ov); if(qx2) qx2.onpointerdown=closeQuest;
   /* FIX-P3：返回键=上一步（stageIdx>0 回上一阶段，第一步才告辞）；新增跳过按钮=略过任务进待消印集合（视作已做完，给奖励解锁进度，标记待复习） */
@@ -4536,6 +4847,8 @@ async function settleQuest(q,quizPerfect,ov){
 }
 async function _settleQuestInner(q,quizPerfect,ov){
   st.xp+=q.xp; st.coin+=q.coin; st.done[q.id]=new Date().toISOString();
+  /* v61：任务交割（含跳过）后清除暂离进度——重进即回看模式 */
+  try{ if(st.questProg) delete st.questProg[q.id]; }catch(e){}
   /* v54 批 1：SRS 收尾——正常完成=首学卡入档（tier1·明日回潮）；跳过=视作已做完，逐卡进待消印集合
      v57：逐卡独立保护，单卡入档失败只记日志，不阻断其余卡与整个结算（防一张坏 key 卡死任务交割） */
   if(q.rt&&st.rtPlan&&st.rtPlan[q.id]){
@@ -4559,14 +4872,20 @@ async function _settleQuestInner(q,quizPerfect,ov){
   const fresh=[]; ((byDay[q.day]&&byDay[q.day].quests)||[]).forEach(qq=>{ if(qq.id!==q.id&&!qDone(qq.id)&&questUnlocked(qq)) fresh.push(qq); });
   const nq=fresh[0]||null;
   if(nq) refs.push({qid:nq.id});
-  /* —— 第一阶段（同步，<200ms）：落本地兜底 + 云汀模板 + 关弹窗 + 播特效 + 渲染 ——
-     让用户立即看到"完成"反馈，不被 AI 调用阻塞。 */
-  const fallbackText=qdn(q)+"已完成。";
-  st.dialogue.push({role:"npc",npc:q.npc,text:fallbackText,refs,at:new Date().toISOString(),day:st.day});
-  const ymsg={id:"yh_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),role:"npc",npc:"yunheng",
-    text:yunhengSettleLocal(q,nq,quizPerfect),refs:[{qid:q.id}].concat(nq?[{qid:nq.id}]:[]),
-    at:new Date().toISOString(),day:st.day};
-  st.dialogue.push(ymsg);
+  /* —— 第一阶段（同步，<200ms）：落本地兜底 + 云汀离线终态句 + 关弹窗 + 播特效 + 渲染 ——
+     v60：云汀气泡落盘即完整台词（pendingAI 仅作替换标记，不写入任何「正在接话」加载态）。 */
+  const fallbackText=q.npc==="yunting"?settleLocalLine(q):(qdn(q)+"已完成。");
+  const ackId="ack_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
+  st.dialogue.push({id:ackId,role:"npc",npc:q.npc,text:fallbackText,refs,at:new Date().toISOString(),day:st.day});
+  /* v60：云汀以「引路人」身份接话——但任务NPC本人就是云汀时（修诵线已归她）不再重复追加第二条 */
+  let ymsg=null;
+  if(q.npc!=="yunting"){
+    ymsg={id:"yh_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),role:"npc",npc:"yunting",
+      text:yunhengSettleLocal(q,nq,quizPerfect),pendingAI:dsReady()?1:0,
+      refs:[{qid:q.id}].concat(nq?[{qid:nq.id}]:[]),
+      at:new Date().toISOString(),day:st.day};
+    st.dialogue.push(ymsg);
+  }
   if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
   WDFx.questDone(q.xp,q.coin);
   SFX.win();
@@ -4582,25 +4901,25 @@ async function _settleQuestInner(q,quizPerfect,ov){
     WDChat.directorFlow("我刚把「"+qdn(q)+"」做完了。",{targets:[q.npc],kind:"questreact",quest:q,tools:(st.agentFlags||{}).tools})
       .then(questLines=>{
         if(questLines&&questLines.length){
-          /* 替换 fallback 任务NPC文本为 AI 生成 */
-          const ackIdx=st.dialogue.findIndex(m=>m&&m.role==="npc"&&m.npc===q.npc&&(m.text||"").includes("已完成"));
+          /* 替换 fallback 任务NPC文本为 AI 生成（v60：按消息 id 锚定，不再靠文本匹配） */
+          const ackIdx=st.dialogue.findIndex(m=>m&&m.id===ackId);
           if(ackIdx>=0){
             const taskLine=questLines.find(l=>l.npc===q.npc);
-            if(taskLine){ st.dialogue[ackIdx].text=taskLine.text; }
+            if(taskLine){ st.dialogue[ackIdx].text=filterNpcText(taskLine.text); }
           }
           /* 其他 NPC 插话追加 */
           questLines.filter(l=>l.npc!==q.npc).forEach(l=>{
-            st.dialogue.push({role:"npc",npc:l.npc,text:l.text,refs,at:new Date().toISOString(),day:st.day});
+            st.dialogue.push({role:"npc",npc:l.npc,text:filterNpcText(l.text),refs,at:new Date().toISOString(),day:st.day});
           });
           if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
         }
-        refineYunheng(ymsg.id,q,nq,quizPerfect);
+        if(ymsg) refineYunheng(ymsg.id,q,nq,quizPerfect);
         if(WDChat.storyAppend) WDChat.storyAppend(q.npc,"与玩家并肩，见证了「"+qdn(q)+"」的交付");
         save(); renderChat();
       })
-      .catch(()=>{ refineYunheng(ymsg.id,q,nq,quizPerfect); });
+      .catch(()=>{ if(ymsg) refineYunheng(ymsg.id,q,nq,quizPerfect); });
   } else {
-    refineYunheng(ymsg.id,q,nq,quizPerfect);
+    if(ymsg) refineYunheng(ymsg.id,q,nq,quizPerfect);
   }
   /* —— 第三阶段：剧情过场触发 —— */
   if(q.id&&q.id.endsWith("BOSS")){
@@ -4651,7 +4970,7 @@ function triggerCutscene(node){
   save();
   /* 云汀发起剧情过场，本地兜底话术落流 */
   const msg={id:"cs_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),role:"npc",npc:"yunting",
-    text:cs.local,cutscene:node,at:new Date().toISOString(),day:st.day};
+    text:cutsceneText(node),cutscene:node,at:new Date().toISOString(),day:st.day};
   st.dialogue.push(msg);
   if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
   record("剧情过场",cs.label);
@@ -4684,7 +5003,7 @@ function refineCutscene(id,node){
     +"\n写法：把兜底话术化进云汀本人当面对玩家说的一段话——就是一条聊天消息，不是小说剧本。可以有一个短问句、半句停顿，"
     +"但禁止多组引号分段、禁止旁白（不能出现「她心想/旁白/云汀道」）、禁止复述或发布任务、禁止预告后续、禁止念任务编号与数值。"
     +"≤80字，越像脱口而出越好。禁AI腔（首先/其次/总之）、禁教书先生口吻、禁客服腔、禁已淘汰概念（"+obsolete.join("、")+"）。只输出正文，不要引号。";
-  const user="本地兜底话术：「"+cs.local+"」\n请化写为她此刻会发出的一条消息。";
+  const user="本地兜底话术：「"+cutsceneText(node)+"」\n请化写为她此刻会发出的一条消息。";
   dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"}).then(raw=>{
     let txt=(raw||"").trim();
     if(!txt||txt.length<10) return;
@@ -4926,14 +5245,30 @@ function ensureGuidanceScene(){
   if(todayDlg.length>0){ st.dialogueInitDay=st.day; save(); return; }
   generateGuidanceScene();
 }
-/* v35：AI-only——云汀结算由 refineYunheng 异步生成；此处仅返回占位，AI 失败时保留。 */
-function yunhengSettleLocal(q,nq,perfect){
-  const d=byDay[q.day];
-  return (doneLine(q,d)||"这一程，交割了。")+"「"+qdn(q)+"」——云汀正在接话……";
+/* v60：云汀结算离线终态句——落盘即完整台词，绝不把「正在接话」加载态写进存档。
+   AI 在线时由 refineYunheng 就地替换；AI 失败/限流/空返回时这句就是终态，不穿帮。 */
+const YT_SETTLE_POOL=[
+  "回来了？这一关，干得漂亮。",
+  "嗯——我就知道你没问题。",
+  "雾又薄了一层。有你在，我安心很多。",
+  "辛苦了。先歇口气，下一关不急在这一会儿。",
+  "漂亮。这一段，你走得很稳。",
+  "我在旁边都看见了——这一手，利落。"
+];
+function settleLocalLine(q){
+  const i=(hash((q&&q.id)||"settle")+((st&&st.day)||0))%YT_SETTLE_POOL.length;
+  return YT_SETTLE_POOL[i];
 }
-/* 云汀结算 AI 润色：就地替换本地模板；像云汀本人在群里接话，不写总结报告 */
+function yunhengSettleLocal(q,nq,perfect){
+  return settleLocalLine(q);
+}
+/* 云汀结算 AI 润色：就地替换离线句；像云汀本人在群里接话，不写总结报告。
+   成功→换文本清 pending；任何失败→保留离线终态句并清 pending（加载态永不残留）。 */
 function refineYunheng(id,q,nq,perfect){
   if(!dsReady()) return;
+  const m0=st.dialogue.find(x=>x.id===id);
+  if(!m0) return;
+  if(!m0.pendingAI) return; /* 幂等：只润色一次，防重复调用 */
   const d=byDay[q.day], p=dayProg(d);
   const total=D.quests.filter(x=>qDone(x.id)).length;
   const obsolete=(window.WDRegistry&&WDRegistry.obsoleteTerms)?WDRegistry.obsoleteTerms():["提灯","引灯","引魂灯","问道录","仙侠","仙师","封妖塔","掌灯"];
@@ -4942,13 +5277,29 @@ function refineYunheng(id,q,nq,perfect){
     +"可以点一句她对这次交割的真实反应，可以再带一眼前路，也可以只留半句；收获、点评、下一步都不是必填项，按她此刻想说的来，禁止面面俱到。"
     +"≤90字，越自然越好，允许短句和停顿；禁AI腔（首先/其次/总之）、禁教书先生口吻、禁客服腔、禁念任务编号与数值奖励、禁已淘汰概念（"+obsolete.join("、")+"）。只输出正文，不要引号。";
   const user="刚交割的关卡：「"+qdn(q)+"」（"+q.tlabel+(perfect?"，试炼全对":"，试炼有错")+"）；当日进度 "+p.n+"/"+p.all+"，全程 "+total+"/"+D.quests.length+"（这些数字只供你心里有数，台词里不许念）。"
-    +(nq?("下一桩在途：「"+qdn(nq)+"」（"+nq.tlabel+"），目标："+qdn({name:nq.goal||"通关"})+"——提不提随你。"):"今日没有待办，别给他排活。");
-  dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"}).then(t=>{
-    t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,220);
-    if(!t) return;
-    const m=st.dialogue.find(x=>x.id===id); if(!m) return;
-    m.text=t; save(); renderChat(true);
-  }).catch(()=>{});
+    +(nq?("下一程在途：「"+qdn(nq)+"」（"+nq.tlabel+"），目标："+qdn({name:nq.goal||"通关"})+"——提不提随你。"):"今日没有待办，别给他排活。");
+  const finish=txt=>{ const m=st.dialogue.find(x=>x.id===id); if(!m) return;
+    const t=(txt||"").trim().replace(/^["「『]+|["」』]+$/g,"").slice(0,220);
+    if(t) m.text=filterNpcText(t);   /* 空返回→保留离线终态句 */
+    delete m.pendingAI; save(); renderChat(true);
+  };
+  dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"})
+    .then(t=>finish(t))
+    .catch(()=>finish(""));
+}
+/* v60：旧存档清洗——历史版本把「——云汀正在接话……」加载态写进了对话流，
+   逐条还原为云汀离线终态句（按消息 id 哈希轮换，保证同一条稳定）。 */
+function migrateSettlePlaceholders(){
+  if(!Array.isArray(st.dialogue)) return;
+  let changed=0;
+  st.dialogue.forEach(m=>{
+    if(!m||m.role!=="npc"||typeof m.text!=="string") return;
+    if(/正在接话/.test(m.text)||/这一程，交割了……/.test(m.text)){
+      m.text=YT_SETTLE_POOL[(hash(m.id||(m.at||"")+m.npc))%YT_SETTLE_POOL.length];
+      delete m.pendingAI; changed++;
+    }
+  });
+  if(changed) save();
 }
 function maybeUnlockDay(){
   /* 批5修：当日全清后逐日放行——空排程日（p.all===0 或无排程）直接跳过不再锁死后续。
@@ -5424,7 +5775,8 @@ const RTINDEX=(function(){
   return {bySubj,wen,oral,trans};
 })();
 const RT_SUBJ_NAME={S1:"政策法规",S2:"导游业务",S3:"全国知识",S4:"北京知识"};
-const RT_NPC={a:"shenzhao",b:"wantang",c:"wantang",d:"wantang",rev:"tina",exam:"yunting"};
+/* v59：导游词（修诵 c 类）改由云汀亲自带诵；问契 b/传译 d 仍归晚棠，理经 a 归沈昭——其他人物不变 */
+const RT_NPC={a:"shenzhao",b:"wantang",c:"yunting",d:"wantang",rev:"tina",exam:"yunting"};
 const RT_TLABEL={a:"理经",b:"问契",c:"修诵",d:"传译",rev:"消印",exam:"验界"};
 /* 英语口语约 120 词/分钟 → 时长预估（校订后按 getEdit 现值重算，整篇/分段同步） */
 function rtSpkMin(words){ return Math.max(1,Math.round((words||0)/120)); }
@@ -5504,7 +5856,7 @@ function rtOralPages(o){
     {title:"整景理解 · "+o.name+" §"+(o.sec+1),
      lines:[
       {t:"p",x:"〔通篇「"+o.name+"」约 "+wholeEst+" 分钟 · 本段约 "+est+" 分钟〕"},
-      {t:"n",x:"晚棠轻声开口：这一段是「"+(o.h||("第"+(o.sec+1)+"节"))+"」。先别急着诵——听这段身体自己的故事，读懂了，句子会自己来找你。"},
+      {t:"n",x:"云汀轻声开口：这一段是「"+(o.h||("第"+(o.sec+1)+"节"))+"」。先别急着诵——听这段身体自己的故事，读懂了，句子会自己来找你。"},
       {t:"p",x:"本段导览（只助理解，不考原文）："+sentences.slice(0,3).map(s=>s.trim()).join(" / ")},
       {t:"n",x:"读完请告诉我：这段在讲哪一处身体、什么故事？带着这个画面进下一页。"}
      ],_oral:{fullId:o.fullId,sec:o.sec,name:o.name,h:o.h,est,wholeEst}},
@@ -5522,8 +5874,11 @@ function buildRuntimePlan(day){
   const dueAll=srsDueKeys();
   const quests=[];
   /* v2 第 6.2 节算式：1 自然日=1 周=5 纪日——3 个正修纪日（学新）+2 个轻修纪日（复习不空转）。
+     v63：正修落周一/三/五（gi 0/2/4），轻修落周二/四（gi 1/3）。
      每个纪日一套任务：正修套 8 槽 / 轻修套 3 槽；同日 5 套由套间滚动游标 c2 接续消费，不重复排卡。 */
-  const gds=(d.gameDays&&d.gameDays.length)?d.gameDays:[1,2,3,4,5].map(i=>({gd:(day-1)*5+i,kind:i<=3?"study":"rest"}));
+  const gds=(d.gameDays&&d.gameDays.length===5)?d.gameDays:[0,1,2,3,4].map(i=>({gd:(day-1)*5+i+1,kind:isStudyGi(i)?"study":"rest"}));
+  /* v63：game-data.js 按旧周历（周一二三正修）烘焙——运行时按新周历覆盖 kind/校正 gd */
+  gds.forEach((g,gi)=>{ g.gd=(day-1)*5+gi+1; g.kind=isStudyGi(gi)?"study":"rest"; });
   const c2=Object.assign({S1:0,S2:0,S3:0,S4:0,wen:0,oral:0,trans:0},cur);
   /* 批5修：卡池回绕——池子耗尽后从头再排（第一遍学完自然转入第二遍复习，45 日恒有任务）。
      旧行为 slice(c2,c2+n) 线性消费，S2/S4 约 19 日耗尽、其余 20 日内耗尽 → day21+ 空日 →
@@ -5542,9 +5897,12 @@ function buildRuntimePlan(day){
     /* 幂等关键：已完成槽位复用旧任务对象，st.rtPlan 快照不再重写（重写会导致游标错位）。
        已完成槽位仍须入 quests——dayProg/maybeUnlockDay 依赖全量统计，漏掉会误判当日全清。 */
     if(st.done[id]){ let snap=st.rtPlan[id];
+      /* v63：周历迁移（旧周一二三正修→新一三五）——同槽位任务类别已变（如旧 gi=1 槽0=修诵，
+         新 gi=1 为轻修槽0=消印），类别不符的历史已交付任务不得在新槽位复活，直接跳过（不 bump 游标）。 */
+      if(snap&&snap.cat!==cat) return null;
       /* v58 自愈：旧档/首批任务可能缺 rtPlan 快照（intro 曾清空过），从重建前索引里的旧任务对象补回，
          杜绝已交付槽位在计划重建后凭空消失、当日列表缺环。 */
-      if(!snap&&QMAP[id]&&Array.isArray(QMAP[id].cards)&&QMAP[id].cards.length){
+      if(!snap&&QMAP[id]&&Array.isArray(QMAP[id].cards)&&QMAP[id].cards.length&&(QMAP[id].rtCat||cat)===cat){
         snap={cat:QMAP[id].rtCat||cat,cards:QMAP[id].cards.slice()}; st.rtPlan[id]=snap;
       }
       bump(snap?snap.cards:[]);
@@ -5665,7 +6023,8 @@ function buildRuntimePlan(day){
   if(day>=31&&day<=45){
     const extra={31:1,32:1,33:2,34:1,36:2,37:2,38:2,39:1,41:2,42:2,43:2,44:2}[day]||0;
     for(let k=0;k<extra;k++){
-      const gi=(k+day)%5;
+      /* v63：守关只落正修纪日（一三五），不占用休息日；同纪日多阵以槽位后缀区分 */
+      const gi=GD_WORK_GI[(k+day)%GD_WORK_GI.length];
       mkBoss(gi,"R"+day+"-"+gi+"-GB"+k,3,"side","雾魁守关 · 第"+(k+1)+"阵","雾魁来袭——连破谜题守住结界",6,15,8);
     }
   }
@@ -5924,18 +6283,60 @@ function ptTitle(pt,pid){
   if(t&&t!==pid) return t;
   return cleanMd((pt&&pt.module)||"").slice(0,14)||pid;
 }
-/* 考点核心句：优先含数字/引号、长度适中的完整陈述句，用作判断/选择的正确项 */
+/* 考点核心句：优先含数字/引号的完整陈述句，用作判断/选择的正确项。
+   v61：不再把句子腰斩成残句——优先整句（≤120字），超长按小句边界（，、；）截到 119 字再补省略号。 */
 function ptKeySentence(pt){
   const t=cleanMd(pt&&pt.text||"");
   if(!t) return "";
   /* FIX-P1：过滤备课批注元话语（"本条考察/常考/记忆锚/重点"等），避免被当知识点塞进选项 */
   const META_RE=/^(本条|此条|这里|注意|提示|记忆锚|常考|考点|重点|说明|备注|备考|考纲|出题)/;
   const parts=t.split(/(?<=[。！？；])/).map(s=>s.trim()).filter(s=>s.length>=6&&!META_RE.test(s));
-  if(!parts.length) return t.length>48?t.slice(0,48)+"…":t;
-  const ranked=parts.map((s,i)=>({s,i,v:(/\d/.test(s)?3:0)+(/[“"「『]/.test(s)?1:0)-(s.length>50?2:0)})).sort((a,b)=>b.v-a.v||a.i-b.i);
+  if(!parts.length) return t.length>120?clipClause(t,120):t;
+  const ranked=parts.map((s,i)=>({s,i,v:(/\d/.test(s)?3:0)+(/[“"「『]/.test(s)?1:0)-(s.length>120?2:0)})).sort((a,b)=>b.v-a.v||a.i-b.i);
   let s=ranked[0].s;
-  if(s.length>50) s=s.slice(0,50)+"…";
+  if(s.length>120) s=clipClause(s,120);
   return s;
+}
+/* v61：长句按小句边界截断，保证语义完整、不出残词（优先在逗号/顿号/分号处收束） */
+function clipClause(s,max){
+  s=String(s||""); if(s.length<=max) return s;
+  const head=s.slice(0,max-1);
+  const m=head.match(/^[\s\S]*[，、；,;]/);
+  return (m?m[0]:head).replace(/[，、；,;\s]+$/,"")+"…";
+}
+/* v61：试炼反馈讲解包——正确答案 + 正确说法（判断/选择给完整陈述句）+ 所属知识点全文。
+   不再只甩一个考点编号；判断题必须给出判断依据（原句为何真/伪）与正确的说法。 */
+function quizPointText(z){
+  try{
+    const pt=D.pointsLib.find(p=>p.id===z.pid);
+    return pt?cleanMd(pt.text):"";
+  }catch(e){ return ""; }
+}
+function quizFactOf(z){
+  if(z.kind==="judge"){
+    /* 优先题面自带的正确说法（新题）；旧题从考点核心句现取 */
+    if(z.a===true) return z.fact||z.q.replace(/（判断正误）$/,"")||quizPointCore(z);
+    return z.fact||quizPointCore(z); /* 伪命题：正确说法=未被篡改的真句 */
+  }
+  if(z.kind==="choice") return z.a||"";
+  return "";
+}
+function quizPointCore(z){
+  try{ const pt=D.pointsLib.find(p=>p.id===z.pid); return pt?ptKeySentence(pt):""; }catch(e){ return ""; }
+}
+/* 反馈块 HTML（含：判定结果行由调用方拼前缀；正确答案/正确说法/考点全文） */
+function quizExplainHtml(z,correct){
+  const parts=[];
+  parts.push(`正确答案：<b style="color:var(--gold)">${esc(String(correct))}</b>`);
+  if(z.kind==="judge"){
+    const fact=quizFactOf(z);
+    if(fact) parts.push(`判断依据 · 正确说法：<span style="color:var(--fg)">${esc(fact)}</span>`);
+  }else if(z.kind==="choice"){
+    if(z.a) parts.push(`正确说法：<span style="color:var(--fg)">${esc(z.a)}</span>`);
+  }
+  const ptTxt=quizPointText(z);
+  if(ptTxt) parts.push(`所属知识点（${esc(z.pid||"")}）全文：<div style="margin-top:4px;padding:8px 10px;border:1px dashed var(--border);border-radius:6px;font-size:12.5px;line-height:1.85;color:var(--fg2);white-space:pre-wrap">${esc(ptTxt)}</div>`);
+  return parts.join("<br>");
 }
 /* 题目出口清洗：q/a/accept/opts/why 一律去 markdown */
 function sanitizeQuiz(z){
@@ -6173,10 +6574,10 @@ function genQuestion(form, pt, keyWords, pid, distractorSentences){
   const txt=cleanMd(pt.text||"");
   const title=ptTitle(pt,pid);
   if(form==="judge"){
-    const core=ptKeySentence(pt)||txt.slice(0,50);
+    const core=ptKeySentence(pt)||(txt.length>120?clipClause(txt,120):txt);
     const a=Math.random()<0.5;
     const body=a?core:distortTxt(core,keyWords);
-    return {kind:"judge", q:body+"（判断正误）", a, pid, why:"出自考点 "+pid};
+    return {kind:"judge", q:body+"（判断正误）", a, pid, fact:core, why:"出自考点 "+pid};
   }
   if(form==="blank"){
     /* 候选词：anchor/正文关键词 → 三/四位完整年份 → 句中中文专名；
@@ -6207,7 +6608,7 @@ function genQuestion(form, pt, keyWords, pid, distractorSentences){
   }
   if(form==="choice"){
     /* 选项是完整陈述句：正确项=本考点核心句，干扰项=同模块其他考点的真句 */
-    const ans=ptKeySentence(pt)||txt.slice(0,48);
+    const ans=ptKeySentence(pt)||(txt.length>120?clipClause(txt,120):txt);
     const pool=(distractorSentences||[]).filter(s=>s&&s!==ans);
     const distractors=shuffleArr(pool).slice(0,3);
     const filler=["此项为无关叙述","与本考点内容不符","以上并非正确说法"];
@@ -6220,7 +6621,8 @@ function genQuestion(form, pt, keyWords, pid, distractorSentences){
     }
     return {kind:"choice", q:`关于「${title}」，以下说法正确的是？`, opts:shuffleArr([ans].concat(distractors.slice(0,3))), a:ans, pid, why:"出自考点 "+pid};
   }
-  return {kind:"judge", q:(ptKeySentence(pt)||txt.slice(0,50))+"（判断正误）", a:true, pid, why:"出自考点 "+pid};
+  const _core=ptKeySentence(pt)||(txt.length>120?clipClause(txt,120):txt);
+  return {kind:"judge", q:_core+"（判断正误）", a:true, pid, fact:_core, why:"出自考点 "+pid};
 }
 /* 兜底题库：AI 失败且本任务静态题为空时，本地算法造题，保证温故试炼永不 0/0 空转。
    v51：题量溢出（max(考点数*2, 考点数+4, 8)），每考点 1-2 题，形式随机（judge/blank/choice）。
@@ -6316,7 +6718,7 @@ function refreshWrongForms(we){
     const nq=sanitizeQuiz(genQuestion(form,pt,kw,we.pid,sentencePool));
     const fk=nq.kind+":"+nq.q;
     if(we.forms.some(f=>(f.kind+":"+f.q)===fk)) continue;
-    we.forms.push({kind:nq.kind,q:nq.q,a:nq.a,accept:nq.accept,opts:nq.opts,why:nq.why,okA:(nq.kind==="judge"?(nq.a?"真":"伪"):nq.a)});
+    we.forms.push({kind:nq.kind,q:nq.q,a:nq.a,accept:nq.accept,opts:nq.opts,why:nq.why,fact:nq.fact,pid:nq.pid,okA:(nq.kind==="judge"?(nq.a?"真":"伪"):nq.a)});
   }
 }
 function renderStar(){
@@ -6361,7 +6763,7 @@ function renderStar(){
           if(window.WDMem){ const pt=D.pointsLib.find(p=>p.id===z.pid);
             WDMem.wrong("xuanji",wTopic({pid:z.pid||""}),pt?+pt.star:null); } }
         fb.style.color=v?"var(--ok)":"var(--danger)";
-        fb.innerHTML=(v?"✓ 对了。":"✗ 不对。")+`正确答案：<b style="color:var(--gold)">${esc(String(isJudge?(z.a?"真":"伪"):z.a))}</b>。${esc(z.why||"")}`;
+        fb.innerHTML=(v?"✓ 对了。":"✗ 不对。")+quizExplainHtml(z,isJudge?(z.a?"真":"伪"):z.a);
         const nx=document.createElement("button"); nx.className="btn sm primary"; nx.type="button"; nx.textContent="知道了"; nx.style.marginTop="6px";
         nx.onpointerdown=()=>{ SFX.tap(); qi++; drawOne(); };
         fb.appendChild(document.createTextNode(" ")); fb.appendChild(nx); save();
@@ -6409,7 +6811,7 @@ function renderStar(){
       rfb.className = ok ? "fb ok" : "fb no";
       rfb.style.color = ok ? "var(--ok)" : "var(--danger)";
       rfb.innerHTML=(ok?"✓ 这次对了——知识点移出星盘。":"✗ 仍不对——形式已记下，下次换一种再考你。")
-        +`正确答案：<b style="color:var(--gold)">${esc(String(f.okA!=null?f.okA:f.a))}</b>。`;
+        +quizExplainHtml(f,(f.okA!=null?f.okA:f.a));
       const got=document.createElement("button");
       got.className="btn sm primary"; got.type="button"; got.textContent="知道了";
       got.style.marginTop="6px";
@@ -6485,6 +6887,10 @@ function renderCfg(){
   const c=WDCfg.all();
   const avOf=id=>WDCfg.avatarURL(id)||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(id):"");
   const ov=panel(`<h2>配置中心</h2><div class="mt">头像 · 称呼 · 属性 · 记忆数据 —— 所有变更实时生效，无需重启</div>
+  <div class="cfgrow" style="margin:8px 0 4px;gap:8px;flex-wrap:wrap">
+    <button class="btn sm gold" id="cfgStudio" type="button">✦ 剧情工坊（道具 / 剧情 CG / 内置剧情 / AI 剧情编辑）</button>
+    <button class="btn sm gold" id="cfgSync" type="button">☁ 设备同步（iPhone / iPad / Mac）</button>
+  </div>
   <div class="cfgtabs">
     <button data-tab="av" class="on" type="button">头像</button>
     <button data-tab="call" type="button">称呼与语气</button>
@@ -6669,6 +7075,12 @@ function renderCfg(){
       ov.querySelectorAll(".cfgpane").forEach(p=>p.classList.toggle("on",p.dataset.pane===b.dataset.tab));
     };
   });
+  /* v59：剧情工坊独立页入口 */
+  const stBtn=$("#cfgStudio",ov);
+  if(stBtn) stBtn.onpointerdown=()=>{ SFX.tap(); renderStoryStudio(); };
+  /* v64：设备同步入口 */
+  const syBtn=$("#cfgSync",ov);
+  if(syBtn) syBtn.onpointerdown=()=>{ SFX.tap(); renderSync(); };
 
   /* ---- 头像 / 立绘 ---- */
   function paintGrid(){
@@ -7037,33 +7449,29 @@ function renderPlotLog(){
   const plotDays=Object.keys(st.plotDone||{}).map(Number).sort((a,b)=>a-b);
   const ov=panel(`<h2>剧情回顾</h2><div class="mt">已触发 ${plotDays.length} 段剧情 · 共 45 日</div>
     <div class="badgewall">${plotDays.length?plotDays.map(day=>{
-      const t=PLOT_THEMES[day]||{title:"未知",type:""};
+      const t=plotThemeOf(day)||{title:"未知",type:"",chars:[]};
       const typeLabel={major:"大剧情",small:"日常",small_reward:"小奖励",medium_reward:"中奖励",ultimate:"终极",ultimate_reward:"终极奖励"}[t.type]||t.type;
       return `<div class="badge got"><div class="bic">✦</div><b>第${day}日 · ${esc(t.title)}</b><div class="bd">${esc(typeLabel)} · 出场：${esc((t.chars||[]).join("、"))}</div></div>`;
     }).join(""):'<div class="missing">尚无剧情触发——完成当日 60% 任务即可触发</div>'}</div>`);
 }
 function renderYijing(){
   const cgs=st.cgUnlocked||{};
-  const allCgs=[
-    ...Object.values(PLOT_THEMES).filter(t=>t.cg).map(t=>({id:t.cg,name:"剧情·"+t.title,type:"剧情"})),
-    {id:"welfare_yunting",name:"云汀福利图",type:"福利"},
-    {id:"welfare_shenzhao",name:"沈昭福利图",type:"福利"},
-    {id:"welfare_wantang",name:"晚棠福利图",type:"福利"},
-    {id:"welfare_tina",name:"缇娜福利图",type:"福利"},
-    {id:"welfare_chengxiu",name:"程绣福利图",type:"福利"},
-  ];
+  const allCgs=cgAllList();
   const got=allCgs.filter(c=>cgs[c.id]).length;
-  const ov=panel(`<h2>忆境 · CG 图集</h2><div class="mt">已收藏 ${got}/${allCgs.length} 张（剧情通关 / 程绣处购福利图获得）</div>
+  const imgOf=id=>{ try{ return (WDCfg.cgImageURL&&WDCfg.cgImageURL(id))||""; }catch(e){ return ""; } };
+  const ov=panel(`<h2>忆境 · CG 图集</h2><div class="mt">已收藏 ${got}/${allCgs.length} 张（剧情通关 / 程绣处购福利图获得；图片可在配置中心 → 剧情工坊上传）</div>
     <div class="badgewall">${allCgs.map(c=>cgs[c.id]
-      ? `<div class="badge got" data-cg="${c.id}"><div class="bic">✦</div><b>${esc(c.name)}</b><div class="bd">${esc(c.type)} · 点击查看</div></div>`
+      ? `<div class="badge got" data-cg="${esc(c.id)}"><div class="bic">✦</div><b>${esc(c.name)}</b><div class="bd">${esc(c.type)} · 点击查看</div></div>`
       : `<div class="badge"><div class="bic">·</div><b>？？？</b><div class="bd">未解锁</div></div>`).join("")}</div>`);
   ov.querySelectorAll("[data-cg]").forEach(b=>b.onpointerdown=()=>{
     const id=b.dataset.cg;
-    /* CG 占位展示——实际美术素材到位后替换为 <img> */
-    panel(`<h2>${esc(allCgs.find(c=>c.id===id)?.name||id)}</h2>
-      <div style="width:100%;height:320px;background:linear-gradient(135deg,#2a1a4a,#1a0a2a);display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:18px;border-radius:8px">
-        【CG 占位】${esc(id)}<br><small>美术素材到位后替换</small>
-      </div>`);
+    const cg=allCgs.find(c=>c.id===id)||{name:id};
+    const u=imgOf(id);
+    panel(`<h2>${esc(cg.name||id)}</h2>${u
+      ? `<img src="${esc(u)}" alt="${esc(cg.name||id)}" style="width:100%;max-height:70vh;object-fit:contain;border-radius:8px;display:block;margin:8px auto">`
+      : `<div style="width:100%;height:320px;background:linear-gradient(135deg,#2a1a4a,#1a0a2a);display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:18px;border-radius:8px;text-align:center;line-height:2">
+        【CG 占位】${esc(id)}<br><small>可在配置中心 → 剧情工坊上传图片</small>
+      </div>`}`);
   });
 }
 function renderHeart(){
@@ -7079,8 +7487,8 @@ function renderHeart(){
   save();
 }
 function renderShop(){
-  /* v48：程绣的踏春行——卖时装/福利图/恢复道具/剧情道具
-     使用即换装、发玩家福利图，解锁对应 CG 进忆境 */
+  /* v59：程绣的踏春行 Gal 式店面——道具网格 + 程绣立绘台 + 对话框选项。
+     商品=内置（时装/福利图/恢复/剧情道具）＋剧情工坊自定义道具（st.customItems）。 */
   const WELFARE_GOODS=[
     {id:"costume_yunting",name:"云汀·圣装初醒",type:"时装",cost:200,desc:"云汀兼修祷祝师身份的第一套圣装，使用后换装"},
     {id:"costume_shenzhao",name:"沈昭·经匣符衣",type:"时装",cost:200,desc:"藏经阁阁主的符器衣装，使用后换装"},
@@ -7096,49 +7504,565 @@ function renderShop(){
   /* 剧情道具：按日解锁；v52 R2 另需剧情点 total 达阈值才可购买 */
   const plotGoods=REWARD_ITEMS.filter(r=>(st.day||1)>=r.day).map(r=>{
     const ppTotal=((st.plotPoints&&st.plotPoints.total)||0);
+    const th=plotThemeOf(r.plot);
     return {id:r.id,name:r.name,type:"剧情",cost:r.cost,
-      desc:"触发第 "+r.plot+" 日奖励剧情《"+(PLOT_THEMES[r.plot]||{}).title+"》（需剧情点 ≥ "+r.plot+"，当前 "+ppTotal+"）",
+      desc:"触发第 "+r.plot+" 日奖励剧情《"+(th&&th.title||"")+"》（需剧情点 ≥ "+r.plot+"，当前 "+ppTotal+"）",
       plot:r.plot, ppLocked:ppTotal<r.plot};
   });
-  const allGoods=[...WELFARE_GOODS,...plotGoods];
-  const ov=panel(`<h2>踏春行 · 程绣的旅行社</h2>
-    <div class="mt">灵铢 ${st.coin} · 时装/福利图/恢复道具/剧情道具。购买即生效。</div>`+
-    allGoods.map((g,i)=>{
-      const owned=(st.goods&&st.goods[g.id])||(g.type==="剧情"&&plotTriggered(g.plot));
-      const ppLocked=!!g.ppLocked;
-      const disabled=owned||ppLocked;
-      const btnLabel=owned?'已拥有':(ppLocked?'剧情点不足':'购买');
-      return `<div class="shoprow">
-        <div style="flex:1"><b>${esc(g.name)}</b><span style="color:var(--ink2);font-size:12px"> · ${esc(g.type)}</span><div style="font-size:12px;color:var(--ink2)">${esc(g.desc)}</div></div>
-        <span class="cost">${g.cost} 文</span>
-        <button class="btn sm ${owned||ppLocked?'ghost':'primary'}" data-buy="${g.id}" data-cost="${g.cost}" ${disabled?'disabled':''}>${btnLabel}</button>
-      </div>`;
-    }).join(""));
-  ov.querySelectorAll("[data-buy]").forEach(b=>b.onpointerdown=()=>{
-    const id=b.dataset.buy, cost=+b.dataset.cost;
-    const g=allGoods.find(x=>x.id===id); if(!g) return;
-    if(g.ppLocked){ toast("剧情点不足——完成当日任务或静待时序推进"); return; }
-    if(st.coin<cost){ toast("灵铢不足——再修习一日"); return; }
-    st.coin-=cost;
-    st.goods=st.goods||{}; st.goods[id]=new Date().toISOString();
-    /* 生效逻辑 */
+  /* v59：剧情工坊自定义道具（拥有型：购买即收藏） */
+  const customGoods=(st.customItems||[]).map(x=>Object.assign({custom:true},x));
+  const allGoods=[...WELFARE_GOODS,...plotGoods,...customGoods];
+  const isOwned=g=>!!((st.goods&&st.goods[g.id])||(g.type==="剧情"&&plotTriggered(g.plot)));
+  const TYPE_ICON={"时装":"👗","福利图":"🖼️","恢复":"🧪","剧情":"📜","自定义":"🎁"};
+  const iconOf=g=>{
+    try{ const u=WDCfg.itemIconURL&&WDCfg.itemIconURL(g.id); if(u) return `<img src="${esc(u)}" alt="">`; }catch(e){}
+    return TYPE_ICON[g.type]||"🎁";
+  };
+  let selId=null;
+  const ov=panel(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h2 style="margin:0">踏春行 · 程绣的旅行社</h2>
+      <button class="btn sm gold" id="shopStudio" type="button">✦ 剧情工坊</button>
+    </div>
+    <div class="shopgal">
+      <div class="shopgridwrap">
+        <div class="shopcoin">🪙 灵铢 <b id="shopCoin">${st.coin}</b> · 点选道具，跟程绣打听；买定离手，不退不换。</div>
+        <div class="shopgrid" id="shopGrid">
+          ${allGoods.map(g=>{
+            const owned=isOwned(g), ppLocked=!!g.ppLocked;
+            return `<div class="shopitem${owned?' owned':''}" data-pick="${esc(g.id)}" title="${esc(g.desc)}">
+              <span class="sit">${esc(g.type)}</span>
+              ${owned?'<span class="sibadge">已拥有</span>':''}
+              <div class="siic">${iconOf(g)}</div>
+              <div class="sin">${esc(g.name)}</div>
+              <div class="sip">${ppLocked?'剧情点不足':g.cost+' 灵铢'}</div>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>
+      <div class="shopstage">
+        <div class="shav">${(function(){ try{ const u=WDCfg.avatarURL&&WDCfg.avatarURL("chengxiu"); return u?`<img src="${esc(u)}" alt="">`:"绣"; }catch(e){ return "绣"; } })()}</div>
+        <div class="shpt">${(function(){ try{ const u=WDCfg.portraitURL&&WDCfg.portraitURL("chengxiu"); return u?`<img src="${esc(u)}" alt="程绣立绘">`:`<span class="shph">程绣立绘</span>`; }catch(e){ return '<span class="shph">程绣立绘</span>'; } })()}</div>
+      </div>
+    </div>
+    <div class="shopdlg">
+      <div class="sdn">程绣 · 踏春行掌柜</div>
+      <div class="sdtext" id="shopSay">哟，稀客。架子上的东西随便看——光看不买也成，别碰掉漆就行。</div>
+      <div class="shopopts" id="shopOpts"></div>
+    </div>`);
+  const sayEl=$("#shopSay",ov), optsEl=$("#shopOpts",ov);
+  function say(t){ sayEl.textContent=t; }
+  function renderOpts(){
+    const g=selId?allGoods.find(x=>x.id===selId):null;
+    let btns=[];
+    if(g){
+      const owned=isOwned(g);
+      if(owned) btns.push(["再看看别的","back"]);
+      else if(g.ppLocked) btns.push(["（剧情点不够，先记下）","back"]);
+      else btns.push(["买下它 · "+g.cost+" 灵铢","buy"],["再听听别的","back"]);
+    }
+    btns.push(["今天到了什么新货？","new"],["灵铢不够怎么办？","poor"],["（转身离开）","leave"]);
+    optsEl.innerHTML=btns.map(([t,k])=>`<button class="btn sm ${k==="buy"?"primary":"ghost"}" data-opt="${k}" type="button">${esc(t)}</button>`).join("");
+    optsEl.querySelectorAll("[data-opt]").forEach(b=>b.onpointerdown=()=>{
+      SFX.tap();
+      const k=b.dataset.opt;
+      if(k==="back"){ selId=null; markSel(); idleSay(); renderOpts(); }
+      else if(k==="leave"){ ov.remove(); }
+      else if(k==="new"){ say("新货都在亮着金边的格子里摆着呢。剧情道具得你的故事走到那一天、剧情点攒够了才肯露面——我也做不了它的主。"); }
+      else if(k==="poor"){ say("灵铢不够？去藏经阁清几匣雾怪、把今天的修行做完，灵铢自然就有了。我这儿……概不赊账，别撒娇。"); }
+      else if(k==="buy"){ doBuy(g); }
+    });
+  }
+  function idleSay(){
+    const pool=["看上什么直接点它，我给你讲讲门道。","买不买不要紧，先听个乐子也行。","我这儿明码标价，童叟无欺——当然，童叟也不一定买得起。"];
+    say(pool[Math.floor(Math.random()*pool.length)]);
+  }
+  function markSel(){
+    ov.querySelectorAll(".shopitem").forEach(el=>el.classList.toggle("sel",el.dataset.pick===selId));
+  }
+  function pickLine(g){
+    if(g.ppLocked) return "「"+g.name+"」是剧情道具，要第 "+g.plot+" 日的故事走到、剧情点攒够 "+g.plot+" 点才肯跟你走——你现在还差些火候。";
+    const byType={
+      "时装":"「"+g.name+"」。"+g.desc+"——衣服这种东西，穿过一次就知道值不值。",
+      "福利图":"「"+g.name+"」。买下就收进忆境，夜深人静时自己翻出来看……别想歪，我说的是画。",
+      "恢复":"「"+g.name+"」。"+g.desc+"。雾浓的日子备一个，比硬撑划算。",
+      "剧情":"「"+g.name+"」。"+g.desc+"——这种东西我只负责递到你手上，故事是你们自己的。",
+      "自定义":"「"+g.name+"」。"+(g.desc||"客人订的私货，识货的人才看得上。")
+    };
+    return byType[g.type]||g.desc;
+  }
+  ov.querySelectorAll("[data-pick]").forEach(el=>el.onpointerdown=()=>{
+    if(el.classList.contains("owned")){ say("这个你已经有了，还想再买一个囤着？行啊，先付钱。"); return; }
+    SFX.tap(); selId=el.dataset.pick; markSel();
+    const g=allGoods.find(x=>x.id===selId); if(g){ say(pickLine(g)); renderOpts(); }
+  });
+  function doBuy(g){
+    if(!g||isOwned(g)) return;
+    if(g.ppLocked){ toast("剧情点不足——完成当日任务或静待时序推进"); say("说了嘛，火候不到，它不认主。"); return; }
+    if(st.coin<g.cost){ toast("灵铢不足——再修习一日"); say("灵铢不够呢。去清几匣雾怪再来，我给你留着……留到打烊为止。"); return; }
+    st.coin-=g.cost;
+    st.goods=st.goods||{}; st.goods[g.id]=new Date().toISOString();
     if(g.type==="时装"){
-      st.costumes=st.costumes||{}; st.costumes[id]=true;
+      st.costumes=st.costumes||{}; st.costumes[g.id]=true;
       toast("已换装：「"+g.name+"」——新衣上身","gold");
+      say("衣服上身，人精神三分。照照去，别在我店里转得我眼花。");
     } else if(g.type==="福利图"){
-      st.cgUnlocked=st.cgUnlocked||{}; st.cgUnlocked[id]=true;
+      st.cgUnlocked=st.cgUnlocked||{}; st.cgUnlocked[g.id]=true;
       toast("福利图已收入忆境：「"+g.name+"」","gold");
+      say("收进忆境了。一个人看的时候……把门闩好。");
     } else if(g.type==="恢复"){
-      if(id==="ningxin_xiang"){ const cap=maxHP(); st.hp=Math.min(cap,(st.hp||0)+30); toast("凝心香起效——心气 +30","gold"); }
+      if(g.id==="ningxin_xiang"){ const cap=maxHP(); st.hp=Math.min(cap,(st.hp||0)+30); toast("凝心香起效——心气 +30","gold"); }
       else { const cap=maxEnergy(); st.energy=Math.min(cap,(st.energy||0)+10); toast("回灵丹起效——灵力 +10","gold"); }
+      say("随身带着，别等雾扑到脸上才想起它。");
     } else if(g.type==="剧情"){
-      const theme=PLOT_THEMES[g.plot];
-      if(theme) performPlot(theme);
+      const th=plotThemeOf(g.plot);
+      if(th) performPlot(th);
+      say("去吧，故事不等人——钱货两清，我接着看店。");
+    } else {
+      toast("已收入行囊：「"+g.name+"」","gold");
+      say("算你识货。这东西搁别人那儿，有钱都未必找得到。");
     }
     save(); renderShop();
+  }
+  renderOpts();
+  const ssBtn=$("#shopStudio",ov);
+  if(ssBtn) ssBtn.onpointerdown=()=>{ SFX.tap(); renderStoryStudio(); };
+}
+/* ============================================================
+   v64 设备同步面板——GitHub 私有 Gist 通道 + 加密 + 加入码换机 + 文件备份
+   ============================================================ */
+function renderSync(){
+  if(!window.WDSync){ toast("同步模块未加载"); return; }
+  const S=WDSync;
+  let busy=false;
+  const ov=panel(`<h2>☁ 设备同步</h2>
+    <div class="mt">iPhone / iPad / Mac 共用一份旅程：进度、私聊、错题、头像立绘与剧情工坊配置自动合并；
+    通道是你 GitHub 账号下的<b>私有 Gist</b>，内容经 AES-GCM 加密，仅持加入码的本人设备可读写。</div>
+    <div id="syncBody" style="margin-top:12px"></div>`);
+  const body=$("#syncBody",ov);
+
+  function fmtSize(n){ n=+n||0; return n>1048576?(n/1048576).toFixed(2)+"MB":(n/1024).toFixed(0)+"KB"; }
+  function fmtT(t){ return t?String(t).slice(0,16).replace("T"," "):"从未"; }
+
+  function renderHome(msg){
+    const stt=S.status();
+    if(!stt.enabled){
+      body.innerHTML=`
+      <div class="note" style="border-left-color:var(--gold)">需要一个 GitHub 个人访问令牌（Token，勾选 <b>gist</b> 权限即可）：
+        <a href="https://github.com/settings/tokens/new?scopes=gist&description=wendao-sync" target="_blank" style="color:var(--cyber)">点此一键生成（登录 GitHub 后拉到底 Generate token）</a>，复制后粘到下面。
+        令牌只保存在你每台设备本机，不进游戏代码。</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px">
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px">
+          <b style="color:var(--cyber)">① 第一次：在本机创建同步档案</b>
+          <div class="cfgrow" style="margin-top:8px"><label>GitHub Token</label><input id="syToken" type="password" placeholder="ghp_..." style="flex:1;min-width:0"></div>
+          <div class="cfgrow"><label>加密口令</label><input id="syPw" placeholder="可留空（默认绑定档案号）" style="flex:1;min-width:0"></div>
+          <button class="btn sm primary" id="syCreate" type="button" style="margin-top:6px">创建并立即上传本机档案</button>
+          <div class="note" style="margin-top:8px;font-size:11.5px">在你最常玩的设备（建议 Mac）上创建，另外两台用加入码加入。</div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px">
+          <b style="color:var(--gold)">② 另一台设备：粘贴加入码</b>
+          <textarea id="syJoin" rows="4" placeholder="把主机「加入码」整段粘到这里（或用下方扫码）" style="width:100%;margin-top:8px;font-size:12px"></textarea>
+          <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <button class="btn sm primary" id="syJoinBtn" type="button">加入并拉取云端档案</button>
+            <button class="btn sm ghost" id="syScan" type="button" style="${('BarcodeDetector' in window)?'':'display:none'}">📷 扫主机二维码</button>
+          </div>
+          <div class="note" style="margin-top:8px;font-size:11.5px">扫码需授权摄像头；二维码仅包含加入码，不含你的密钥明文之外的任何存档内容。</div>
+        </div>
+      </div>
+      <div style="border-top:1px dashed var(--border);margin-top:14px;padding-top:10px">
+        <b>离线备份（不走网络，最稳妥）：</b>
+        <span style="margin-left:8px"><button class="btn sm" id="syExp" type="button">⬇ 导出完整备份文件</button>
+        <button class="btn sm" id="syImp" type="button">⬆ 导入备份文件</button></span>
+        <input type="file" id="syImpF" accept="application/json,.json" style="display:none">
+        <div class="note" style="margin-top:6px;font-size:11.5px">备份含全部进度与配置（不含 AI 密钥）。可用 AirDrop/微信文件/iCloud 云盘发到 iPhone、iPad 后选择「导入」。</div>
+      </div>`;
+      bindCommon();
+      $("#syCreate",body).onpointerdown=async()=>{
+        if(busy) return;
+        const token=$("#syToken",body).value.trim(), pw=$("#syPw",body).value.trim();
+        if(!token.startsWith("gh")||token.length<20){ toast("请粘贴有效的 GitHub Token（ghp_ 开头）"); return; }
+        busy=true; const b=$("#syCreate",body); b.disabled=true; b.textContent="创建中……";
+        try{ await S.create(token,pw); toast("同步档案已创建并上传","gold"); renderHome(); }
+        catch(e){ busy=false; b.disabled=false; b.textContent="创建并立即上传本机档案"; toast("创建失败："+e.message); }
+      };
+      $("#syJoinBtn",body).onpointerdown=async()=>{
+        if(busy) return;
+        const code=$("#syJoin",body).value.trim(); if(!code){ toast("请粘贴加入码"); return; }
+        busy=true;
+        try{ await S.join(code); toast("已加入并完成首次同步","gold");
+          if(confirm("云端档案已合并到本机。刷新页面后生效，现在刷新吗？")) location.reload(); else renderHome();
+        }catch(e){ busy=false; toast("加入失败："+e.message); }
+      };
+      const scanBtn=$("#syScan",body);
+      if(scanBtn) scanBtn.onpointerdown=()=>startScan(code=>{ const ta=$("#syJoin",body); if(ta){ ta.value=code; toast("已识别加入码，点「加入」"); } });
+    } else {
+      const code=S.joinCode();
+      body.innerHTML=`
+      <div class="note" style="border-left-color:var(--ok)">同步已启用 · 上次上传 ${fmtT(stt.lastPush)} · 上次拉取 ${fmtT(stt.lastPull)} · 本机档案 ${fmtSize(stt.size)}${stt.auto===false?' · <b style="color:var(--gold)">自动同步已关</b>':''}</div>
+      <div style="display:grid;grid-template-columns:1fr 240px;gap:14px;margin-top:12px;align-items:start">
+        <div>
+          <label class="cfgrow" style="font-size:12px;color:var(--dim)">加入码（在新设备粘贴或扫码；含写入令牌，请勿外传）</label>
+          <textarea id="syCode" rows="4" readonly style="width:100%;font-size:11.5px;font-family:monospace">${esc(code)}</textarea>
+          <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <button class="btn sm" id="syCopy" type="button">复制加入码</button>
+            <button class="btn sm primary" id="syPush" type="button">立即上传</button>
+            <button class="btn sm primary" id="syPull" type="button">立即拉取并合并</button>
+            <button class="btn sm" id="syAuto" type="button">自动同步：${stt.auto===false?"关":"开"}</button>
+            <button class="btn sm ghost" id="syLeave" type="button">退出同步（保留本机档案）</button>
+          </div>
+          <div class="note" style="margin-top:10px;font-size:11.5px">自动节奏：每次进度变化后约 25 秒上传；每次打开游戏先拉取合并。任务完成、收藏、私聊等进度自动并集，不会互相覆盖。</div>
+          <div style="border-top:1px dashed var(--border);margin-top:12px;padding-top:10px">
+            <b>离线备份：</b>
+            <button class="btn sm" id="syExp2" type="button" style="margin-left:8px">⬇ 导出备份文件</button>
+            <button class="btn sm" id="syImp2" type="button">⬆ 导入备份文件</button>
+          </div>
+        </div>
+        <div style="text-align:center">
+          <div id="syQR" style="display:inline-block;padding:8px;border:1px solid var(--border);border-radius:10px;background:#fff"></div>
+          <div class="note" style="margin-top:6px;font-size:11px">新设备：打开游戏 → 配置中心 → 设备同步 → 扫码/粘贴</div>
+        </div>
+      </div>
+      <input type="file" id="syImpF" accept="application/json,.json" style="display:none">`;
+      bindCommon();
+      S.qr($("#syQR",body),code,216);
+      $("#syCopy",body).onpointerdown=()=>{
+        const ta=$("#syCode",body); ta.select();
+        try{ navigator.clipboard.writeText(ta.value); toast("加入码已复制"); }
+        catch(e){ document.execCommand&&document.execCommand("copy"); toast("加入码已复制"); }
+      };
+      $("#syPush",body).onpointerdown=async()=>{
+        if(busy) return; busy=true; const b=$("#syPush",body); b.disabled=true; b.textContent="上传中……";
+        try{ const r=await S.pushNow(); toast(r.skipped?"刚同步过，稍候再试":"已上传云端","gold"); }
+        catch(e){ toast("上传失败："+e.message); }
+        finally{ busy=false; renderHome(); }
+      };
+      $("#syPull",body).onpointerdown=async()=>{
+        if(busy) return; busy=true; const b=$("#syPull",body); b.disabled=true; b.textContent="拉取中……";
+        try{ await S.pullNow(); toast("已与云端合并","gold");
+          if(confirm("合并完成。刷新页面后生效，现在刷新吗？")) location.reload(); else { busy=false; renderHome(); }
+        }catch(e){ busy=false; b.disabled=false; b.textContent="立即拉取并合并"; toast("拉取失败："+e.message); }
+      };
+      $("#syAuto",body).onpointerdown=()=>{ S.setAuto(stt.auto!==false?false:true); toast("自动同步已"+(stt.auto===false?"开启":"关闭")); renderHome(); };
+      $("#syLeave",body).onpointerdown=()=>{
+        if(confirm("退出同步？本机档案保留，只是不再自动上传/拉取。")){ S.leave(); toast("已退出同步"); renderHome(); }
+      };
+    }
+  }
+  function bindCommon(){
+    [$("#syExp",body),$("#syExp2",body)].forEach(b=>{ if(b) b.onpointerdown=()=>{ S.exportFile(); toast("备份文件已生成"); }; });
+    [$("#syImp",body),$("#syImp2",body)].forEach(b=>{ if(!b) return; b.onpointerdown=()=>$("#syImpF",body).click(); });
+    const f=$("#syImpF",body);
+    if(f) f.onchange=async e=>{
+      const file=e.target.files[0]; if(!file) return;
+      if(busy) return; busy=true;
+      try{ await S.importFile(file); toast("备份已合并","gold");
+        if(confirm("导入完成。刷新页面后生效，现在刷新吗？")) location.reload();
+      }catch(err){ toast("导入失败："+err.message); busy=false; }
+      finally{ try{ f.value=""; }catch(_){} }
+    };
+  }
+  /* 摄像头扫码（BarcodeDetector 可用时；不支持的浏览器隐藏按钮） */
+  function startScan(onCode){
+    let stream0=null, stopped=false, det=null;
+    const wrap=panel(`<h2>扫描主机加入码</h2>
+      <video id="scanV" autoplay playsinline muted style="width:100%;max-width:420px;border-radius:10px;background:#000;display:block;margin:10px auto"></video>
+      <div class="note" style="text-align:center">将主机屏幕上的二维码对准取景框，识别后自动填入。</div>`);
+    const stop=()=>{ stopped=true; try{ stream0&&stream0.getTracks().forEach(t=>t.stop()); }catch(e){} wrap.remove(); };
+    wrap.querySelector(".close").onpointerdown=stop;
+    (async()=>{
+      try{
+        stream0=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+        const v=$("#scanV",wrap); v.srcObject=stream0; await v.play();
+        const Ctor=window.BarcodeDetector;
+        det=new Ctor({formats:["qr_code"]});
+        const tick=async()=>{
+          if(stopped) return;
+          try{ const codes=await det.detect(v);
+            if(codes&&codes.length&&codes[0].rawValue){ onCode(codes[0].rawValue); stop(); return; }
+          }catch(e){}
+          setTimeout(tick,400);
+        };
+        tick();
+      }catch(e){ stop(); toast("无法打开摄像头："+e.message); }
+    })();
+  }
+  renderHome();
+}
+
+/* ============================================================
+   v59 剧情工坊——前台配置道具/剧情CG，可视化编辑内置剧情与AI推演剧情
+   文本覆写随存档（storyThemeOV/cutsceneOV/customItems/customCgs），
+   图片走 WDCfg（cgImages/itemIcons）。 ============================================================ */
+const SS_THEME_TYPES=[["small","日常"],["major","大剧情"],["small_reward","小奖励"],["medium_reward","中奖励"],["ultimate","终极"]];
+function renderStoryStudio(){
+  const ov=panel(`<h2>剧情工坊</h2>
+    <div class="mt">内置剧情 · 过场对白 · AI 推演剧情 · CG 图鉴 · 道具——改动即刻生效并随存档保存；图片素材保存在本机。</div>
+    <div class="cfgtabs" id="ssTabs">
+      <button data-ss="theme" class="on" type="button">内置剧情</button>
+      <button data-ss="cut" type="button">过场对白</button>
+      <button data-ss="ai" type="button">AI 推演剧情</button>
+      <button data-ss="cg" type="button">CG 图鉴</button>
+      <button data-ss="item" type="button">道具</button>
+    </div>
+    <div id="ssBody" style="margin-top:10px"></div>`);
+  const body=$("#ssBody",ov);
+  function head(n){ ov.querySelectorAll("#ssTabs [data-ss]").forEach(b=>b.classList.toggle("on",b.dataset.ss===n)); }
+  /* —— 1. 内置剧情（45 日） —— */
+  function showTheme(){
+    head("theme");
+    const rows=Object.keys(PLOT_THEMES).map(Number).sort((a,b)=>a-b).map(day=>{
+      const t=plotThemeOf(day), ovr=st.storyThemeOV[day];
+      const sel=SS_THEME_TYPES.map(([v,l])=>`<option value="${v}"${t.type===v?" selected":""}>${l}</option>`).join("");
+      return `<div style="display:grid;grid-template-columns:42px 1.2fr 1.4fr 84px 1fr 1fr 56px;gap:6px;align-items:center;padding:5px 2px;border-bottom:1px solid var(--border);font-size:12px">
+        <b style="color:var(--gold)">第${day}日</b>
+        <input data-th="${day}" data-k="title" value="${esc(t.title||"")}" maxlength="20" style="min-width:0">
+        <input data-th="${day}" data-k="charsStr" value="${esc((t.chars||[]).join("、"))}" placeholder="出场角色，、分隔" style="min-width:0">
+        <select data-th="${day}" data-k="type">${sel}</select>
+        <input data-th="${day}" data-k="cg" value="${esc(t.cg||"")}" placeholder="CG id（可空）" maxlength="40" style="min-width:0">
+        <input data-th="${day}" data-k="item" value="${esc(t.item||"")}" placeholder="道具名（可空）" maxlength="20" style="min-width:0">
+        <button class="btn sm ghost" data-threset="${day}" type="button" ${ovr?"":"disabled"} style="font-size:11px">恢复</button>
+      </div>`;
+    }).join("");
+    body.innerHTML=`<div class="note">四十五日剧情总表。直接改：标题 / 出场角色（yunting、tina、wantang、shenzhao、chengxiu、gugong 等，用顿号分隔）/ 类型 / 绑定 CG id / 绑定道具。留空 CG/道具即无。改完即存。</div>
+      <div style="display:grid;grid-template-columns:42px 1.2fr 1.4fr 84px 1fr 1fr 56px;gap:6px;padding:4px 2px;font-size:11px;color:var(--dim)"><span>日次</span><span>标题</span><span>出场角色</span><span>类型</span><span>CG id</span><span>道具</span><span></span></div>
+      ${rows}`;
+    body.querySelectorAll("[data-th]").forEach(el=>{
+      const commit=()=>{
+        const day=el.dataset.th, k=el.dataset.k, v=el.value.trim();
+        st.storyThemeOV[day]=st.storyThemeOV[day]||{};
+        st.storyThemeOV[day][k]=v; save();
+        const btn=body.querySelector('[data-threset="'+day+'"]'); if(btn) btn.disabled=false;
+      };
+      el.onchange=commit;
+    });
+    body.querySelectorAll("[data-threset]").forEach(b=>b.onpointerdown=()=>{
+      delete st.storyThemeOV[b.dataset.threset]; save(); showTheme(); toast("已恢复内置剧情");
+    });
+  }
+  /* —— 2. 过场对白（9 节点） —— */
+  function showCut(){
+    head("cut");
+    body.innerHTML=`<div class="note">九个固定过场（降临 / 绑定 / 灵魂契约 / 五幕仪式 / 终幕）云汀的本地兜底台词。AI 在线时会以此稿化写；改稿即改兜底与化写底稿。</div>`+
+      Object.keys(CUTSCENE_NODES).map(node=>{
+        const cs=CUTSCENE_NODES[node], v=cutsceneText(node), ovr=!!st.cutsceneOV[node];
+        return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <b style="color:var(--gold);font-size:13px">${esc(cs.label)} <span style="color:var(--dim);font-weight:normal;font-size:11px">${esc(node)}</span></b>
+            <button class="btn sm ghost" data-cutreset="${node}" type="button" ${ovr?"":"disabled"} style="font-size:11px">恢复内置</button>
+          </div>
+          <textarea data-cut="${node}" rows="2" style="width:100%;font-size:13px">${esc(v)}</textarea>
+        </div>`;
+      }).join("");
+    body.querySelectorAll("[data-cut]").forEach(ta=>ta.onchange=()=>{
+      const v=ta.value.trim();
+      if(v) st.cutsceneOV[ta.dataset.cut]=v; else delete st.cutsceneOV[ta.dataset.cut];
+      save();
+      const btn=body.querySelector('[data-cutreset="'+ta.dataset.cut+'"]'); if(btn) btn.disabled=!v;
+    });
+    body.querySelectorAll("[data-cutreset]").forEach(b=>b.onpointerdown=()=>{
+      delete st.cutsceneOV[b.dataset.cutreset]; save(); showCut(); toast("已恢复内置台词");
+    });
+  }
+  /* —— 3. AI 推演剧情（st.plotLines） —— */
+  function showAi(){
+    head("ai");
+    const lines=st.plotLines||[];
+    if(!lines.length){
+      body.innerHTML=`<div class="note">这里收录每段剧情实际演出的台词：剧情触发时由 AI 按当天人设现场推演，离线时落本地稿。</div>
+        <div class="missing">尚无 AI 推演剧情——随主线推进（每日任务全清）或在集市购买剧情道具后自动生成。</div>`;
+      return;
+    }
+    body.innerHTML=`<div class="note">共 ${lines.length} 条剧情台词（倒序）。直接改文本即改剧情回廊与对话流里的呈现；删除只移除该条，不影响剧情已触发状态。</div>`+
+      lines.map((m,i)=>{
+        let nm=m.npc;
+        try{ nm=dName(m.npc); }catch(e){}
+        const at=m.at?String(m.at).slice(0,16).replace("T"," "):"";
+        return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px">
+            <b style="color:var(--cyber);font-size:12.5px">${esc(nm)} <span style="color:var(--dim);font-weight:normal">第${m.day||"?"}日 · ${esc(m.theme||"剧情")}</span></b>
+            <span style="font-size:10.5px;color:var(--dim);white-space:nowrap">${esc(at)}
+              <button class="btn sm ghost" data-plsave="${i}" type="button" style="font-size:11px;margin-left:6px">保存</button>
+              <button class="btn sm ghost" data-pldel="${i}" type="button" style="font-size:11px">删除</button>
+            </span>
+          </div>
+          <textarea data-pl="${i}" rows="2" style="width:100%;font-size:13px">${esc(m.text||"")}</textarea>
+        </div>`;
+      }).reverse().join("");
+    body.querySelectorAll("[data-plsave]").forEach(b=>b.onpointerdown=()=>{
+      const i=+b.dataset.plsave, ta=body.querySelector('[data-pl="'+i+'"]');
+      if(ta&&st.plotLines[i]){ st.plotLines[i].text=ta.value.slice(0,500); syncPlotMirror(i); save(); toast("已保存台词修改"); }
+    });
+    body.querySelectorAll("[data-pldel]").forEach(b=>b.onpointerdown=()=>{
+      const i=+b.dataset.pldel, m=st.plotLines[i]; if(!m) return;
+      st.plotLines.splice(i,1);
+      /* 同步删除 st.dialogue 中的镜像（按 plotId+at+text 匹配，占位/AI 台词均覆盖） */
+      st.dialogue=(st.dialogue||[]).filter(d=>!(d.kind==="plot"&&d.at===m.at&&d.npc===m.npc&&d.text===m.text));
+      save(); showAi(); toast("已删除该条剧情台词");
+    });
+  }
+  /* plotLines 改文本后同步 dialogue 镜像 */
+  function syncPlotMirror(i){
+    const m=st.plotLines[i]; if(!m) return;
+    (st.dialogue||[]).forEach(d=>{ if(d.kind==="plot"&&d.at===m.at&&d.npc===m.npc&&d.plotId===m.plotId) d.text=m.text; });
+  }
+  /* —— 4. CG 图鉴 —— */
+  function cgImg(id){ try{ return (WDCfg.cgImageURL&&WDCfg.cgImageURL(id))||""; }catch(e){ return ""; } }
+  function showCg(){
+    head("cg");
+    const cgs=st.cgUnlocked||{};
+    const grid=cgAllList().map(c=>{
+      const u=cgImg(c.id), got=!!cgs[c.id];
+      return `<div class="shopitem" style="cursor:default">
+        <span class="sit">${esc(c.type)}</span>
+        <span class="sibadge" style="color:${got?'var(--ok)':'var(--dim)'}">${got?'已解锁':'未解锁'}</span>
+        <div class="siic" style="font-size:14px">${u?`<img src="${esc(u)}" alt="">`:"🖼️"}</div>
+        <div class="sin">${esc(c.name)}</div>
+        <div style="font-size:10px;color:var(--dim);margin:2px 0;word-break:break-all">${esc(c.id)}</div>
+        <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">
+          <button class="btn sm ghost" data-cgup="${esc(c.id)}" type="button" style="font-size:11px;padding:2px 6px">${u?'换图':'上传'}</button>
+          ${u?'<button class="btn sm ghost" data-cgclr="'+esc(c.id)+'" type="button" style="font-size:11px;padding:2px 6px">移除图</button>':''}
+          <button class="btn sm ghost" data-cgtoggle="${esc(c.id)}" type="button" style="font-size:11px;padding:2px 6px">${got?'收回':'解锁'}</button>
+        </div>
+      </div>`;
+    }).join("");
+    body.innerHTML=`<div class="note">给剧情 CG / 福利图上传图片（JPG/PNG，自动等比压缩）。「解锁」仅改变收藏状态，方便你立刻在忆境里预览效果。</div>
+      <div class="shopgrid" style="max-height:none;margin-bottom:14px">${grid}</div>
+      <div style="border-top:1px dashed var(--border);padding-top:10px">
+        <b style="font-size:13px;color:var(--cyber)">新增自定义 CG</b>
+        <div class="cfgrow" style="margin-top:6px">
+          <input id="cgNewId" placeholder="CG 英文键（如 cg_my_01，唯一）" maxlength="40" style="flex:1;min-width:140px">
+          <input id="cgNewName" placeholder="显示名称" maxlength="20" style="flex:1;min-width:120px">
+          <button class="btn sm primary" id="cgNewAdd" type="button">新建</button>
+        </div>
+      </div>`;
+    body.querySelectorAll("[data-cgup]").forEach(b=>b.onpointerdown=()=>{
+      const id=b.dataset.cgup;
+      pickFile("image/*",f=>{
+        WDCfg.setCGImage(id,f,s=>{}).then(()=>{ toast("CG 图片已保存","gold"); showCg(); })
+          .catch(e=>toast("图片保存失败："+(e.message||e)));
+      });
+    });
+    body.querySelectorAll("[data-cgclr]").forEach(b=>b.onpointerdown=()=>{
+      WDCfg.clearCGImage(b.dataset.cgclr); showCg(); toast("已移除 CG 图片");
+    });
+    body.querySelectorAll("[data-cgtoggle]").forEach(b=>b.onpointerdown=()=>{
+      const id=b.dataset.cgtoggle; st.cgUnlocked=st.cgUnlocked||{};
+      if(st.cgUnlocked[id]) delete st.cgUnlocked[id]; else st.cgUnlocked[id]=new Date().toISOString();
+      save(); showCg();
+    });
+    $("#cgNewAdd",body).onpointerdown=()=>{
+      const id=$("#cgNewId",body).value.trim().replace(/[^\w-]/g,"_"), name=$("#cgNewName",body).value.trim();
+      if(!id||!name){ toast("CG 键和名称都要填"); return; }
+      if(cgAllList().some(c=>c.id===id)){ toast("CG 键已存在"); return; }
+      st.customCgs.push({id,name}); save(); showCg(); toast("已新建自定义 CG，可上传图片了","gold");
+    };
+  }
+  /* —— 5. 道具 —— */
+  const BUILTIN_ITEMS=[
+    {id:"costume_yunting",name:"云汀·圣装初醒",type:"时装",cost:200,desc:"云汀兼修祷祝师身份的第一套圣装，使用后换装"},
+    {id:"costume_shenzhao",name:"沈昭·经匣符衣",type:"时装",cost:200,desc:"藏经阁阁主的符器衣装，使用后换装"},
+    {id:"costume_wantang",name:"晚棠·祷祝碎片",type:"时装",cost:200,desc:"祷祝成功段落凝成的衣物虚影，使用后换装"},
+    {id:"welfare_yunting",name:"云汀福利图",type:"福利图",cost:150,desc:"解锁云汀福利 CG 进忆境"},
+    {id:"welfare_shenzhao",name:"沈昭福利图",type:"福利图",cost:150,desc:"解锁沈昭福利 CG 进忆境"},
+    {id:"welfare_wantang",name:"晚棠福利图",type:"福利图",cost:150,desc:"解锁晚棠福利 CG 进忆境"},
+    {id:"welfare_tina",name:"缇娜福利图",type:"福利图",cost:150,desc:"解锁缇娜福利 CG 进忆境"},
+    {id:"welfare_chengxiu",name:"程绣福利图",type:"福利图",cost:150,desc:"解锁程绣福利 CG 进忆境"},
+    {id:"ningxin_xiang",name:"凝心香",type:"恢复",cost:80,desc:"恢复 30 点心气"},
+    {id:"huiling_dan",name:"回灵丹",type:"恢复",cost:60,desc:"恢复 10 点灵力"}
+  ].concat(REWARD_ITEMS.map(r=>({id:r.id,name:r.name,type:"剧情",cost:r.cost,desc:"第 "+r.plot+" 日奖励剧情道具"})));
+  function itemIcon(id){ try{ return (WDCfg.itemIconURL&&WDCfg.itemIconURL(id))||""; }catch(e){ return ""; } }
+  function showItem(){
+    head("item");
+    const built=BUILTIN_ITEMS.map(g=>{
+      const u=itemIcon(g.id);
+      return `<div class="shopitem" style="cursor:default">
+        <span class="sit">内置</span>
+        <div class="siic">${u?`<img src="${esc(u)}" alt="">`:"🎁"}</div>
+        <div class="sin">${esc(g.name)}</div>
+        <div class="sip">${g.cost} 灵铢 · ${esc(g.type)}</div>
+        <div style="display:flex;gap:4px;justify-content:center;margin-top:2px">
+          <button class="btn sm ghost" data-iup="${esc(g.id)}" type="button" style="font-size:11px;padding:2px 6px">${u?'换图标':'配图标'}</button>
+          ${u?'<button class="btn sm ghost" data-iclr="'+esc(g.id)+'" type="button" style="font-size:11px;padding:2px 6px">移除</button>':''}
+        </div>
+      </div>`;
+    }).join("");
+    const mine=(st.customItems||[]).map((g,i)=>{
+      const u=itemIcon(g.id);
+      return `<div class="shopitem sel" style="cursor:default">
+        <span class="sit">自定义</span>
+        <span class="sibadge">${(st.goods&&st.goods[g.id])?'已购':'在售'}</span>
+        <div class="siic">${u?`<img src="${esc(u)}" alt="">`:"🎁"}</div>
+        <div class="sin">${esc(g.name)}</div>
+        <div class="sip">${g.cost} 灵铢 · ${esc(g.type)}</div>
+        <div style="display:flex;gap:4px;justify-content:center;margin-top:2px;flex-wrap:wrap">
+          <button class="btn sm ghost" data-iup="${esc(g.id)}" type="button" style="font-size:11px;padding:2px 6px">${u?'换图标':'配图标'}</button>
+          <button class="btn sm ghost" data-iedit="${i}" type="button" style="font-size:11px;padding:2px 6px">编辑</button>
+          <button class="btn sm ghost" data-idel="${i}" type="button" style="font-size:11px;padding:2px 6px">删除</button>
+        </div>
+      </div>`;
+    }).join("");
+    body.innerHTML=`<div class="note">内置道具可配/换图标（不改价与效果）；自定义道具会自动上架程绣的集市，玩家花灵铢购买收藏。</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 2px">
+        <b style="font-size:13px;color:var(--cyber)">自定义道具（上架集市）</b>
+        <button class="btn sm primary" id="itemAddTop" type="button">＋ 增加道具</button>
+      </div>
+      <b style="font-size:13px;color:var(--cyber)">内置道具</b>
+      <div class="shopgrid" style="max-height:none;margin:6px 0 14px">${built}</div>
+      <div class="shopgrid" style="max-height:none;margin:6px 0 14px">${mine||'<div class="missing" style="grid-column:1/-1">还没有自定义道具——点右上角「＋ 增加道具」新建。</div>'}</div>
+      <div id="itemEdit" style="border-top:1px dashed var(--border);padding-top:10px">${itemFormHtml(null)}</div>`;
+    const addTop=$("#itemAddTop",body);
+    if(addTop) addTop.onpointerdown=()=>{ SFX.tap();
+      $("#itemEdit",body).innerHTML=itemFormHtml(null); bindForm();
+      const inp=$("#ifId",body); if(inp) inp.focus();
+      try{ $("#itemEdit",body).scrollIntoView({behavior:"smooth",block:"center"}); }catch(e){ body.scrollTop=body.scrollHeight; }
+    };
+    function uploadIcon(id){
+      pickFile("image/*",f=>{ WDCfg.setItemIcon(id,f,s=>{}).then(()=>{ toast("道具图标已保存","gold"); showItem(); }).catch(e=>toast("图标保存失败："+(e.message||e))); });
+    }
+    body.querySelectorAll("[data-iup]").forEach(b=>b.onpointerdown=()=>uploadIcon(b.dataset.iup));
+    body.querySelectorAll("[data-iclr]").forEach(b=>b.onpointerdown=()=>{ WDCfg.clearItemIcon(b.dataset.iclr); showItem(); });
+    body.querySelectorAll("[data-idel]").forEach(b=>b.onpointerdown=()=>{
+      if(confirm("删除自定义道具「"+(st.customItems[+b.dataset.idel]||{}).name+"」？已购记录保留。")){
+        st.customItems.splice(+b.dataset.idel,1); save(); showItem(); toast("已删除");
+      }
+    });
+    body.querySelectorAll("[data-iedit]").forEach(b=>b.onpointerdown=()=>{
+      $("#itemEdit",body).innerHTML=itemFormHtml(st.customItems[+b.dataset.iedit]||null); bindForm();
+    });
+    bindForm();
+    function itemFormHtml(g){
+      g=g||{id:"",name:"",type:"自定义",cost:50,desc:""};
+      return `<b style="font-size:13px;color:var(--cyber)">${g.id?'编辑道具':'新建道具'}</b>
+        <div class="cfgrow" style="margin-top:6px"><label>英文键</label><input id="ifId" value="${esc(g.id)}" maxlength="40" placeholder="唯一，如 my_lantern" ${g.id?'disabled':''} style="flex:1"></div>
+        <div class="cfgrow"><label>名称</label><input id="ifName" value="${esc(g.name)}" maxlength="16" style="flex:1"></div>
+        <div class="cfgrow"><label>类型</label><select id="ifType">
+          ${["自定义","时装","福利图","恢复","剧情"].map(t=>`<option ${g.type===t?"selected":""}>${t}</option>`).join("")}
+        </select><label style="min-width:auto">价格</label><input id="ifCost" type="number" min="0" max="9999" value="${+g.cost||0}" style="width:80px"></div>
+        <div class="cfgrow" style="align-items:flex-start"><label>描述</label><textarea id="ifDesc" rows="2" maxlength="80" style="flex:1">${esc(g.desc||"")}</textarea></div>
+        <div class="savegrid"><button class="btn sm primary" id="ifSave" type="button">${g.id?'保存修改':'新建并上架'}</button>${g.id?'':'<button class="btn sm ghost" id="ifCancel" type="button">清空</button>'}</div>`;
+    }
+    function bindForm(){
+      const saveBtn=$("#ifSave",body); if(!saveBtn) return;
+      saveBtn.onpointerdown=()=>{
+        const id=$("#ifId",body).value.trim().replace(/[^\w-]/g,"_");
+        const name=$("#ifName",body).value.trim();
+        if(!id||!name){ toast("英文键和名称都要填"); return; }
+        const exists=BUILTIN_ITEMS.some(x=>x.id===id)||st.customItems.some(x=>x.id===id);
+        const editing=saveBtn.textContent.includes("保存修改");
+        if(!editing&&exists){ toast("英文键与已有道具冲突"); return; }
+        const rec={id,name,type:$("#ifType",body).value,cost:Math.max(0,+$("#ifCost",body).value||0),desc:$("#ifDesc",body).value.trim()};
+        if(editing){ const i=st.customItems.findIndex(x=>x.id===id); if(i>=0) st.customItems[i]=rec; }
+        else st.customItems.push(rec);
+        save(); showItem(); toast(editing?"已保存":"已新建并上架集市","gold");
+      };
+      const can=$("#ifCancel",body); if(can) can.onpointerdown=()=>{ $("#itemEdit",body).innerHTML=itemFormHtml(null); bindForm(); };
+    }
+  }
+  showTheme();
+  ov.querySelectorAll("#ssTabs [data-ss]").forEach(b=>b.onpointerdown=()=>{
+    SFX.tap();
+    ({theme:showTheme,cut:showCut,ai:showAi,cg:showCg,item:showItem}[b.dataset.ss])();
   });
 }
-const DS_MODEL="deepseek-chat";
 /* v2：密钥独立键（WZ-017）——不再入存档，导出存档不再泄漏密钥 */
 const DS_KEY_STORE="wdzx.dskey";
 function dsKeyGet(){
@@ -8322,7 +9246,20 @@ async function reconnectAi(){
   if(view==="chat") renderChat(true); else refreshStat();
 }
 function record(ev, x){ st.log=st.log||[]; st.log.push({at:new Date().toISOString(), ev, x}); }
-function boot(){
+async function boot(){
+  /* v64：设备同步——进游戏前先从云端拉取并合并（≤9s，失败静默走本地，绝不阻塞离线铁律） */
+  if(window.WDSync&&WDSync.enabled()){
+    let veil=null;
+    try{
+      veil=document.createElement("div");
+      veil.style.cssText="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--bg,#1a1422);color:var(--gold,#d9b84a);font-size:15px;letter-spacing:.1em";
+      veil.textContent="☁ 正在与云端同步……";
+      document.body.appendChild(veil);
+      const r=await WDSync.startup(9000);
+      if(r&&r.ok&&window.WDCfg) WDCfg.init(); /* 合并改写了 cfg LS，内存态重载 */
+    }catch(e){}
+    finally{ try{ if(veil) veil.remove(); }catch(_){} }
+  }
   // 独立模块依赖注入：对话生成（WDChat）/记忆（WDMem）/配置（WDCfg）/像素头像（WDAvatar）低耦合接入
   // 配置中心/记忆模块须先初始化——reconcile() 的心气上限依赖 WDCfg.ready()
   if(window.WDCfg) WDCfg.init();
@@ -8541,13 +9478,13 @@ function renderBoard(){
   <div class="loadmeter ${heavy?"heavy":""}">
     <div class="lmrow"><span>${curGi!=null?GD_LABELS[curGi]+"负荷":"本周已圆满"}（剩余约 ${curGdMin} 分钟 · 记忆点 ${memPts} 个）${totalMin!==curGdMin?` · 全周 ${totalMin} 分钟`:""}</span><span>${heavy?"偏重，可拆两段":"适中"} ${load}%</span></div>
     <div class="lmtrack"><div class="lmfill" style="width:${Math.min(100,load)}%"></div></div>
-    <div class="ad">任务按纪日（周一~周五）发放 · 本周完成 ${prog.n}/${prog.all}</div>
+    <div class="ad">周一·三·五正修学新，周二·四轻修休息（复习·回访） · 本周完成 ${prog.n}/${prog.all}</div>
   </div>
   <div class="boardgroup"><h3>快捷入口</h3>
     <div class="entrygrid">${entryHtml}</div>
     <div class="ad">不必拘于一条线索——从任一法器切入，系统据你所选指引后续内容。</div>
   </div>
-  <div class="boardgroup"><h3>本周任务 · 周一~周五（${prog.n}/${prog.all}）</h3>${gdGroups}</div>
+  <div class="boardgroup"><h3>本周任务 · 一三五正修 · 二四休息（${prog.n}/${prog.all}）</h3>${gdGroups}</div>
   <div class="boardgroup"><h3>任务树 · 全程（阶段 / 周 / 纪日 / 任务，点击三角折叠）</h3>
     ${treeHtml}
   </div>`;

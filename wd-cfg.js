@@ -19,7 +19,7 @@ let cfg=null;
 const DECODE_TIMEOUT=30000;
 
 function defaults(){
-  return {ver:VER, npcAvatar:{}, userAvatar:null, npcPortrait:{},
+  return {ver:VER, npcAvatar:{}, userAvatar:null, npcPortrait:{}, cgImages:{}, itemIcons:{},
     address:"", addressHist:[], selfName:"", bio:"",
     style:{tone:"",humor:"",depth:""},
     attr:{str:2,agi:2,int:2}, hist:[], rejected:0,
@@ -29,6 +29,8 @@ function defaults(){
 function sanitize(recount){
   if(!cfg.npcAvatar||typeof cfg.npcAvatar!=="object"){ if(recount&&cfg.npcAvatar!==undefined)cfg.rejected++; cfg.npcAvatar={}; }
   if(!cfg.npcPortrait||typeof cfg.npcPortrait!=="object"){ if(recount&&cfg.npcPortrait!==undefined)cfg.rejected++; cfg.npcPortrait={}; }
+  if(!cfg.cgImages||typeof cfg.cgImages!=="object"){ if(recount&&cfg.cgImages!==undefined)cfg.rejected++; cfg.cgImages={}; }
+  if(!cfg.itemIcons||typeof cfg.itemIcons!=="object"){ if(recount&&cfg.itemIcons!==undefined)cfg.rejected++; cfg.itemIcons={}; }
   if(!Array.isArray(cfg.addressHist)){ if(recount)cfg.rejected++; cfg.addressHist=[]; }
   if(!cfg.style||typeof cfg.style!=="object"){ if(recount&&cfg.style!==undefined)cfg.rejected++; cfg.style={tone:"",humor:"",depth:""}; }
   if(!cfg.attr||typeof cfg.attr!=="object"){ if(recount&&cfg.attr!==undefined)cfg.rejected++; cfg.attr={str:2,agi:2,int:2}; }
@@ -110,8 +112,9 @@ function processImageFile(file,opt){
   opt=opt||{};
   return loadImageFile(file,opt).then(img=>{
     const side=Math.min(img.naturalWidth,img.naturalHeight);
-    if(side<MIN_SIDE) throw new Error("E_CFG_SMALL");
-    const out=OUT, zoom=Math.max(1,Math.min(3,opt.zoom||1));
+    const minSide=opt.minSide||MIN_SIDE;
+    if(side<minSide) throw new Error("E_CFG_SMALL");
+    const out=opt.size||OUT, zoom=Math.max(1,Math.min(3,opt.zoom||1));
     const cv=document.createElement("canvas"); cv.width=out; cv.height=out;
     const g=cv.getContext("2d");
     const k=(out/side)*zoom, w=img.naturalWidth*k, h=img.naturalHeight*k;
@@ -126,8 +129,10 @@ function processPortraitFile(file,opt){
   opt=opt||{};
   return loadImageFile(file,opt).then(img=>{
     const w0=img.naturalWidth, h0=img.naturalHeight;
-    if(Math.min(w0,h0)<MIN_SIDE) throw new Error("E_CFG_SMALL");
-    const k=Math.min(1, 900/h0, 720/w0), w=Math.round(w0*k), h=Math.round(h0*k);
+    const minSide=opt.minSide||MIN_SIDE;
+    if(Math.min(w0,h0)<minSide) throw new Error("E_CFG_SMALL");
+    const maxH=opt.maxH||900, maxW=opt.maxW||720;
+    const k=Math.min(1, maxH/h0, maxW/w0), w=Math.round(w0*k), h=Math.round(h0*k);
     const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
     const g=cv.getContext("2d"); g.imageSmoothingEnabled=true;
     g.drawImage(img,0,0,w,h);
@@ -191,6 +196,20 @@ const WDCfg={
     return processPortraitFile(file,{onStage:onStage}).then(r=>{ self.set("npcPortrait."+id,r.url,"NPC立绘"); return r; });
   },
   clearPortrait(id){ this.set("npcPortrait."+id,null,"移除NPC立绘"); },
+  /* v59：剧情 CG 图（等比缩放，宽≤1280）——忆境/过场展示用，id=cg 键 */
+  cgImageURL(id){ return cfg.cgImages[id]||null; },
+  setCGImage(id,file,onStage){
+    const self=this;
+    return processPortraitFile(file,{onStage:onStage,maxW:1280,maxH:900}).then(r=>{ self.set("cgImages."+id,r.url,"剧情CG"); return r; });
+  },
+  clearCGImage(id){ this.set("cgImages."+id,null,"移除剧情CG"); },
+  /* v59：道具图标（方形裁剪 128px）——集市网格用 */
+  itemIconURL(id){ return cfg.itemIcons[id]||null; },
+  setItemIcon(id,file,onStage){
+    const self=this;
+    return processImageFile(file,{zoom:1,onStage:onStage,size:128,minSide:64}).then(r=>{ self.set("itemIcons."+id,r.url,"道具图标"); return r; });
+  },
+  clearItemIcon(id){ this.set("itemIcons."+id,null,"移除道具图标"); },
   /* NPC 名字/人设自定义：用户可覆写 NPC 名称并提供基准描述供 AI 生成角色设定 */
   npcName(id,original){ return (cfg.npcNames&&cfg.npcNames[id])||original||""; },
   npcTitle(id,original){ return (cfg.npcTitles&&cfg.npcTitles[id])||original||""; },

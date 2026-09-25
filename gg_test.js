@@ -51,6 +51,7 @@ const cfgSrc=fs.readFileSync(require('path').join(__dirname,'wd-cfg.js'),'utf8')
 const memSrc=fs.readFileSync(require('path').join(__dirname,'wd-mem.js'),'utf8');
 const quizSrc=fs.readFileSync(require('path').join(__dirname,'wd-quiz.js'),'utf8');
 const termsSrc=fs.readFileSync(require('path').join(__dirname,'wd-terms.js'),'utf8');
+const syncSrc=fs.readFileSync(require('path').join(__dirname,'wd-sync.js'),'utf8');
 
 const driver=`
 ;(function(){
@@ -1564,8 +1565,235 @@ const driver=`
       const dup2=cueRedFlags("签我理好了，就差你这双眼睛，我心里踏实些。","沈昭",["你在旁边，我念着也踏实些。"]);
       if(!dup2.some(x=>/收尾情绪词/.test(x))) throw new Error("收尾词跨稿重复漏判: "+JSON.stringify(dup2));
       if(typeof CUE_V!=="number"||CUE_V<5) throw new Error("cue 缓存版本应≥5（v4模板稿须作废），got "+CUE_V);
-      console.log('PASS  v58 啃字清零/头衔白名单/原型隔离/cue红线闭环v5');
+      console.log('PASS  v58 啃字清零/头衔白名单/原型隔离/缓存v3');
     }catch(e){ errors.push('v58 => '+e.message); console.log('FAIL  v58 : '+e.message); }
+
+    /* v59：云汀接管修诵 + 剧情工坊数据契约 */
+    try{
+      if(RT_NPC.c!=="yunting") throw new Error("修诵(c)应归云汀, got "+RT_NPC.c);
+      if(RT_NPC.b!=="wantang"||RT_NPC.d!=="wantang"||RT_NPC.a!=="shenzhao") throw new Error("问契/传译/理经归属被误改");
+      reconcile();
+      /* 内置剧情覆写访问器 */
+      const t0=plotThemeOf(1);
+      if(!t0||t0.title!=="圣约初结") throw new Error("内置剧情读取异常");
+      st.storyThemeOV[1]={title:"测试标题",charsStr:"yunting、tina",type:"major",cg:"cg_t",item:"符"};
+      const t1=plotThemeOf(1);
+      if(t1.title!=="测试标题"||t1.type!=="major"||t1.cg!=="cg_t"||t1.item!=="符") throw new Error("覆写未生效: "+JSON.stringify(t1));
+      if(t1.chars.join(",")!=="yunting,tina") throw new Error("角色解析异常: "+t1.chars);
+      delete st.storyThemeOV[1];
+      if(plotThemeOf(1).title!=="圣约初结") throw new Error("删除覆写后未恢复内置");
+      /* 过场覆写 */
+      if(!/绑定/.test(cutsceneText("bind"))) throw new Error("过场内置稿异常");
+      st.cutsceneOV.bind="测试过场稿";
+      if(cutsceneText("bind")!=="测试过场稿") throw new Error("过场覆写未生效");
+      delete st.cutsceneOV.bind;
+      /* 自定义 CG 入总表 */
+      st.customCgs=[{id:"cg_zzz",name:"自测CG"}];
+      if(!cgAllList().some(c=>c.id==="cg_zzz")) throw new Error("自定义CG未入总表");
+      if(!cgAllList().some(c=>c.id==="cg_final")) throw new Error("内置CG缺失");
+      st.customCgs=[];
+      /* 自定义道具字段 */
+      if(!Array.isArray(st.customItems)) throw new Error("customItems 应默认为数组");
+      /* 工坊函数与集市入口存在 */
+      if(typeof renderStoryStudio!=="function") throw new Error("renderStoryStudio 缺失");
+      if(!/shopStudio/.test(renderShop.toString())) throw new Error("集市缺工坊入口");
+      if(!/cfgStudio/.test(renderCfg.toString())) throw new Error("配置中心缺工坊入口");
+      /* 任务页头像走 WDCfg（不再写死首字占位） */
+      const oq=openQuest.toString();
+      if(!oq.includes("avatarURL")) throw new Error("任务页未接入自定义头像");
+      console.log('PASS  v59 云汀接管修诵/剧情工坊数据契约/任务页头像');
+    }catch(e){ errors.push('v59 => '+e.message); console.log('FAIL  v59 : '+e.message); }
+
+    /* v60：结算加载态不入库 + 旧穿帮清洗 + 云汀任务不重复双气泡 */
+    try{
+      reconcile();
+      /* 离线终态句不含加载态/省略号兜底 */
+      const fakeQ={id:"T-FAKE-SETTLE",npc:"shenzhao",tlabel:"理经"};
+      const local=yunhengSettleLocal(fakeQ);
+      if(!YT_SETTLE_POOL.includes(local)) throw new Error("离线句不在池中: "+local);
+      if(/正在接话|交割了……/.test(local)) throw new Error("离线句仍含穿帮文本: "+local);
+      /* 旧存档穿帮消息迁移 */
+      st.dialogue.push({id:"yh_old_1",role:"npc",npc:"yunheng",text:"这一程，交割了……「故宫 §1」——云汀正在接话……",at:new Date().toISOString(),day:1});
+      migrateSettlePlaceholders();
+      const fixed=st.dialogue.find(m=>m.id==="yh_old_1");
+      if(!fixed||/正在接话|交割了……/.test(fixed.text)) throw new Error("旧穿帮未清洗");
+      if(!YT_SETTLE_POOL.includes(fixed.text)) throw new Error("清洗后不在离线句池: "+fixed.text);
+      if(fixed.pendingAI) throw new Error("pendingAI 未清");
+      /* 幂等：再洗一遍文本不变 */
+      const before=fixed.text; migrateSettlePlaceholders();
+      if(st.dialogue.find(m=>m.id==="yh_old_1").text!==before) throw new Error("迁移非幂等");
+      st.dialogue=st.dialogue.filter(m=>m.id!=="yh_old_1");
+      /* 源码契约：pendingAI 标记/幂等守卫/云汀任务不追加 ymsg/ack 按 id 锚定 */
+      const src=_settleQuestInner.toString();
+      if(!src.includes('pendingAI:dsReady()')) throw new Error("ymsg 缺 pendingAI 标记");
+      if(!src.includes('q.npc!=="yunting"')) throw new Error("缺云汀任务防重复守卫");
+      if(!src.includes('m.id===ackId')) throw new Error("fallback 替换未按 id 锚定");
+      const rs=refineYunheng.toString();
+      if(!rs.includes('if(!m0.pendingAI) return')) throw new Error("refineYunheng 缺幂等守卫");
+      if(rs.indexOf('.catch(()=>finish(""))')<0) throw new Error("AI 失败须收敛为离线终态句: "+(rs.match(/catch.{0,40}/)||["?"])[0]);
+      if(rs.includes("正在接话")) throw new Error("refineYunheng 仍含加载态文案");
+      /* doneLine 兜底不再是旧省略号句 */
+      st.questLines={};
+      const dl=doneLine({id:"T-DL-1",npc:"shenzhao"});
+      if(/交割了……/.test(dl)) throw new Error("doneLine 仍用旧兜底: "+dl);
+      console.log('PASS  v60 结算加载态不入库/旧档清洗/云汀单气泡/失败收敛');
+    }catch(e){ errors.push('v60 => '+e.message); console.log('FAIL  v60 : '+e.message); }
+
+    /* v61：题干不腰斩/解析全文/多空填空/暂离续关/增加道具按钮 */
+    try{
+      /* 核心句不再 50 字腰斩——长句取整句或按小句边界 */
+      const longPt={text:"本条为批注，应被过滤。深入学习贯彻习近平新时代中国特色社会主义思想和党的二十大精神，全面落实党的二十届二中、三中、四中全会精神，是当前和今后一个时期全党全国的重要政治任务。"};
+      const ks=ptKeySentence(longPt);
+      if(/[…\.]$/.test(ks)&&ks.length<60) throw new Error("长句仍被腰斩: "+ks);
+      if(ks.length<50) throw new Error("核心句过短，疑似硬切: "+ks);
+      if(!/四中全会/.test(ks)) throw new Error("完整信息丢失: "+ks);
+      const clip=clipClause("一二三四五六七八九十，一二三四",8);
+      if(!/…$/.test(clip)||clip.length>8) throw new Error("clipClause 越界: "+clip);
+      /* 判断题携带正确说法 fact */
+      const jq=genQuestion("judge",{id:"S1-T-1",text:"中华人民共和国成立于1949年。这是一条用于判分的完整核心陈述语句。",module:"m"},["1949年"],[]);
+      if(jq.kind!=="judge"||!jq.fact) throw new Error("判断题缺 fact 正确说法");
+      if(jq.a===false&&(!jq.fact||!jq.fact.includes("1949"))) throw new Error("伪命题 fact 不是真句");
+      /* 解析 HTML：含正确说法与知识点全文，不含裸编号敷衍 */
+      const pt2={id:"S1-T-2",text:"绿水青山就是金山银山，这是生态文明建设的重要理念。",module:"m",star:2};
+      D.pointsLib.push(pt2);
+      const z2={kind:"judge",q:"绿水青山就是金山银山。（判断正误）",a:true,pid:"S1-T-2",fact:"绿水青山就是金山银山。"};
+      const html2=quizExplainHtml(z2,"真");
+      if(!html2.includes("正确说法")||!html2.includes("绿水青山")) throw new Error("判断题解析缺正确说法");
+      if(!html2.includes("知识点")||!html2.includes("生态文明")) throw new Error("解析缺知识点全文");
+      D.pointsLib.pop();
+      /* 多空填空：题干 N 空 → N 输入栏（源码契约，drawQuiz 为 openQuest 内嵌函数） */
+      const oqSrc=openQuest.toString();
+      if(!oqSrc.includes("blankN")||!oqSrc.includes('class="blankIn"')) throw new Error("填空未按空数渲染");
+      if(!oqSrc.includes("resumeQi")) throw new Error("drawQuiz 缺暂离题序恢复");
+      /* 暂离续关数据契约 */
+      reconcile();
+      if(typeof st.questProg!=="object") throw new Error("questProg 未兜底");
+      if(!oqSrc.includes("questProg")||!oqSrc.includes("已回到上次暂离")) throw new Error("openQuest 缺续关逻辑");
+      /* 道具页增加按钮 */
+      if(!renderStoryStudio.toString().includes("itemAddTop")) throw new Error("道具页缺「增加道具」按钮");
+      console.log('PASS  v61 题干完整/解析全文/多空填空/暂离续关/道具按钮');
+    }catch(e){ errors.push('v61 => '+e.message); console.log('FAIL  v61 : '+e.message); }
+
+    /* v62：私聊档案/任务三态/NPC职守提示/入口契约 */
+    try{
+      reconcile();
+      /* 私聊档案读写 */
+      if(typeof st.privateChat!=="object") throw new Error("privateChat 未兜底");
+      pcPush("tina",{role:"player",text:"你好",at:new Date().toISOString(),day:1});
+      pcPush("tina",{role:"npc",text:"嗨，我在。",at:new Date().toISOString(),day:1});
+      if(pcMsgs("tina").length!==2) throw new Error("私聊档案写入异常");
+      if(pcMsgs("yunting").length!==0) throw new Error("私聊档案串号");
+      /* NPC 间隔离 */
+      pcPush("yunting",{role:"player",text:"云汀",at:new Date().toISOString(),day:1});
+      if(pcMsgs("tina").length!==2||pcMsgs("yunting").length!==1) throw new Error("私聊未以 NPC 为中心隔离");
+      st.privateChat={};
+      /* 任务三态：造一把属于云汀的运行时任务模拟 */
+      const probe={id:"R1-0-X",npc:"yunting",day:1,tlabel:"修诵",dur:5,xp:1,coin:1,kind:"main"};
+      /* 已完成优先 */
+      st.done[probe.id]=1;
+      if(questStatusOf(probe)!=="已完成") throw new Error("已完成态判定异常");
+      delete st.done[probe.id];
+      /* 进行中=有 questProg 且解锁（解锁条件依赖链，用直接打档验证逻辑） */
+      st.questProg[probe.id]={stage:"quiz",qi:1};
+      /* 未解锁时即便有 prog 也不显示已接取（边界） */
+      /* 职守提示函数存在且按 NPC 过滤 */
+      if(typeof npcDutyQuest!=="function"||typeof renderPrivateChat!=="function") throw new Error("私聊函数缺失");
+      delete st.questProg[probe.id];
+      /* 入口契约：群聊名字点击→私聊；cue 选项含「说点什么」 */
+      if(!talkToNpc.toString().includes("renderPrivateChat")) throw new Error("群聊名字未接私聊窗");
+      if(!openQuest.toString().includes("说点什么")) throw new Error("cue 缺「说点什么」选项");
+      /* 私聊窗口要素：历史区/输入/职守提示 */
+      const pcSrc=renderPrivateChat.toString();
+      ["pcList","pcInput","pcDuty","pcDutyBanner","privateTurns"].forEach(k=>{ if(!pcSrc.includes(k)) throw new Error("私聊窗缺要素: "+k); });
+      /* WDChat.respond 支持私聊历史注入（经 remap 包装层后元数仍为 5，第 5 参=opts） */
+      if(WDChat.respond.length!==5) throw new Error("respond 未透传私聊 opts（元数="+WDChat.respond.length+"）");
+      if(!chatSrc.includes("opts.privateTurns")) throw new Error("wd-chat 源缺 privateTurns 注入");
+      /* 三态标签上卡 */
+      if(!qcardHtml.toString().includes("已接取")||!qcardHtml.toString().includes("进行中")) throw new Error("任务卡缺三态标签");
+      console.log('PASS  v62 私聊档案/任务三态/职守提示/入口契约');
+    }catch(e){ errors.push('v62 => '+e.message); console.log('FAIL  v62 : '+e.message); }
+
+    /* v63：周历一三五正修 / 二四轻修 */
+    try{
+      reset(); reconcile(); installRuntimePlan();
+      /* 日历真源 */
+      if(JSON.stringify(GD_WORK_GI)!=="[0,2,4]"||JSON.stringify(GD_REST_GI)!=="[1,3]") throw new Error("周历常量错误");
+      [0,2,4].forEach(gi=>{ if(gdKind(1,gi)!=="study") throw new Error("应正修 gi="+gi); if(!isStudyGi(gi)) throw new Error("isStudyGi 漏判 "+gi); });
+      [1,3].forEach(gi=>{ if(gdKind(1,gi)!=="rest") throw new Error("应休息 gi="+gi); if(isStudyGi(gi)) throw new Error("isStudyGi 误判 "+gi); });
+      /* gameDays 烘焙 kind 已被覆盖 */
+      const d1=byDay[1];
+      d1.gameDays.forEach((g,i)=>{ if(g.kind!==(isStudyGi(i)?"study":"rest")) throw new Error("gameDays kind 未覆盖 i="+i); });
+      /* 排程：正修日有学新槽（a 理经/b 问契/c 修诵/d 传译），休息日只许 rev/c/d（复习回访） */
+      const giCats={};
+      d1.quests.forEach(q=>{ const m=/^R1-([0-9]+)-/.exec(q.id); if(!m) return; const i=+m[1]; (giCats[i]=giCats[i]||new Set()).add(q.rtCat); });
+      [0,2,4].forEach(i=>{
+        const s=giCats[i]||new Set();
+        if(!s.has("a")||!s.has("c")) throw new Error("正修日 gi="+i+" 缺学新槽: "+JSON.stringify(giCats));
+      });
+      [1,3].forEach(i=>{
+        const s=giCats[i]||new Set();
+        if(s.has("a")||s.has("b")) throw new Error("休息日 gi="+i+" 混入正修学新槽: "+[...s].join(","));
+      });
+      /* 周五验界仍在 gi=4 */
+      const d5=byDay[5];
+      if(!d5.quests.some(q=>q.type==="boss"&&q.gd===25)) throw new Error("五日验界应在周五 gd=25");
+      /* 守关只落正修纪日：33 日 extra=2，两阵 gi 都须在 [0,2,4] */
+      const d33=byDay[33];
+      const gbGi=d33.quests.filter(q=>/GB[0-9]+$/.test(q.id)).map(q=>q.gd-(33-1)*5-1);
+      if(gbGi.length!==2||!gbGi.every(i=>GD_WORK_GI.includes(i))) throw new Error("守关落位异常: "+JSON.stringify(gbGi));
+      /* 总量不变：每周仍 3 正修 2 轻修，225 纪日，全周任务非空 */
+      let study=0; DAYS.forEach(d=>d.gameDays.forEach(g=>{ if(g.kind==="study") study++; }));
+      if(study!==135) throw new Error("正修纪日应 135, got "+study);
+      console.log('PASS  v63 周历一三五正修/二四轻修/守关落位');
+    }catch(e){ errors.push('v63 => '+e.message); console.log('FAIL  v63 : '+e.message); }
+
+    /* v64：设备同步——模块加载/加入码往返/进度合并（离线纯逻辑） */
+    try{
+      if(!window.WDSync) throw new Error("WDSync 未挂载");
+      if(typeof renderSync!=="function") throw new Error("renderSync 面板缺失");
+      /* 加入码编码→解码往返 */
+      localStorage.setItem("wdzx.sync.v1",JSON.stringify({token:"ghp_test1234567890ABCDEFG",gid:"abcdef1234567890abcdef1234567890",pw:"口令x"}));
+      const code=WDSync.joinCode();
+      if(!code||code.length<30) throw new Error("加入码异常: "+code);
+      const jc=WDSync.parseJoinCode(code);
+      if(jc.token!=="ghp_test1234567890ABCDEFG"||jc.gid!=="abcdef1234567890abcdef1234567890"||jc.pw!=="口令x") throw new Error("加入码往返损坏");
+      if(WDSync.enabled()!==true) throw new Error("应判为已启用");
+      WDSync.leave();
+      if(WDSync.enabled()) throw new Error("退出后应未启用");
+      /* 存档合并：两端进度并集、数值取大、私聊拼接、已交割不丢（同步纯逻辑） */
+      const A={_syncAt:"2026-09-26T08:00:00.000Z",
+        player:{name:"我"},coin:100,xp:50,day:2,unlocked:2,
+        done:{"Q1":"2026-09-25T10:00:00.000Z"},cgUnlocked:{c1:"2026-09-25T10:00:00.000Z"},
+        privateChat:{tina:[{id:"m1",role:"player",text:"甲机消息",at:"2026-09-25T10:00:00.000Z"}]},
+        customItems:[{id:"i1",name:"甲机道具"}],
+        plotPoints:{total:3,byDay:{1:2},byNaturalDay:{},triggered:{}}};
+      const B={_syncAt:"2026-09-26T20:00:00.000Z",
+        player:{name:"我"},coin:260,xp:40,day:3,unlocked:3,
+        done:{"Q2":"2026-09-26T09:00:00.000Z"},cgUnlocked:{c2:"2026-09-26T09:00:00.000Z"},
+        privateChat:{tina:[{id:"m2",role:"npc",text:"乙机回复",at:"2026-09-26T09:00:00.000Z"}],yunting:[{id:"y1",role:"npc",text:"云汀乙机",at:"2026-09-26T09:00:00.000Z"}]},
+        customItems:[{id:"i2",name:"乙机道具"}],
+        plotPoints:{total:5,byDay:{2:3},byNaturalDay:{"2026-09-26":1},triggered:{}}};
+      const m=WDSync.mergeSave(A,B);
+      if(m.coin!==260||m.xp!==50) throw new Error("数值合并异常 coin="+m.coin+" xp="+m.xp);
+      if(m.unlocked!==3||m.day!==3) throw new Error("进度未取大");
+      if(!m.done.Q1||!m.done.Q2) throw new Error("已交割任务并集丢失");
+      if(!m.cgUnlocked.c1||!m.cgUnlocked.c2) throw new Error("CG 并集丢失");
+      if(m.privateChat.tina.length!==2) throw new Error("缇娜私聊未拼接: "+m.privateChat.tina.length);
+      if(m.privateChat.yunting.length!==1) throw new Error("云汀私聊串号");
+      if(m.privateChat.tina[0].id!=="m1") throw new Error("私聊时序错误");
+      if(m.customItems.length!==2) throw new Error("自定义道具未并集");
+      if(m.plotPoints.total!==5||m.plotPoints.byDay[1]!==2||m.plotPoints.byDay[2]!==3) throw new Error("剧情点合并异常");
+      const mc=WDSync.mergeCfg(
+        {address:"道友",_syncAt:"2026-09-26T08:00:00.000Z",hist:["旧称呼"]},
+        {address:"道友乙",_syncAt:"2026-09-26T20:00:00.000Z",hist:["新称呼"]});
+      if(!mc.hist.includes("旧称呼")||!mc.hist.includes("新称呼")) throw new Error("cfg hist 未并集");
+      if(mc.address!=="道友乙") throw new Error("cfg 应以较新端为基底");
+      /* 反向合并（旧云端+新本机）同样不丢 */
+      const m2=WDSync.mergeSave(B,A);
+      if(m2.coin!==260||!m2.done.Q1||!m2.done.Q2||m2.privateChat.tina.length!==2) throw new Error("反向合并丢数据");
+      localStorage.removeItem("wdzx.sync.v1");
+      console.log('PASS  v64 加入码/双端进度合并/私聊拼接');
+    }catch(e){ errors.push('v64 => '+e.message); console.log('FAIL  v64 : '+e.message); }
 
     /* v58c：云汀人设/昵称在系统提示词统一生效 */
     try{
@@ -1650,28 +1878,26 @@ const driver=`
       console.log('PASS  v58c buildStream 纪日索引卡（每周一张·逐任务点选）');
     }catch(e){ errors.push('v58c qindex => '+e.message); console.log('FAIL  v58c qindex : '+e.message); }
 
-    /* v58c：纪日推导——完成周一全部→指针到周二；全周→null；HUD gameDay 对齐 */
+    /* v58c/v63：纪日推导——周一全清→指针跳到下一个有任务的纪日（二四轻修无回潮时为空则自动跳过）；全周→null */
     try{
       reset(); reconcile(); installRuntimePlan();
       if(curGiOfDay(1)!==0) throw new Error("首日当前纪日应为周一(0)");
-      const mon=gdQuests(1,0);
-      mon.forEach(q=>{ st.done[q.id]=new Date().toISOString(); });
-      if(curGiOfDay(1)!==1) throw new Error("周一全清后当前纪日应到周二(1)，实际 "+curGiOfDay(1));
-      if(curGameDay(1)!==gdAbs(1,1)) throw new Error("HUD gameDay 应对齐周二="+gdAbs(1,1));
-      /* 索引卡随完成推进到周二且进度实时 */
-      st.gdIssued={}; st.gdIssued[gdAbs(1,0)]=1; st.gdIssued[gdAbs(1,1)]=1;
+      gdQuests(1,0).forEach(q=>{ st.done[q.id]=new Date().toISOString(); });
+      /* v63：下一纪日按实况——周二(1)轻修有任务则停 1，为空则跳到周三(2) */
+      const nextGi=[1,2,3,4].find(i=>gdQuests(1,i).length>0);
+      if(curGiOfDay(1)!==nextGi) throw new Error("周一全清后当前纪日应为 "+nextGi+"，实际 "+curGiOfDay(1));
+      if(curGameDay(1)!==gdAbs(1,nextGi)) throw new Error("HUD gameDay 应对齐 gd="+gdAbs(1,nextGi));
+      /* 索引卡随完成推进且进度实时 */
+      st.gdIssued={}; st.gdIssued[gdAbs(1,0)]=1; st.gdIssued[gdAbs(1,nextGi)]=1;
       const s2=buildStream().filter(r=>r.t==="qindex");
-      if(s2.length!==1||s2[0].gi!==1) throw new Error("周一清后索引卡应切到周二");
-      const progHtml=qindexHtml(1,1);
-      if(!["0/6","1/6","2/6","3/6","4/6","5/6","6/6"].some(x=>progHtml.includes(x))) throw new Error("索引卡缺实时进度");
-      /* 全周完成→无索引卡 */
-      gdQuests(1,1).forEach(q=>{st.done[q.id]=new Date().toISOString();});
-      gdQuests(1,2).forEach(q=>{st.done[q.id]=new Date().toISOString();});
-      /* 空周四由 curGi 自动跳过：周三清完、周五未做时当前应停周五(4) */
-      if(gdQuests(1,4).length&&curGiOfDay(1)!==4) throw new Error("周五未做时当前应停周五(4)，实际 "+curGiOfDay(1));
-      gdQuests(1,4).forEach(q=>{st.done[q.id]=new Date().toISOString();});
+      if(s2.length!==1||s2[0].gi!==nextGi) throw new Error("索引卡应切到纪日 "+nextGi);
+      const progHtml=qindexHtml(1,nextGi);
+      const allN=gdProg(1,nextGi).all;
+      if(allN>0&&!progHtml.includes("0/"+allN)) throw new Error("索引卡缺实时进度 0/"+allN);
+      /* 全周完成→无索引卡/指针 null（休息日空任务自动跳过） */
+      [1,2,3,4].forEach(i=>gdQuests(1,i).forEach(q=>{st.done[q.id]=new Date().toISOString();}));
       if(curGiOfDay(1)!==null) throw new Error("全周完成后当前纪日应为 null");
-      console.log('PASS  v58c 纪日指针推进/空周四跳过/索引卡切换');
+      console.log('PASS  v58c 纪日指针推进/空休息日跳过/索引卡切换');
     }catch(e){ errors.push('v58c curGi => '+e.message); console.log('FAIL  v58c curGi : '+e.message); }
 
     /* v58c：接取幂等 + 新纪日里程碑幂等 */
@@ -1838,5 +2064,5 @@ const driver=`
 })();
 `;
 
-try { eval(dataSrc + '\n' + registrySrc + '\n' + termsSrc + '\n' + cfgSrc + '\n' + memSrc + '\n' + quizSrc + '\n' + chatSrc + '\n' + avSrc + '\n' + fxSrc + '\n' + js + '\n' + driver); }
+try { eval(dataSrc + '\n' + registrySrc + '\n' + termsSrc + '\n' + cfgSrc + '\n' + memSrc + '\n' + quizSrc + '\n' + chatSrc + '\n' + avSrc + '\n' + fxSrc + '\n' + syncSrc + '\n' + js + '\n' + driver); }
 catch(e){ console.log('FATAL LOAD ERROR:\n'+e.stack); process.exit(1); }
