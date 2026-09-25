@@ -1,15 +1,17 @@
 // 问道之旅 Service Worker — 离线缓存 + 即时更新
 // 版本号每次内容变更必须 +1，activate 时据此清除旧缓存
-const CACHE = "wdzx-v46";
+const CACHE = "wdzx-v58";
 const CORE = [
   "./",
   "./index.html",
   "./game-data.js",
+  "./exam-2026-data.js",
   "./wd-chat.js",
   "./wd-avatar.js",
   "./wd-fx.js",
   "./npc-registry.js",
   "./wd-cfg.js",
+  "./wd-terms.js",
   "./wd-mem.js",
   "./wd-quiz.js",
   "./manifest.json",
