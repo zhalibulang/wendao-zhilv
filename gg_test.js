@@ -1541,7 +1541,16 @@ const driver=`
         "经匣里那几团雾还赖着不散，能陪我去看看吗？我一个人，心里没底。",
         "嘿，等你好久了——今天也一起，慢慢把这段走完吧。"
       ].forEach(s=>{ const f=cueRedFlags(s,"晚棠"); if(f.length) throw new Error("正例被误杀："+f.join("、")+" @ "+s); });
-      console.log('PASS  v58 啃字清零/头衔白名单/原型隔离/cue红线闭环v4');
+      /* v58b 二轮：咬字复合词 + 跨稿去重 */
+      if(cueRedFlags("趁它还没咬进骨缝，能陪我去看看吗","晚棠").indexOf("生猛动词「咬」")<0) throw new Error("「咬进骨缝」漏判");
+      if(filterNpcText("溺水、虫蛇叮咬的应急处置").indexOf("叮咬")<0) throw new Error("考点「叮咬」被误杀");
+      if(/咬/.test(filterNpcText("雾快咬进骨缝了"))) throw new Error("「咬进」未被替换");
+      const dup=cueRedFlags("雾在灯影里晃，能陪我去经匣看看吗？","沈昭",["经匣的雾还没散，能陪我去理一理吗？"]);
+      if(!dup.includes("「能陪我…」请求框架重复")) throw new Error("请求框架跨稿重复漏判: "+JSON.stringify(dup));
+      const dup2=cueRedFlags("签我理好了，就差你这双眼睛，我心里踏实些。","沈昭",["你在旁边，我念着也踏实些。"]);
+      if(!dup2.some(x=>/收尾情绪词/.test(x))) throw new Error("收尾词跨稿重复漏判: "+JSON.stringify(dup2));
+      if(typeof CUE_V!=="number"||CUE_V<5) throw new Error("cue 缓存版本应≥5（v4模板稿须作废），got "+CUE_V);
+      console.log('PASS  v58 啃字清零/头衔白名单/原型隔离/cue红线闭环v5');
     }catch(e){ errors.push('v58 => '+e.message); console.log('FAIL  v58 : '+e.message); }
 
     /* v52 R2：剧情点双奖励累积 + 幂等 + 触发 */
@@ -1580,6 +1589,17 @@ const driver=`
       if((txt.match(/\\n/g)||[]).length<4) throw new Error("cue 应为多行多段结构");
       console.log('PASS  v53 buildQuestCue 六要素完整且无违禁词');
     }catch(e){ errors.push('v53 buildQuestCue => '+e.message); console.log('FAIL  v53 buildQuestCue : '+e.message); }
+
+    /* v58b：对话流开场 cue 只挂当前第一件待办（首日十余张卡不得各挂一条） */
+    try{
+      reset(); reconcile(); installRuntimePlan();
+      const stream=buildStream();
+      const cues=stream.filter(r=>r&&r.kind==="cue");
+      if(cues.length!==1) throw new Error("当日 cue 气泡应为 1 条（仅当前待办），实际 "+cues.length);
+      const aq=firstActiveQuest();
+      if(!aq||cues[0].npc!==aq.npc) throw new Error("唯一 cue 不属于当前待办 NPC");
+      console.log('PASS  v58b buildStream cue 仅挂当前待办（密度收敛）');
+    }catch(e){ errors.push('v58b cue密度 => '+e.message); console.log('FAIL  v58b cue密度 : '+e.message); }
 
     /* v52 R6：ORAL_ORDER 故宫首位 + 六篇齐全 */
     try{

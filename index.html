@@ -1300,7 +1300,8 @@ const STYLE_BLACKLIST=[
   ["今儿","今天"],["尚且","还"],["尚未","还没"],["方才","刚才"],["大人您","大人"],
   /* v58：生猛撕咬动词（先长词后单字）＋AI 自创头衔——animeShell 原型头衔泄漏兜底 */
   ["啃噬","侵蚀"],["啃食","侵蚀"],["啃下","闯过"],["啃","侵蚀"],
-  ["咬噬","侵蚀"],["撕咬","侵蚀"],
+  /* v58b：单字「咬」不裸替（考点「虫蛇叮咬」、咬牙/咬唇须保留），只拦雾怪动作复合词 */
+  ["咬噬","侵蚀"],["撕咬","侵蚀"],["咬进","侵蚀进"],["咬入","侵蚀入"],["咬住","侵蚀住"],
   ["女王陛下","圣女"],["陛下","圣女"],["殿下","圣女"],["女王","圣女"],
   ["主子","你"],["主上","你"]
   /* 注：「公主」不入确定性替换——北京考点含地名（公主坟/公主寺），仅在 prompt 铁律层禁 AI 自创头衔 */
@@ -2393,7 +2394,13 @@ function buildStream(){
         return;
       }
       if(un){
-        out.push({t:"npc",npc:q.npc,x:pubLine(q,d),kind:"cue"});
+        /* v58b：开场 cue 只挂「当前第一件待办」——同日十几张卡各挂一条既轰炸对话流，
+           还会触发十几次后台 AI 预热；其余卡只显示任务卡本身。下一件待办随完成自然顶上。 */
+        const aq=firstActiveQuest();
+        if(aq&&aq.id===q.id){
+          out.push({t:"npc",npc:q.npc,x:pubLine(q,d),kind:"cue"});
+          genQuestCue(q,d); /* 仅为当前待办预热一次（_cueP/缓存幂等），不随每张卡连发生成 */
+        }
         out.push({t:"quest",qid:q.id});
       }
     });
@@ -2460,19 +2467,21 @@ function dayCatCount(d){
   (d.quests||[]).forEach(q=>{ const k=q.tlabel||q.type||"其他"; m[k]=(m[k]||0)+1; });
   return m;
 }
-/* v58b：AI cue 缓存版本——旧版 cue 曾放行命令/催促/说教/自呼姓名句（如
-   「晚棠那边等着的，别绕远路……路我指了，脚得你自己迈」），v4 起旧缓存一律作废重生成 */
-const CUE_V=4;
+/* v58b：AI cue 缓存版本——v5：v4 虽拦住命令句，却全部坍缩成
+   「能陪我…吗？你在，我就安心/踏实/稳」同一模板，v5 起加入跨稿去重并重生成。
+   历史：v3 放行命令/自呼姓名；v4 拦命令但模板坍缩；v5 加跨稿去重与类别画面。 */
+const CUE_V=5;
 /* cue/串场词确定性红线扫描：只列模型最常犯、误杀率最低的模式；
    命中即带反馈重拟一次，二次仍中则弃用 AI 稿、回退本地兜底池（绝不带病上线）。
+   recent：该 NPC 近期已采用的 cue（跨稿去重）；无则只查单稿红线。
    注：不做裸字误杀（且/尚/莫=莫非 等），命令判定只认真对玩家的祈使分句与把字句。 */
-function cueRedFlags(t,npcDispName){
+function cueRedFlags(t,npcDispName,recent){
   const s=String(t==null?"":t).trim();
   if(!s) return ["空台词"];
   const f=[];
   if(s.length>90) f.push("超长("+s.length+"字)");
   const clauses=s.split(/[，。；！？、…—~～\s]+/).filter(Boolean);
-  const cmdClause=clauses.some(c=>/^(别|不要|不准|不许|莫(?!非|如|不)|赶紧|立刻|马上给)/.test(c)||/^快(点|些|去)/.test(c));
+  const cmdClause=clauses.some(c=>/^(别|不要|不准|不许|可别|莫(?!非|如|不)|赶紧|立刻|马上给)/.test(c)||/^快(点|些|去)/.test(c));
   if(cmdClause) f.push("命令/催促分句");
   if(/你把/.test(s)) f.push("把字命令句");
   if(/你得|你给我|你去(?!年)/.test(s)) f.push("指令式你字句");
@@ -2482,6 +2491,18 @@ function cueRedFlags(t,npcDispName){
   if(npcDispName&&npcDispName.length>=2&&s.indexOf(npcDispName)>=0) f.push("第三人称自呼姓名");
   if(/考试|考生|老师|教材|知识点|没过|考核|复习|章节|课程|真题|题库/.test(s)) f.push("现实考试词入L1");
   if(/\d+\s*(件|分钟|题|页|个|条|次|%)|共[\s\d一二三四五六七八九十两]+件/.test(s)) f.push("数量/时间播报");
+  /* 生猛撕咬动词：「咬进骨缝」这类漏网复合词（叮咬/咬牙/咬唇/咬紧是合法用法） */
+  if(/咬(?![叮牙紧唇])/.test(s)) f.push("生猛动词「咬」");
+  /* 跨稿去重：同一 NPC 同日多条 cue 不许共享开头/请求框架/收尾词 */
+  const arr=(Array.isArray(recent)?recent:[]).map(x=>String(x||""));
+  if(arr.length){
+    if(arr.some(x=>x.slice(0,4)&&x.slice(0,4)===s.slice(0,4))) f.push("开头与近期开场雷同");
+    if(/能陪我/.test(s)&&arr.some(x=>/能陪我/.test(x))) f.push("「能陪我…」请求框架重复");
+    /* 收尾情绪词去重（安心/踏实/稳，兼容「踏实些/稳得住」等变体） */
+    const tailMark=x=>{ const m=String(x).replace(/[。！？!?…，、~～」』"\s]+$/,"").match(/(安心[些一点]?|踏实[些一点]?|稳[得住些一]?)$/); return m?m[1][0]:null; };
+    const mark=tailMark(s);
+    if(mark&&arr.some(x=>tailMark(x)===mark)) f.push("收尾情绪词与近期重复(「"+mark+"」)");
+  }
   const bl=(window.scanStyleBlacklist&&window.scanStyleBlacklist(s))||[];
   if(bl.length) f.push("风格禁词:"+bl.slice(0,3).join("/"));
   return f;
@@ -2567,7 +2588,26 @@ async function genQuestCue(q,d){
     const b=buildQuestCue(q,d);
     const npcName=((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(q.npc,(NPC[q.npc]&&NPC[q.npc].name)||q.npc):((NPC[q.npc]&&NPC[q.npc].name)||q.npc));
     const smp=(window.WDTerms&&WDTerms.styleSamples)?WDTerms.styleSamples(q.npc):[];
-    const isOral=q.type==="oral";
+    /* 跨稿去重数据源：同一 NPC 已采用的 cue（仅当前版本），取最近 6 条 */
+    const recent=Object.keys(st.questLines||{})
+      .filter(id=>id!==q.id&&QMAP[id]&&QMAP[id].npc===q.npc)
+      .map(id=>st.questLines[id])
+      .filter(r=>r&&r.cueV===CUE_V&&r.cue).slice(-6).map(r=>r.cue);
+    /* 任务类别→画面边界（修诵才许写精灵/夺回气力，问契/传译不许串画面） */
+    const cat=q.rtCat||({study:"a",review:"rev",oral:"c",trans:"d",boss:"exam"}[q.type]||"a");
+    const SCENE_BOUND={
+      a:"理经/新学：画面只能围绕经匣、节点卡、卷轴、书页上盘踞的雾团；她在整理卡页",
+      b:"问契：画面围绕来客的问签与一问一答；她在誊写或理顺签条，不许出现景点精灵受伤、夺回气力",
+      c:"修诵：画面才允许围绕景点守护精灵与咒祷辞（协律/同调），可以写精灵被侵蚀、要帮她夺回气力",
+      d:"传译：画面围绕两本语言的通界语料、五句互译；不许出现精灵受伤或咒祷辞吟诵",
+      rev:"复习：画面是旧日净化过的节点又起雾（雾回潮），不是新的精灵受伤",
+      exam:"守城：画面是雾潮攻城与守关大阵"
+    };
+    /* 身体意象轮换：避开近期已用过的，按任务 hash 给一个新意象建议（仅供发散，禁止照抄句式） */
+    const SENS=["灯影里晃着一层湿雾","肩头落了点凉意","睫毛沾了细雾","杯里的茶凉透了","窗纸被雾气洇出印子","书页角卷着潮意","灯笼穗滴着水","靴尖沾了雾水","发梢凝着细水珠","指节有点发僵","袖口能拧出湿气","墨都研不开了"];
+    const usedSens=SENS.filter(x=>recent.join("|").includes(x.slice(0,2)));
+    const freshSens=SENS.filter(x=>!usedSens.includes(x));
+    const suggestedSens=freshSens[hash(q.id)%Math.max(1,freshSens.length)]||SENS[hash(q.id)%SENS.length];
     let personaBlock="";
     if(pc){
       personaBlock="【角色铁律·不可违背】"
@@ -2581,28 +2621,34 @@ async function genQuestCue(q,d){
     }
     const sys="你是日式RPG《问道之旅·四十五日》里的角色「"+npcName+"」。玩家是与你并肩同行的同伴，不是来听安排的下属。\n"
       +"请用「"+npcName+"」的口吻，对他说一小段开场台词（1-2句，≤70字），像当季新番动画里同伴当面开口。只讲三件事："
-      +"①一个具体画面或你此刻的身体感受（雾侵蚀到哪里、你正在做什么、谁在等他）；"
-      +"②今天想请他陪你做的一件事，一句话概括；③一句有温度的请求式收尾。\n"
-      +"【姿态·最优先】是你在请求他帮忙，不是派发任务：只能商量、邀请、倾诉（比如「能陪我……吗」「我想请你……」「你在的话，我会安心些」）。"
+      +"①一个具体画面或你此刻的身体感受；②今天想请他陪你做的一件事，一句话概括；③有温度的请求式收尾。\n"
+      +"【姿态·最优先】是你在请求他帮忙，不是派发任务：商量、邀请、倾诉都可以。"
       +"禁止命令与催促、禁止讲条件交换、禁止说教或把责任推回给他；禁止用第三人称称呼自己——台词里不许出现你的名字「"+npcName+"」，自称只用「我」。\n"
-      +"反例（自呼姓名、命令、催促、讲条件、说教，五处全错，绝不能这样写）：「"+npcName+"那边等着的，别绕远路。你把那段念顺了，我就把剩下的雾再收一收——路我指了，脚得你自己迈。」\n"
-      +"正例的感觉（只体会姿态，禁止照搬）：「"+(isOral
-        ?"这边的雾又漫上来了……那一段咒祷辞，能陪我再过一遍吗？你在，我就安心。"
-        :"经匣里那几团雾还赖着不散，能陪我去看看吗？我一个人，心里没底。")+"」\n"
+      +"【反例·五处全错】「"+npcName+"那边等着的，别绕远路。你把那段念顺了，我就把剩下的雾再收一收——路我指了，脚得你自己迈。」\n"
+      +"【多样性·硬要求·避免千篇一律】不要每条都写「能陪我……吗？你在，我就安心/踏实/稳」——这是偷懒模板。"
+      +"请求框架要换着用，例如（仅示范结构差异，禁止照搬字句和收尾）："
+      +"①疑问邀请「……我想请你陪我去看一眼」；"
+      +"②陈述式「签我理好了，就差你这双眼睛」；"
+      +"③自言自语被他听见「（回头）你来得正好，这段我正想找人试」；"
+      +"④先吐槽自己的状态再开口「手都冻僵了……走，陪我活动活动」。"
+      +"每条的开头画面、请求说法、收尾词都要和你最近说过的开场不一样。\n"
       +"当前阶段心境：「"+stage.name+"」。\n"
       +personaBlock
       +(smp.length?"【台词质感·参考节奏勿照搬字句】"+smp.slice(0,3).map(x=>"「"+x+"」").join(" ")+"\n":"")
       +(iron.length?"【语言铁律·全员共守】\n"+iron.map((s,i)=>(i+1)+"."+s).join("\n")+"\n":"")
-      +"【本场景补充】不报任何数字（几件/几分钟/还剩几件由界面显示）；不念任务编号与标题；时间单位只能说「分钟」；雾怪对景点的动作只用「侵蚀/蚕食」。";
+      +"【本场景补充】不报任何数字（几件/几分钟/还剩几件由界面显示）；不念任务编号与标题；时间单位只能说「分钟」；雾怪对景点的动作只用「侵蚀/蚕食」，禁「咬」及撕咬类动词。";
     const user="下一程的内容（仅供你心里有数，禁止原样念出来，尤其不许报数量、类别、耗时）：\n"+b.plan
+      +"\n画面边界（只能写这一类画面，不许串到别的任务类型）："+(SCENE_BOUND[cat]||SCENE_BOUND.a)
+      +"\n身体感受请换一个没用过的意象（给你一个方向，可自由发挥但别照抄）：「"+suggestedSens+"」"
+      +(recent.length?("\n你最近已经对他说过这些开场——开头、请求框架、身体意象、收尾词都不许再撞：\n"+recent.map((x,i)=>"〔"+(i+1)+"〕"+x).join("\n")):"")
       +"\n\n请只输出这一小段台词（≤70字），不要解释、不要舞台说明、不要引号以外的字。";
-    const gate=t=>cueRedFlags(filterNpcText(t),npcName);
+    const gate=t=>cueRedFlags(filterNpcText(t),npcName,recent);
     let t=cleanCue(await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"questcue"}));
     let flags=t?gate(t):[];
     if(t&&flags.length){
       console.warn("[cue] 红线未过，带反馈重拟一次：",flags,t);
       const t2=cleanCue(await dsChat([{role:"system",content:sys},{role:"user",
-        content:user+"\n\n上一稿触犯了红线：「"+flags.join("、")+"」。请逐条避开，保持请求姿态，用「我」自称，重写这一小段（≤70字）。"}],
+        content:user+"\n\n上一稿触犯了红线：「"+flags.join("、")+"」。请逐条避开（尤其换一个完全不同的开头、请求说法和收尾，不许再用「能陪我…吗/你在我就…」），保持请求姿态，用「我」自称，重写这一小段（≤70字）。"}],
         {kind:"questcue"}));
       const f2=t2?gate(t2):[];
       if(t2&&!f2.length) t=t2; else { console.warn("[cue] 两次未过红线，本轮采用本地兜底词：",f2); t=""; }
@@ -2612,9 +2658,10 @@ async function genQuestCue(q,d){
   delete c[q.id]._cueP;
 }
 function pubLine(q,d){
-  /* FIX-P4：任务流气泡只播一句激励（完整 cue 由 stage 0 开场对话逐行讲，避免弹窗横幅/气泡/开场对话三遍重复） */
+  /* FIX-P4：任务流气泡只播一句激励（完整 cue 由 stage 0 开场对话逐行讲，避免弹窗横幅/气泡/开场对话三遍重复）。
+     v58b：本函数不再触发 AI 预热——预热由 buildStream 对当前待办单点触发、进任务时再兜一次，
+     避免每张卡渲染都连发 API。 */
   const c=buildQuestCue(q,d);
-  genQuestCue(q,d);
   return filterNpcText("「"+c.motivate+"」");
 }
 function doneLine(q,d){
@@ -4402,6 +4449,8 @@ function refineCutscene(id,node){
     else { txt=txt.split(/\n{1,}/)[0].trim(); }
     txt=txt.replace(/^[「『"][\s,，。、]?|[\s,，。、]?[」』"]$/g,"").trim().slice(0,120);
     if(txt.length<8) return;
+    /* v58b：过场台词同样不许自呼姓名/命令催促——不过则保留本地兜底，不替换 */
+    if(cueRedFlags(filterNpcText(txt),"云汀").length) { console.warn("[过场润色] 未过红线，保留本地句：",txt); return; }
     const idx=st.dialogue.findIndex(m=>m&&m.id===id);
     if(idx<0) return;
     st.dialogue[idx].text=txt;
@@ -4483,6 +4532,9 @@ function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
     +"3）玩家与 "+dName(npc1)+" 互动（玩家主动提问，NPC以角色身份回应）；"
     +(npc2?"4）"+dName(npc2)+" 可适时插话一句，体现多NPC在场感。":"")
     +"所有发言像一群熟人在现场你一句我一句：允许短句、停顿、半句、跑题再拉回，不必每句完整、不必每句都推进什么，更不要每句都解释。整体语感接近日式轻小说的日常群像对白，有温度、有性格。禁网游黑话堆砌、禁江湖气装熟、禁AI腔、禁教书先生口吻、禁念任务编号与数值、禁已淘汰概念（"+obsolete.join("、")+"）。每条≤90字。"
+    +"【说话人纪律·硬约束】①每条开头必须严格按我给的角色名标注，内容只能是该角色本人说的话——云汀的台词里永远不许出现「云汀」二字（自称只用「我」），其他角色同理不许自呼姓名；"
+    +"②玩家的台词是玩家本人的口语，禁止替玩家做角色介绍（大家早已相识，不许出现「这位是云汀/我的引路人」之类引荐句），也不许让玩家念旁白；"
+    +"③每条严格对应我列出的顺序，缺条、串角视为废稿。"
     +(window.WDChat&&WDChat.masterRule?WDChat.masterRule():"");
   const user="当日情境："+(dctx?JSON.stringify(dctx):"无")+"\n当前任务："+(aq?qdn(aq)+"（"+aq.tlabel+"）":"无在途任务")
     +"\n出场角色：云汀、玩家、"+dName(npc1)+(npc2?"、"+dName(npc2):"")
@@ -4499,10 +4551,60 @@ function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
     const txt=(raw||"").trim(); if(!txt||txt.length<10){ refineGuidanceSceneFail(ids); return; }
     const parts=txt.split(/\|\|\||\n{2,}/).map(s=>s.trim()).filter(s=>s);
     if(parts.length<ids.length){ refineGuidanceSceneFail(ids); return; }
-    for(let i=0;i<ids.length&&i<parts.length;i++){
+    /* v58b：按说话人标签归位，修「云汀自称这位是云汀」式串角——
+       旧逻辑纯按序号入座，模型把玩家视角的引荐句排到云汀槽位也照收。
+       ①识别每行「名：」归入说话人队列；②无标签行按序号兜底；
+       ③NPC 台词再过 cueRedFlags（自呼姓名等），不过则换安全短句。 */
+    const dn2=id=>dName(id);
+    const labelToId=label=>{
+      const x=String(label||"").trim();
+      if(/^(我|玩家)/.test(x)) return "player";
+      const all=[npc1,npc2,"yunting","shenzhao","chengxiu","tina","wantang"].filter(Boolean);
+      for(const id of new Set(all)){
+        if(x===dn2(id)||x===(NPC[id]&&NPC[id].name)) return id;
+        if(id==="yunting"&&/云/.test(x)) return "yunting";
+        if(id==="shenzhao"&&/沈昭|阁主/.test(x)) return "shenzhao";
+        if(id==="chengxiu"&&/程绣|掌柜/.test(x)) return "chengxiu";
+        if(id==="tina"&&/缇娜|精灵/.test(x)) return "tina";
+        if(id==="wantang"&&/晚棠/.test(x)) return "wantang";
+      }
+      return null;
+    };
+    const buckets={player:[]}; [npc1,npc2,"yunting"].forEach(id=>{if(id)buckets[id]=[];});
+    const unlabeled=[];
+    parts.forEach(line=>{
+      const m=line.match(/^([^：:]{1,8})[：:]\s*([\s\S]*)$/);
+      if(m){
+        const id=labelToId(m[1]); const body=m[2].replace(/^[「『"“]+|[」』"”]+$/g,"").trim();
+        if(id&&body){ (buckets[id]||(buckets[id]=[])).push(body); return; }
+      }
+      unlabeled.push(line.replace(/^[「『"“]+|[」』"”]+$/g,"").trim());
+    });
+    const GUIDANCE_SAFE={
+      yunting:["……你来了。","今天的雾，看着薄一些。"],
+      tina:["叮——我在呢。","有错题我会喊你的。"],
+      shenzhao:["……进来吧。","书在这儿，自己翻。"],
+      chengxiu:["哟，稀客。","坐，茶刚沏上。"],
+      wantang:["嘿，你来啦。","这段，我们一起练。"]
+    };
+    let ui=0;
+    const take=speaker=>{
+      const q=(buckets[speaker]||[]).shift();
+      return q!=null?q:(unlabeled[ui++]||"");
+    };
+    for(let i=0;i<ids.length;i++){
       const idx=st.dialogue.findIndex(m=>m&&m.id===ids[i]); if(idx<0) continue;
-      let p=parts[i].replace(/^[^：:]{1,10}[：:]\s*/,"").replace(/^[「『"“]+|[」』"”]+$/g,"");
-      p=p.slice(0,200);
+      /* 期望说话人以落流槽位自身的 role/npc 为准（generateGuidanceScene 已固定） */
+      const slotMsg=st.dialogue[idx];
+      const speaker=slotMsg.role==="player"?"player":slotMsg.npc;
+      let p=take(speaker).slice(0,200);
+      if(speaker!=="player"){
+        const fl=cueRedFlags(p,dn2(speaker));
+        if(fl.length){ console.warn("[引导场景] 台词未过红线，换安全短句：",fl,p);
+          const pool=GUIDANCE_SAFE[speaker]||["……"];
+          p=pool[hash(ids[i])%pool.length];
+        }
+      }
       st.dialogue[idx].text=p.length>=2?p:"……";
     }
     save();
