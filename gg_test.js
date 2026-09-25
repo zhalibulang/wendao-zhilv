@@ -1582,6 +1582,19 @@ const driver=`
       console.log('PASS  v58c 云汀昵称/人设系统提示词统一生效');
     }catch(e){ errors.push('v58 => '+e.message); console.log('FAIL  v58 : '+e.message); }
 
+    /* v58g：图片管线必须保留 alpha（JPEG 编码会把透明压成黑底）。
+       注意：本测试在模板字符串驱动内，断言只用字符串方法，不用正则字面量。 */
+    try{
+      const fs2=require('fs');
+      const cfgSrc2=fs2.readFileSync(require('path').join(__dirname,'wd-cfg.js'),'utf8');
+      if(!cfgSrc2.includes('function toAlphaDataURL')) throw new Error('缺 toAlphaDataURL');
+      if(cfgSrc2.includes('toDataURL("image/jpeg"')) throw new Error('图片管线仍在用 JPEG 编码（透明会变黑）');
+      if(!cfgSrc2.includes('image/webp')||!cfgSrc2.includes('image/png')) throw new Error('应优先 WebP 回退 PNG');
+      const htmlSrc=fs2.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+      if(!htmlSrc.includes('object-fit:contain')) throw new Error('立绘缺 contain 完整显示规则');
+      console.log('PASS  v58g 图片管线保留 alpha（webp/png）+立绘 contain');
+    }catch(e){ errors.push('v58g alpha => '+e.message); console.log('FAIL  v58g alpha : '+e.message); }
+
     /* v52 R2：剧情点双奖励累积 + 幂等 + 触发 */
     try{
       reset(); st.day=5; st.unlocked=5; reconcile();

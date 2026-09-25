@@ -46,6 +46,17 @@ function sanitize(recount){
 }
 /* v58：配额失败必须上抛——旧实现 try/catch 静默吞错，会导致“提示上传成功但刷新后立绘丢失” */
 function save(){ localStorage.setItem(KEY,JSON.stringify(cfg)); }
+/* v58g：导出保留 alpha 的 dataURL——JPEG 不支持透明，透明 PNG 经 JPEG 编码后
+   四周会被压成纯黑（立绘黑底事故根因）。优先 WebP（带透明且体积小），
+   不支持时回退 PNG；质量参数仅 WebP 生效。 */
+function toAlphaDataURL(canvas,quality){
+  let url="";
+  try{
+    url=canvas.toDataURL("image/webp",quality||0.9);
+    if(url&&url.indexOf("data:image/webp")===0) return url;
+  }catch(e){}
+  return canvas.toDataURL("image/png");
+}
 function emit(keys){ try{ window.dispatchEvent(new CustomEvent("wd:cfg",{detail:{keys:keys||[]}})); }catch(e){} }
 function summ(v){ const s=typeof v==="string"?v:JSON.stringify(v); return s==null?"":String(s).slice(0,40); }
 function histPush(k,from,to,reason){
@@ -106,7 +117,7 @@ function processImageFile(file,opt){
     const k=(out/side)*zoom, w=img.naturalWidth*k, h=img.naturalHeight*k;
     g.imageSmoothingEnabled=true;
     g.drawImage(img,(out-w)/2,(out-h)/2,w,h);
-    const url2=cv.toDataURL("image/jpeg",QUALITY);
+    const url2=toAlphaDataURL(cv,QUALITY);
     return {url:url2, w:img.naturalWidth, h:img.naturalHeight, kb:Math.round(url2.length/1024)};
   });
 }
@@ -120,7 +131,7 @@ function processPortraitFile(file,opt){
     const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
     const g=cv.getContext("2d"); g.imageSmoothingEnabled=true;
     g.drawImage(img,0,0,w,h);
-    const url2=cv.toDataURL("image/jpeg",0.85);
+    const url2=toAlphaDataURL(cv,0.85);
     return {url:url2, w:w0, h:h0, kb:Math.round(url2.length/1024)};
   });
 }

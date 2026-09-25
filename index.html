@@ -294,12 +294,15 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .gal-portrait::after{content:"立绘";position:absolute;bottom:6px;left:0;right:0;text-align:center;
   font-size:10px;letter-spacing:.2em;color:var(--dim)}
 .gal-portrait.hasimg::after{content:none}
-.gal-portrait.hasimg{background:none;border:none;box-shadow:none}
+.gal-portrait.hasimg{background:none;border:none;box-shadow:none;display:flex;align-items:flex-start;justify-content:center;overflow:hidden}
+/* v58g：立绘完整显示——contain 不裁头脚（旧版无尺寸规则靠 overflow 硬裁，
+   全身立绘只剩腰以下）；透明背景直接透出纸面 */
+.gal-portrait.hasimg img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;object-position:top center;border-radius:10px;background:transparent}
 /* v58：窄屏不再完全藏起立绘——已上传时以紧凑横幅展示，无图仍隐藏占位剪影 */
 @media(max-width:899px){
   .gal-portrait{display:none}
-  .gal-portrait.hasimg{display:block;min-height:0;height:150px;margin:8px 12px}
-  .gal-portrait.hasimg img{width:100%;height:100%;object-fit:cover;border-radius:10px}
+  .gal-portrait.hasimg{display:flex;min-height:0;height:150px;margin:8px 12px;align-items:center}
+  .gal-portrait.hasimg img{max-width:100%;max-height:100%;object-fit:contain;border-radius:10px}
 }
 
 /* timer */
@@ -3523,7 +3526,7 @@ function openQuest(qid){
       <div>${esc(q.tlabel)} · ${fmtDur(q.dur)}</div>
       <div style="color:var(--gold);font-size:10px;margin-top:2px">${q.kind==="main"?"主线":"支线"}</div>
     </div>
-    <div class="gal-portrait${(function(){ try{ return (WDCfg.portraitURL&&WDCfg.portraitURL(npc.id))?" hasimg":""; }catch(e){ return ""; } })()}" aria-hidden="true">${(function(){ try{ const u=WDCfg.portraitURL&&WDCfg.portraitURL(npc.id); return u?`<img src="${esc(u)}" style="width:100%;height:100%;object-fit:cover;border-radius:10px" onerror="this.style.display='none'" alt="">`:""; }catch(e){ return ""; } })()}</div>
+    <div class="gal-portrait${(function(){ try{ return (WDCfg.portraitURL&&WDCfg.portraitURL(npc.id))?" hasimg":""; }catch(e){ return ""; } })()}" aria-hidden="true">${(function(){ try{ const u=WDCfg.portraitURL&&WDCfg.portraitURL(npc.id); return u?`<img src="${esc(u)}" style="max-width:100%;max-height:100%;object-fit:contain;object-position:top center;border-radius:10px" onerror="this.style.display='none'" alt="">`:""; }catch(e){ return ""; } })()}</div>
     <div style="text-align:center;padding-top:8px;border-top:1px dashed var(--border)">
       ${readonly
         ? '<div style="font-size:11px;color:var(--ok)">✓ 已完成<br>回看模式</div>'
@@ -4701,6 +4704,16 @@ function refineCutscene(id,node){
   }).catch(()=>{});
 }
 /* v58c 旧档迁移：把已落流的纯省略号引导消息替换为自然短句（AI 曾少给台词留下的空槽） */
+/* v58g：旧版立绘经 JPEG 编码透明通道已丢失（黑底无法逆向恢复），提示重新上传一次 */
+function hintLegacyPortraits(){
+  if(st._portraitHintV===1) return;
+  try{
+    const legacy=Object.keys((window.WDCfg&&WDCfg._testGet&&WDCfg._testGet().npcPortrait)||{})
+      .filter(id=>/^data:image\/jpeg/.test(WDCfg.portraitURL(id)||""));
+    st._portraitHintV=1; save();
+    if(legacy.length) setTimeout(()=>toast("检测到旧版立绘透明层丢失（黑底），请在配置中心重新上传原图", "gold"),1200);
+  }catch(e){ st._portraitHintV=1; }
+}
 function migrateGuidanceDots(){
   if(st._gdDotCleanV===1) return;
   const SAFE_NPC={yunting:["嗯，人到了就好。","今天的雾薄一些。"],tina:["叮——我在呢。","星盘亮着呢。"],
@@ -8329,6 +8342,7 @@ function boot(){
     installRuntimePlan();
     syncGameDay();
     migrateGuidanceDots(); /* v58c：清理旧版落流的「……」空引导句 */
+    hintLegacyPortraits(); /* v58g：旧版黑底立绘提示重传 */
     ensureGdMilestone(st.day); /* v58c：旧档/同日再进也要补发当前纪日手札（advanceNaturalDay 同日会提前 return） */
     /* v48：三套时钟——离线按自然日推进游戏日/雾涌日，恢复心气灵力 */
     ensureClocks();
