@@ -369,12 +369,14 @@ const driver=`
     try{ WDMem.import('{"ver":1}'); throw new Error('SHOULD_FAIL'); }catch(e){ if(e.message!=='E_MEM_SHAPE')throw e; }
   });
   /* ===== NPC 职能重构：云蘅 + 全角色×四章矩阵 ===== */
-  run('NPC 四章互动矩阵全员覆盖',()=>{
-    ['yunheng','qingxuan','smq','tiemian','liuruyan','moxiaogu','xuanji'].forEach(id=>{
+  run('v58c NPC 互动矩阵：规范 5 角色全幕覆盖 + 云汀引导链路',()=>{
+    ['yunting','shenzhao','chengxiu','tina','wantang'].forEach(id=>{
       if(!NPC[id])throw new Error(id+' 未注册');
-      for(let a=1;a<=4;a++) if(!NPC_MATRIX[id]['act'+a])throw new Error(id+' 缺 act'+a+' 话题');
+      for(let a=1;a<=5;a++) if(!NPC_MATRIX[id]['act'+a])throw new Error(id+' 缺 act'+a+' 话题');
     });
-    if(!npcActTopic('yunheng')||!MENTION_ALIASES.yunheng.includes('云蘅'))throw new Error('云蘅引导链路不完整');
+    if(!npcActTopic('yunting'))throw new Error('云汀当前幕话题缺失');
+    if(!MENTION_ALIASES.yunting.includes('云汀'))throw new Error('云汀提及别名不完整');
+    if(MENTION_ALIASES.yunting.includes('云蘅'))throw new Error('规范别名表不应含旧名云蘅');
   });
   run('renderCfg/renderMem 面板渲染不崩',()=>{
     reset(); renderCfg();
@@ -1461,17 +1463,26 @@ const driver=`
       if(DS_PROFILES.directorplan.max_tokens>400) throw new Error('directorplan max_tokens 过高');
       console.log('PASS  v36 DS_PROFILES 含 directorplan 低token档');
     }catch(e){ errors.push('v36 DS_PROFILES => '+e.message); console.log('FAIL  v36 DS_PROFILES : '+e.message); }
-    /* v36：@ 弹窗纯函数 */
+    /* v58c：@ 弹窗纯函数——规范 5 角色、唯一、无旧 id/景点精灵 */
     try{
       const l1=filterMentionList('');
       if(l1[0].id!=='__ALL__') throw new Error('首项应为所有人');
-      if(l1.filter(x=>x.kind==='npc').length<7) throw new Error('NPC数量不足');
+      const npcs=l1.filter(x=>x.kind==='npc');
+      if(npcs.length!==5) throw new Error('规范 NPC 应为 5 个，实际 '+npcs.length);
+      const ids=npcs.map(x=>x.id);
+      if(new Set(ids).size!==5) throw new Error('NPC id 不应重复');
+      if(ids.some(id=>['yunheng','qingxuan','smq','tiemian','liuruyan','moxiaogu','xuanji','gugong'].includes(id))) throw new Error('选单混入旧 id/景点精灵');
+      if(!ids.includes('yunting')) throw new Error('应含 yunting');
       const l2=filterMentionList('云');
-      if(!l2.some(x=>x.id==='yunheng')) throw new Error('云 应命中云蘅');
+      if(!l2.some(x=>x.id==='yunting')) throw new Error('云 应命中云汀');
       const l3=filterMentionList('zzz不存在');
-      if(l3.length!==0) throw new Error('无匹配应返回空数组');
-      console.log('PASS  v36 @mention filterMentionList 过滤正确');
-    }catch(e){ errors.push('v36 filterMentionList => '+e.message); console.log('FAIL  v36 filterMentionList : '+e.message); }
+      if(l3.filter(x=>x.kind==='npc').length!==0) throw new Error('无匹配应返回空 NPC 列表');
+      /* 旧名静默路由仍可用，但不进选单 */
+      if(parseMention('@云蘅')!=='yunting') throw new Error('旧名云蘅应静默路由到 yunting');
+      if(parseMention('@铁面')!=='shenzhao') throw new Error('旧名铁面应静默路由到 shenzhao');
+      if(filterMentionList('云蘅').some(x=>x.kind==='npc')) throw new Error('旧名不应出现在选单');
+      console.log('PASS  v58c @mention 规范5角色唯一/旧名静默路由');
+    }catch(e){ errors.push('v58c mention => '+e.message); console.log('FAIL  v58c mention : '+e.message); }
     /* v36：@ 弹窗插入函数 */
     try{
       const r=insertMention('@云 在吗',0,2,'云蘅');
@@ -1554,6 +1565,21 @@ const driver=`
       if(!dup2.some(x=>/收尾情绪词/.test(x))) throw new Error("收尾词跨稿重复漏判: "+JSON.stringify(dup2));
       if(typeof CUE_V!=="number"||CUE_V<5) throw new Error("cue 缓存版本应≥5（v4模板稿须作废），got "+CUE_V);
       console.log('PASS  v58 啃字清零/头衔白名单/原型隔离/cue红线闭环v5');
+    }catch(e){ errors.push('v58 => '+e.message); console.log('FAIL  v58 : '+e.message); }
+
+    /* v58c：云汀人设/昵称在系统提示词统一生效 */
+    try{
+      const sys=WDChat.sysPrompt("yunting",false);
+      if(!sys.includes("云汀")) throw new Error("系统提示词缺云汀");
+      if(sys.includes("云蘅")) throw new Error("系统提示词残留旧名云蘅");
+      if(/候补|候选/.test(sys)) throw new Error("系统提示词残留旧称谓候补/候选");
+      if(/导游次元|导游异次元/.test(sys)) throw new Error("系统提示词残留旧世界观导游次元");
+      if(!sys.includes("贞德")) throw new Error("云汀原型锚点（saber/贞德）未注入");
+      /* 注册表新角色人设可取 */
+      if(!WDRegistry.voiceOf("yunting")||!WDRegistry.arcSeedOf("yunting")) throw new Error("新角色 voice/arc 未在注册表生效");
+      /* 晚棠原型锚点（芙莉莲） */
+      if(!WDChat.sysPrompt("wantang",false).includes("芙莉莲")) throw new Error("晚棠原型锚点未注入");
+      console.log('PASS  v58c 云汀昵称/人设系统提示词统一生效');
     }catch(e){ errors.push('v58 => '+e.message); console.log('FAIL  v58 : '+e.message); }
 
     /* v52 R2：剧情点双奖励累积 + 幂等 + 触发 */

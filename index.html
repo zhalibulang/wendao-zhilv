@@ -698,10 +698,10 @@ const WD_NEW_ROLES = {
   yunting: {
     id:"yunting", name:"云汀", title:"圣女",
     species:"human", romanceable:true,
-    intro:"导游世界的圣女候补，主引导者。性情温柔但心怀大志，在仪式被遗忘之雾打断后与玩家形成灵魂绑定。她负责把四十五日的行程串成一条完整的线，从晨间问候到夜灯长明，都有她的影子。",
+    intro:"导游世界的圣女，主引导者。性情温柔但心怀大志，在就职典礼被遗忘之雾打断后与玩家形成灵魂绑定。她负责把四十五日的行程串成一条完整的线，从晨间问候到夜灯长明，都有她的影子。",
     role:"主引导人——把四十五日行程串成一条完整的线，晨间问候到夜灯长明都有她",
     keywords:["主线","剧情","圣女","引导","下一步","指引","雾","启程","行程","帮"],
-    aliases:["云汀","圣女","云汀","yunting","圣女候补"],
+    aliases:["云汀","圣女","yunting"],
     actTopics:{
       act1:"初遇之时，雾刚漫过圣殿的阶。别慌，有我同行。",
       act2:"律法之下，脉络犹在。沈昭的阁规我熟，带你绕最稳的那条。",
@@ -1449,7 +1449,7 @@ if(window.WDQuiz){
           }
           if(k==="aliasMap"){
             Object.assign(out,{
-              yunting:["云汀","圣女","云汀","yunting","圣女"],
+              yunting:["云汀","圣女","yunting"],
               shenzhao:["沈昭","阁主","藏经阁","shenzhao"],
               chengxiu:["程绣","老板","旅行社","踏春行","chengxiu"],
               tina:["缇娜","精灵","次元精灵","tina"],
@@ -1553,8 +1553,8 @@ if(window.WDChat){
     const charList=npcs.map(n=>n.name+"（"+(n.title||"")+"，"+n.intro+"）").join("｜");
     return {
       游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
-      游戏目的:"玩家意外降临导游世界，与圣女候补云汀形成灵魂绑定。玩家须完成四十五日修行，助云汀逐步恢复被遗忘之雾侵蚀的圣女之力，重新驾驭圣器以驱逐遗忘之雾。做任务就是修行：研习新考点=点亮阵纹节点，复习=净化回潮的雾怪，题组试炼=试炼阵中净化雾怪，英文导游词=咒祷辞吟诵，小考=守城之战。",
-      世界观:"玩家意外降临导游世界——一个正在被遗忘之雾吞噬的残破次元。圣女候补云汀在就职典礼被遗忘之雾打断时与玩家形成灵魂绑定。四十五日的旅程中，玩家将激活六个景点的结界（天安门/故宫/天坛/颐和园/长城/明十三陵），与藏经阁阁主沈昭、旅行社老板程绣、次元精灵缇娜、英语导游晚棠同行，最终在第四十五日登上金榜台完成云汀的圣女就职。景点皆有守护精灵（如故宫的紫宸）：结界是精灵的战甲，雾怪侵蚀景点=精灵的痛感，节点被点亮=精灵的力量恢复。",
+      游戏目的:"玩家意外降临导游世界，与圣女云汀形成灵魂绑定。玩家须完成四十五日修行，助云汀逐步恢复被遗忘之雾侵蚀的圣女之力，重新驾驭圣器以驱逐遗忘之雾。做任务就是修行：研习新考点=点亮阵纹节点，复习=净化回潮的雾怪，题组试炼=试炼阵中净化雾怪，英文导游词=咒祷辞吟诵，小考=守城之战。",
+      世界观:"玩家意外降临导游世界——一个正在被遗忘之雾吞噬的残破次元。圣女云汀在就职典礼被遗忘之雾打断时与玩家形成灵魂绑定。四十五日的旅程中，玩家将激活六个景点的结界（天安门/故宫/天坛/颐和园/长城/明十三陵），与藏经阁阁主沈昭、旅行社老板程绣、次元精灵缇娜、英语导游晚棠同行，最终在第四十五日登上金榜台完成云汀的圣女就职。景点皆有守护精灵（如故宫的紫宸）：结界是精灵的战甲，雾怪侵蚀景点=精灵的痛感，节点被点亮=精灵的力量恢复。",
       角色设定:charList+"。（注：以上角色名字/称号/人设均以玩家配置中心的自定义为准，玩家可随时编辑覆写）",
       隐喻系统:"每个复习任务都是一个游戏化关卡：新学任务=秘境探幽/残卷修复/点亮阵纹节点；复习任务=雾回潮（雾怪重新侵蚀已净化的节点，需要玩家再次净化）；题组练习=试炼阵（联手布置的模拟大阵，生成精英级雾怪将）；英文导游词=咒祷辞吟诵（点亮节点的核心仪轨）；小考=守城之战（雾怪攻城）。",
       剧情节点:"关键剧情节点：①玩家初次降临 ②与云汀形成灵魂绑定 ③藏经阁开匣 ④踏春行开张 ⑤星盘织网 ⑥第四十五日金榜台。过场由AI根据背景和故事线虚构，呈现为角色与玩家一问一答形式，简短沉浸，自然融入对话流。",
@@ -7948,7 +7948,26 @@ function openPersonaPanel(){
 /* ==================== @角色名 AI 互动 ==================== */
 /* 角色别名 → npcId（含全名与常用称呼，均取自 D.npcs 真实名，避免错字） */
 /* v2（R2.1）：@提及别名从角色注册表派生 */
-const MENTION_ALIASES=(window.WDRegistry&&WDRegistry.aliasMap())||{};
+/* v58c：@提及别名——以新版 5 角色为唯一规范名册（旧注册表含 7 旧 id+景点精灵，
+   直接用会导致选单里云汀出现 3 次、紫宸混入）。旧名仅作静默路由，不进选单。 */
+const MENTION_CANON=["yunting","shenzhao","chengxiu","tina","wantang"];
+const MENTION_ALIASES={};
+MENTION_CANON.forEach(id=>{
+  const n=NPC[id]||(window.WDRegistry&&WDRegistry.get(id)); if(!n) return;
+  const set=new Set([id,n.name,n.title]);
+  (n.aliases||[]).forEach(a=>{ if(a) set.add(a); });
+  MENTION_ALIASES[id]=[...set].filter(Boolean);
+});
+/* 旧名静默路由表：旧版称谓 → 新 id（打旧名仍找得到人，但选单不展示）。
+   注：WDRegistry 已被 proxy 重定向，取不到旧记录别名，故在此显式登记。 */
+const MENTION_LEGACY={
+  yunheng:"yunting",云蘅:"yunting",青玄:"yunting",青玄先生:"yunting",
+  tiemian:"shenzhao",铁面:"shenzhao",铁面先生:"shenzhao",
+  liuruyan:"chengxiu",柳如烟:"chengxiu",柳首座:"chengxiu",
+  xuanji:"tina",玄机:"tina",玄机夫人:"tina",璇玑:"tina",
+  smq:"wantang",司马青衫:"wantang",
+  moxiaogu:"wantang",墨小骨:"wantang",
+};
 function parseMention(text){
   const m=/@([A-Za-z0-9_\u4e00-\u9fa5]{2,8})/.exec(text);
   if(!m) return null;
@@ -7956,13 +7975,15 @@ function parseMention(text){
   // @所有人/各位/全员/大家 → 全员应答
   if(/^(所有人|各位|全员|大家|全部|所有人呢|都有)$/.test(tok)) return "__ALL__";
   for(const id in MENTION_ALIASES){ if(MENTION_ALIASES[id].some(a=>tok===a||tok.startsWith(a)||a.startsWith(tok)&&tok.length>=2)) return id; }
-  // 玩家自定义名/称号同样可被 @ 触发（ID 仍为系统固定值）
+  // 玩家自定义名/称号同样可被 @ 触发（仅限规范 5 角色）
   if(window.WDCfg){
-    for(const id of Object.keys(NPC)){
+    for(const id of MENTION_CANON){
       const cn=WDCfg.npcName(id,""), ct=WDCfg.npcTitle(id,"");
       if((cn&&(tok===cn||tok.startsWith(cn)))||(ct&&(tok===ct||tok.startsWith(ct)))) return id;
     }
   }
+  /* 旧名静默兼容（云蘅/铁面/璇玑……）→ 重定向新版角色，不在界面展示 */
+  if(MENTION_LEGACY[tok]) return MENTION_LEGACY[tok];
   return null;
 }
 
@@ -7977,12 +7998,11 @@ function filterMentionList(token){
   if(!t||allKw.some(k=>k.startsWith(t)||(t.length>=2&&k.includes(t)))){
     out.push({id:"__ALL__",name:"所有人",title:"全员应答",kind:"all"});
   }
-  const seen=new Set(["__ALL__"]);
-  for(const id in MENTION_ALIASES){
+  /* v58c：选单只列规范 5 角色（旧 id/景点精灵不入），天然去重 */
+  for(const id of MENTION_CANON){
     const aliases=MENTION_ALIASES[id]||[];
     const hit=!t||aliases.some(a=>a===t||a.startsWith(t)||(t.length>=2&&a.includes(t)));
-    if(!hit||seen.has(id)) continue;
-    seen.add(id);
+    if(!hit) continue;
     out.push({id,name:dName(id),title:dTitle(id),kind:"npc"});
   }
   return out;
