@@ -1524,11 +1524,24 @@ const driver=`
       ['index.html','wd-chat.js','wd-terms.js','npc-registry.js'].forEach(f=>{
         try{ cnt+=(fs.readFileSync(f,'utf8').match(/啃/g)||[]).length; }catch(e){}
       });
-      if(cnt!==9) throw new Error("源文本「啃」计数异常(期望9处防御性定义): "+cnt);
+      if(cnt!==7) throw new Error("源文本「啃」计数异常(期望7处防御性定义): "+cnt);
       const cueSrc=genQuestCue.toString();
-      if(!cueSrc.includes("cueV===3")) throw new Error("cue 缓存未升 v3");
+      if(!cueSrc.includes("cueV===CUE_V")) throw new Error("cue 缓存未走版本常量 CUE_V");
+      if(!cueSrc.includes("cueRedFlags")) throw new Error("cue 生成缺红线扫描/重拟闭环");
       if(cueSrc.includes("雾正在啃")) throw new Error("cue prompt 仍在示范啃字");
-      console.log('PASS  v58 啃字清零/头衔白名单/原型隔离/缓存v3');
+      /* v58b：晚棠事故句的五类红线必须全部能被 cueRedFlags 命中 */
+      const bad="晚棠那边等着的，别绕远路。你把那段念顺了，我就把剩下的雾再收一收——路我指了，脚得你自己迈。";
+      const fl=cueRedFlags(bad,"晚棠");
+      ["命令/催促分句","把字命令句","命令式讲条件(你做X我就Y)","说教/责任转嫁","第三人称自呼姓名"].forEach(k=>{
+        if(!fl.includes(k)) throw new Error("红线漏判："+k+" → "+JSON.stringify(fl));
+      });
+      /* 正例姿势不得误杀：请求式、倾诉式、含「你在，我就安心」 */
+      [
+        "这边的雾又漫上来了……那一段咒祷辞，能陪我再过一遍吗？你在，我就安心。",
+        "经匣里那几团雾还赖着不散，能陪我去看看吗？我一个人，心里没底。",
+        "嘿，等你好久了——今天也一起，慢慢把这段走完吧。"
+      ].forEach(s=>{ const f=cueRedFlags(s,"晚棠"); if(f.length) throw new Error("正例被误杀："+f.join("、")+" @ "+s); });
+      console.log('PASS  v58 啃字清零/头衔白名单/原型隔离/cue红线闭环v4');
     }catch(e){ errors.push('v58 => '+e.message); console.log('FAIL  v58 : '+e.message); }
 
     /* v52 R2：剧情点双奖励累积 + 幂等 + 触发 */

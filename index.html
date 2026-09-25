@@ -2460,6 +2460,32 @@ function dayCatCount(d){
   (d.quests||[]).forEach(q=>{ const k=q.tlabel||q.type||"其他"; m[k]=(m[k]||0)+1; });
   return m;
 }
+/* v58b：AI cue 缓存版本——旧版 cue 曾放行命令/催促/说教/自呼姓名句（如
+   「晚棠那边等着的，别绕远路……路我指了，脚得你自己迈」），v4 起旧缓存一律作废重生成 */
+const CUE_V=4;
+/* cue/串场词确定性红线扫描：只列模型最常犯、误杀率最低的模式；
+   命中即带反馈重拟一次，二次仍中则弃用 AI 稿、回退本地兜底池（绝不带病上线）。
+   注：不做裸字误杀（且/尚/莫=莫非 等），命令判定只认真对玩家的祈使分句与把字句。 */
+function cueRedFlags(t,npcDispName){
+  const s=String(t==null?"":t).trim();
+  if(!s) return ["空台词"];
+  const f=[];
+  if(s.length>90) f.push("超长("+s.length+"字)");
+  const clauses=s.split(/[，。；！？、…—~～\s]+/).filter(Boolean);
+  const cmdClause=clauses.some(c=>/^(别|不要|不准|不许|莫(?!非|如|不)|赶紧|立刻|马上给)/.test(c)||/^快(点|些|去)/.test(c));
+  if(cmdClause) f.push("命令/催促分句");
+  if(/你把/.test(s)) f.push("把字命令句");
+  if(/你得|你给我|你去(?!年)/.test(s)) f.push("指令式你字句");
+  /* 讲条件交换只在与命令共现时判负——「你在，我就安心」这类倾诉不拦 */
+  if((cmdClause||/你把|你得|你给我|你去(?!年)/.test(s))&&/我就/.test(s)) f.push("命令式讲条件(你做X我就Y)");
+  if(/得你自己|你自己来|靠你自己|自己的路|脚.{0,3}你自己|路[^。！？]{0,8}指了/.test(s)) f.push("说教/责任转嫁");
+  if(npcDispName&&npcDispName.length>=2&&s.indexOf(npcDispName)>=0) f.push("第三人称自呼姓名");
+  if(/考试|考生|老师|教材|知识点|没过|考核|复习|章节|课程|真题|题库/.test(s)) f.push("现实考试词入L1");
+  if(/\d+\s*(件|分钟|题|页|个|条|次|%)|共[\s\d一二三四五六七八九十两]+件/.test(s)) f.push("数量/时间播报");
+  const bl=(window.scanStyleBlacklist&&window.scanStyleBlacklist(s))||[];
+  if(bl.length) f.push("风格禁词:"+bl.slice(0,3).join("/"));
+  return f;
+}
 function buildQuestCue(q,d){
   d=d||byDay[q.day];
   const curDay=q.day||st.day||1;
@@ -2485,8 +2511,9 @@ function buildQuestCue(q,d){
   /* NPC 心境：任务 id+日 哈希轮换 */
   const moodPool=CUE_NPC_MOOD[q.npc]||["在原地等你过来"];
   const mood=moodPool[(hash(q.id)+curDay)%moodPool.length];
-  /* 激励：AI 缓存优先，无缓存兜底池 */
-  const cachedMot=(st.questLines&&st.questLines[q.id]&&st.questLines[q.id].cue)||"";
+  /* 激励：AI 缓存优先（必须是当前红线版本 CUE_V，旧版违规缓存一律不读），无缓存兜底池 */
+  const _qlRec=st.questLines&&st.questLines[q.id];
+  const cachedMot=(_qlRec&&_qlRec.cueV===CUE_V&&_qlRec.cue)||"";
   const introPool=QUIZ_INTROS[q.npc]||QUIZ_INTROS_FALLBACK;
   const motivate=cachedMot||introPool[(hash(q.id)+curDay)%introPool.length];
   /* FIX-P4 v2：请求式口吻＋蚀度概念，但一律现代口语（禁约莫/几桩/未了/光景等半文半白词）。
@@ -2497,8 +2524,8 @@ function buildQuestCue(q,d){
     : ["藏经阁这一带侵蚀度抬升了，","有几团雾怪在经匣里盘踞，","这一层的雾气又厚了些，"];
   const erodeOpener = erodeOpeners[(hash(q.id)+curDay)%erodeOpeners.length];
   const planReq = isOral
-    ? `${erodeOpener}「${q.name}」的精灵正负伤苦撑，${curMods?("要协律的脉络涉及"+curMods+"，"):""}想请您前往救援，助她夺回气力。`
-    : `${erodeOpener}「${q.name}」这一程${curMods?("——"+curMods+"，"):""}想请您前往清理雾怪，净明这一带。`;
+    ? `${erodeOpener}「${q.name}」的精灵正负伤苦撑，${curMods?("要协律的脉络涉及"+curMods+"，"):""}想请你去搭把手，帮她把气力夺回来。`
+    : `${erodeOpener}「${q.name}」这一程${curMods?("——"+curMods+"，"):""}想请你一起去清理雾怪，净明这一带。`;
   return {
     status:`【${stage.name}阶段 · ${stage.theme}】${mood}`,
     overview:`今天大约要花你 ${totalMin} 分钟，一共 ${qs.length} 件事想拜托你——${catBrief}。`,
@@ -2518,45 +2545,69 @@ function cueText(q,d){
   genQuestCue(q,d); /* 无 AI 缓存时后台生成整段 cue，下轮即命中 */
   return filterNpcText([c.status,c.overview,c.plan,c.remain+" · "+c.next,"「"+c.motivate+"」"].join("\n"));
 }
-/* v57：AI 生成角色开场 cue——只讲画面/请求，不报数量与时间（统计由界面显示）；
-   注入 animeShell＋台词质感示例＋全量铁律。无 API 静默（本地 buildQuestCue 兜底）。 */
+/* v58b：AI 生成角色开场 cue——只讲画面/请求，不报数量与时间（统计由界面显示）。
+   注入完整角色铁律（soulField/请求姿态/禁令）＋全量语言铁律＋正反例；
+   产出过 cueRedFlags 红线：命中带反馈重拟一次，二次仍中则弃稿用本地池，绝不带病缓存。
+   无 API 静默（本地 buildQuestCue 兜底）。 */
 async function genQuestCue(q,d){
   if(!dsReady()||!q) return;
   d=d||byDay[q.day];
   const c=st.questLines||(st.questLines={});
   c[q.id]=c[q.id]||{};
-  /* v58：cue 缓存带版本——旧版（≤v57）AI cue 含「啃」/照抄句式/未授权头衔，一律作废重生成 */
-  if(c[q.id].cueV===3||c[q.id]._cueP) return;
-  if(c[q.id].cue && c[q.id].cueV!==3){ delete c[q.id].cue; }
+  /* v58b：仅当前红线版本 CUE_V 的缓存可用；旧版（命令/催促/说教/自呼姓名稿）作废重生成 */
+  if(c[q.id]._cueP) return;
+  if(c[q.id].cueV===CUE_V&&c[q.id].cue) return;
+  if(c[q.id].cueV!==CUE_V) delete c[q.id].cue;
   c[q.id]._cueP=true;
+  const cleanCue=raw=>String(raw||"").trim().replace(/^[「『"“\s]+|[」』"”\s]+$/g,"").replace(/\s*\n+\s*/g," ").slice(0,90);
   try{
     const stage=stageOfDay(q.day||st.day||1);
     const pc=personaTermOf(q.npc);
     const iron=langIronRules();
     const b=buildQuestCue(q,d);
-    const npcName=(NPC[q.npc]&&NPC[q.npc].name)||q.npc;
+    const npcName=((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(q.npc,(NPC[q.npc]&&NPC[q.npc].name)||q.npc):((NPC[q.npc]&&NPC[q.npc].name)||q.npc));
     const smp=(window.WDTerms&&WDTerms.styleSamples)?WDTerms.styleSamples(q.npc):[];
-    const sys="你是日式RPG《问道之旅·四十五日》里的角色「"+npcName+"」，玩家是你并肩的同伴，不是来听汇报的下属。"
-      +"请用「"+npcName+"」的口吻对玩家说一小段话（≤70字），像当季新番动画里同伴当面开口。只讲三件事：\n"
-      +"1) 一个具体画面或身体感受——谁在等他、雾正在侵蚀哪里、你此刻在做什么（≤25字）；\n"
-      +"2) 今天想请他一起做的事，一句话概括内容，不许报数量；\n"
-      +"3) 一句请求式收尾——是你在请求他帮忙，不命令、不催促；用你自己的话组织，禁止直接套用「我想请你一起」这个句式。\n"
+    const isOral=q.type==="oral";
+    let personaBlock="";
+    if(pc){
+      personaBlock="【角色铁律·不可违背】"
+        +(pc.animeShell?("原型仅借说话节奏与气质："+pc.animeShell+"；原型的身份、头衔、名号、世界观一律不得搬入。"):"")
+        +(pc.soulField&&pc.soulField.length?("灵魂领域："+pc.soulField.join("；")+"。"):"")
+        +(pc.requestPosture?("请求姿态："+pc.requestPosture+"。"):"")
+        +(pc.voice?("口吻："+pc.voice+"。"):"")
+        +(pc.forbidden&&pc.forbidden.length?("专属禁令："+pc.forbidden.join("、")+"。"):"")
+        +(pc.distinguish?("辨识锚点："+pc.distinguish+"。"):"")
+        +(pc.growthArc?("成长弧线："+pc.growthArc+"。"):"")+"\n";
+    }
+    const sys="你是日式RPG《问道之旅·四十五日》里的角色「"+npcName+"」。玩家是与你并肩同行的同伴，不是来听安排的下属。\n"
+      +"请用「"+npcName+"」的口吻，对他说一小段开场台词（1-2句，≤70字），像当季新番动画里同伴当面开口。只讲三件事："
+      +"①一个具体画面或你此刻的身体感受（雾侵蚀到哪里、你正在做什么、谁在等他）；"
+      +"②今天想请他陪你做的一件事，一句话概括；③一句有温度的请求式收尾。\n"
+      +"【姿态·最优先】是你在请求他帮忙，不是派发任务：只能商量、邀请、倾诉（比如「能陪我……吗」「我想请你……」「你在的话，我会安心些」）。"
+      +"禁止命令与催促、禁止讲条件交换、禁止说教或把责任推回给他；禁止用第三人称称呼自己——台词里不许出现你的名字「"+npcName+"」，自称只用「我」。\n"
+      +"反例（自呼姓名、命令、催促、讲条件、说教，五处全错，绝不能这样写）：「"+npcName+"那边等着的，别绕远路。你把那段念顺了，我就把剩下的雾再收一收——路我指了，脚得你自己迈。」\n"
+      +"正例的感觉（只体会姿态，禁止照搬）：「"+(isOral
+        ?"这边的雾又漫上来了……那一段咒祷辞，能陪我再过一遍吗？你在，我就安心。"
+        :"经匣里那几团雾还赖着不散，能陪我去看看吗？我一个人，心里没底。")+"」\n"
       +"当前阶段心境：「"+stage.name+"」。\n"
-      +(pc?"【角色原型·仅借气质】"+pc.animeShell+"（原型的身份、头衔、名号、世界观一律不得搬入，不许出现陛下/王等原型称谓）\n【说话方式】"+[pc.voice,pc.distinguish].filter(Boolean).join("；")+"\n":"")
+      +personaBlock
       +(smp.length?"【台词质感·参考节奏勿照搬字句】"+smp.slice(0,3).map(x=>"「"+x+"」").join(" ")+"\n":"")
-      +(iron.length?"【语言铁律】"+iron.map((s,i)=>(i+1)+"."+s).join(" ")+"\n":"")
-      +"【硬性禁止】①不许报数字——「共几项/分几类/多少分钟/还剩几件」半句都不能有，数量和时间由界面另外显示；"
-      +"②不许半文半白与客服辞令（桩/息/刻/时辰/劳您/候着/成么/拢共/尚且/方才/大人您）；"
-      +"③时间单位若必须提，只能说「分钟」，严禁换算成息/刻/时辰；"
-      +"④不许说教、喊口号、念任务编号与标题；"
-      +"⑤雾怪只用「侵蚀/蚕食」，禁「啃」及咬噬、撕咬；"
-      +"⑥不许给任何人加封头衔——陛下/殿下/女王/公主/主子严禁出现，玩家只称「你」。";
-    const user="下一程内容："+b.plan+"\n"
-      +"今天修行类别（仅供你心里有数，禁止原样报给玩家）："+("修诵/理经/传译/问契")+"\n"
-      +"请只输出这一小段台词（≤70字），不要任何解释。";
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"questcue"});
-    let t=String(raw||"").trim().replace(/^[「『"“\s]+|[」』"”\s]+$/g,"").replace(/\n+/g," ").slice(0,90);
-    if(t){ c[q.id].cue=filterNpcText(t); c[q.id].cueV=3; }
+      +(iron.length?"【语言铁律·全员共守】\n"+iron.map((s,i)=>(i+1)+"."+s).join("\n")+"\n":"")
+      +"【本场景补充】不报任何数字（几件/几分钟/还剩几件由界面显示）；不念任务编号与标题；时间单位只能说「分钟」；雾怪对景点的动作只用「侵蚀/蚕食」。";
+    const user="下一程的内容（仅供你心里有数，禁止原样念出来，尤其不许报数量、类别、耗时）：\n"+b.plan
+      +"\n\n请只输出这一小段台词（≤70字），不要解释、不要舞台说明、不要引号以外的字。";
+    const gate=t=>cueRedFlags(filterNpcText(t),npcName);
+    let t=cleanCue(await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"questcue"}));
+    let flags=t?gate(t):[];
+    if(t&&flags.length){
+      console.warn("[cue] 红线未过，带反馈重拟一次：",flags,t);
+      const t2=cleanCue(await dsChat([{role:"system",content:sys},{role:"user",
+        content:user+"\n\n上一稿触犯了红线：「"+flags.join("、")+"」。请逐条避开，保持请求姿态，用「我」自称，重写这一小段（≤70字）。"}],
+        {kind:"questcue"}));
+      const f2=t2?gate(t2):[];
+      if(t2&&!f2.length) t=t2; else { console.warn("[cue] 两次未过红线，本轮采用本地兜底词：",f2); t=""; }
+    }
+    if(t){ c[q.id].cue=t; c[q.id].cueV=CUE_V; save(); }
   }catch(e){ /* 静默：本地 buildQuestCue 兜底 */ }
   delete c[q.id]._cueP;
 }
@@ -2582,14 +2633,19 @@ async function genQuestLine(q,kind){
   c[q.id][flag]=true;
   try{
     const label=Q_TYPE_LABEL[q.type]||q.type;
+    const dispName=((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(q.npc,(NPC[q.npc]&&NPC[q.npc].name)||q.npc):((NPC[q.npc]&&NPC[q.npc].name)||q.npc));
     const sys=kind==="pub"
-      ? "你是RPG《问道之旅·四十五日》中发布任务的NPC。玩家即将接取任务。请用一句有角色感的话发布任务，≤30字，像NPC当面开口说的，不解释、不报编号、不抒情。"
-      : "你是RPG《问道之旅·四十五日》中的任务NPC。玩家刚完成任务。请用一句有角色感的话认可或交割，≤30字，像NPC当面开口说的，不解释、不报编号。";
-    const user=`任务名：${q.name}\n类型：${label}${q.desc?`\n任务简述：${String(q.desc).slice(0,80)}`:""}`;
+      ? "你是RPG《问道之旅·四十五日》中的任务NPC。玩家即将接取任务。请用一句有角色感的话发出请求，≤30字，像同伴当面开口，不解释、不报编号、不抒情。"
+      : "你是RPG《问道之旅·四十五日》中的任务NPC。玩家刚完成任务。请用一句有角色感的话认可或交割，≤30字，像同伴当面开口，不解释、不报编号。";
+    const user=`任务名：${q.name}\n类型：${label}${q.desc?`\n任务简述：${String(q.desc).slice(0,80)}`:""}`
+      +`\n姿态红线：是请求不是命令，不催促、不讲条件、不说教；自称用「我」，台词里不许出现你自己的名字「${dispName}」；禁考试/考核/复习等现实词。`;
     const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"questbrief"});
     let t=String(raw||"").trim().replace(/^[「『"“\s]+|[」』"”\s]+$/g,"");
-    t=t.replace(/\n.*/s,"").slice(0,40);
-    if(t){ c[q.id][kind]=t; save(); }
+    t=filterNpcText(t.replace(/\n.*/s,"").slice(0,40));
+    /* v58b：过红线才入缓存；不过则弃稿（调用处已有本地占位句兜底） */
+    const flags=cueRedFlags(t,dispName);
+    if(t&&!flags.length){ c[q.id][kind]=t; save(); }
+    else console.warn("[questline] "+kind+" 未过红线，用本地兜底：",flags,t);
   }catch(e){ /* 静默：占位句已展示，下次再试 */ }
   delete c[q.id][flag];
 }
@@ -6721,6 +6777,8 @@ const DS_PROFILES={
   /* v49：R1 推理模型生成人设 — deepseek-reasoner 不支持 temperature/response_format，靠 prompt 约束输出 */
   persona_r1:{model:"deepseek-reasoner",max_tokens:8000},
   questbrief:{temperature:0.7,max_tokens:900,response_format:{type:"json_object"}},
+  /* v58b：任务开场 cue 走独立低档——服从姿态红线比发散更重要，≤70字短输出 */
+  questcue:  {temperature:0.8,max_tokens:180,frequency_penalty:0.35,presence_penalty:0.15},
   polish:    {temperature:0.8,max_tokens:200},
   plan:      {temperature:0.4,max_tokens:120,response_format:{type:"json_object"}},
   quizbank:  {temperature:0.7,max_tokens:4000,response_format:{type:"json_object"}}
