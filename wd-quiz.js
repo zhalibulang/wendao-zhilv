@@ -33,13 +33,11 @@ const Q_TYPES={
 
 /* NPC 职能标签体系：与记忆内容分类的映射关系 */
 const NPC_TOPIC_MAP={
-  smq:{topics:["S1","S2","长城","十三陵","山河","地貌","地形"],label:"山河导游"},
-  tiemian:{topics:["S3","法条","法规","法律","政策","条例","处罚","合同","规定"],label:"律法导游"},
-  liuruyan:{topics:["S4","行会","旅行社","接待","沟通","客人","服务","礼仪","人际"],label:"接待导游"},
-  moxiaogu:{topics:["S5","故宫","天坛","遗迹","机关","建筑","文物","年表","历史"],label:"古迹导游"},
-  xuanji:{topics:["S6","错题","星盘","复习","记忆","背诵","英文","单词","卦"],label:"记忆导游"},
-  qingxuan:{topics:["主线","剧情","背景","故事","世界观","文脉","符文"],label:"文脉导游"},
-  yunheng:{topics:["引路","操作","下一步","开始","指引","求助"],label:"引路导游"}
+  wantang:{topics:["S1","S2","长城","十三陵","山河","地貌","地形","S5","故宫","天坛","遗迹","机关","建筑","文物","年表","历史"],label:"英语导游"},
+  shenzhao:{topics:["S3","法条","法规","法律","政策","条例","处罚","合同","规定"],label:"藏经阁阁主"},
+  chengxiu:{topics:["S4","行会","旅行社","接待","沟通","客人","服务","礼仪","人际"],label:"旅行社老板"},
+  tina:{topics:["S6","错题","星盘","复习","记忆","背诵","英文","单词","卦"],label:"次元精灵"},
+  yunting:{topics:["主线","剧情","背景","故事","世界观","文脉","符文","引路","操作","下一步","开始","指引","求助"],label:"圣女"}
 };
 
 let db=null;
@@ -102,8 +100,8 @@ function matchNpc(pid,text){
   for(const id in NPC_TOPIC_MAP){
     if(NPC_TOPIC_MAP[id].topics.some(t=>fullText.includes(t.toLowerCase()))) return id;
   }
-  /* 兜底：玄机（记忆导游） */
-  return "xuanji";
+  /* 兜底：缇娜（次元精灵） */
+  return "tina";
 }
 
 /* 获取 pid 的能力模型（难度档1-3，默认1） */
@@ -137,7 +135,7 @@ function genQuestion(point){
   return {
     pid:pid, q:q, type:typeKey, typeLabel:type.label, lv:type.lv,
     keyword:keyword, topic:topic, npcId:npcId,
-    npcLabel:NPC_TOPIC_MAP[npcId]?NPC_TOPIC_MAP[npcId].label:"记忆导游",
+    npcLabel:NPC_TOPIC_MAP[npcId]?NPC_TOPIC_MAP[npcId].label:"次元精灵",
     refText:text, at:new Date().toISOString()
   };
 }

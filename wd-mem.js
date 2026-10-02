@@ -16,7 +16,7 @@ const KEY="wdzx.mem.v1", BAK="wdzx.mem.bak.", DAY=864e5;
 let db=null, activeNpc=null, flushTimer=0;
 
 function npcRec(id){
-  if(!id) id="yunheng";
+  if(!id) id="yunting";
   let r=db.byNpc[id];
   if(!r){ r=db.byNpc[id]={meet:0,talks:0,lastMeet:"",lastTalk:"",learnMin:0,entered:{},done:{},wrongs:{}}; db.byNpc[id]=r; }
   return r;

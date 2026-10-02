@@ -17,8 +17,11 @@ const PUSH_MIN_GAP=15000, PUSH_DEBOUNCE=25000, MAX_BUNDLE=950000;
 function lsGet(k){ try{return localStorage.getItem(k);}catch(e){return null;} }
 function lsSet(k,v){ try{localStorage.setItem(k,v);}catch(e){} }
 function clone(o){ return o===undefined?undefined:JSON.parse(JSON.stringify(o)); }
-function b64url(buf){ const b=String.fromCharCode.apply(null,new Uint8Array(buf));
-  return btoa(b).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+function b64url(buf){ const bytes=new Uint8Array(buf);
+  /* 分块处理——apply 全量传参在数据较大时栈溢出（Maximum call stack size exceeded） */
+  const chunks=[]; const CHUNK=0x8000;
+  for(let i=0;i<bytes.length;i+=CHUNK){ chunks.push(String.fromCharCode.apply(null,bytes.subarray(i,i+CHUNK))); }
+  return btoa(chunks.join("")).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
 function unb64url(s){ s=s.replace(/-/g,"+").replace(/_/g,"/");
   while(s.length%4) s+="=";
   return Uint8Array.from(atob(s),c=>c.charCodeAt(0)); }
@@ -101,15 +104,51 @@ function mergeSave(ra,rb){
   const base=(tb>ta)?clone(b):clone(a), other=(tb>ta)?a:b;
   const out=base;
   /* 数值型进度取大（杜绝回退） */
-  ["coin","xp","day","unlocked","gameDay","hp","energy","arenaClears","quizOk"].forEach(k=>{
+  ["coin","xp","day","unlocked","gameDay","hp","energy","arenaClears","quizOk","dialogueInitDay"].forEach(k=>{
     const va=+a[k], vb=+b[k];
     if(!isNaN(va)||!isNaN(vb)) out[k]=Math.max(isNaN(va)?0:va,isNaN(vb)?0:vb);
   });
+  /* arenaBest 取大（可能为 null） */
+  if(a.arenaBest!=null||b.arenaBest!=null){
+    out.arenaBest=Math.max(+a.arenaBest||0,+b.arenaBest||0)||null;
+  }
+  /* 复述次数：取大 */
+  if(a.recTimes||b.recTimes){
+    const rt=out.recTimes||{};
+    [a.recTimes,b.recTimes].forEach(src=>{ if(!src) return; Object.keys(src).forEach(k=>{
+      rt[k]=Math.max(+rt[k]||0,+src[k]||0);
+    }); });
+    out.recTimes=rt;
+  }
   /* 记录型 map 并集 */
   ["done","skipped","accepted","goods","costumes","cgUnlocked","ach","fav","notes",
-   "gdIssued","storyThemeOV","cutsceneOV","questProg"].forEach(k=>{
+   "gdIssued","storyThemeOV","cutsceneOV","questProg",
+   "questTime","doneTime","stageTimeBias","r1StageDone",
+   "cutscenes","dailyCtx","npcGrowth","cueFlows","edits","seenHearts","personas","aiBrief"].forEach(k=>{
     if(a[k]||b[k]) out[k]=mergeRecord(a[k],b[k]);
   });
+  /* 题目尝试次数：取大 */
+  if(a.quizAttempts||b.quizAttempts){
+    const qa=out.quizAttempts||{};
+    [a.quizAttempts,b.quizAttempts].forEach(src=>{ if(!src) return; Object.keys(src).forEach(k=>{
+      qa[k]=Math.max(+qa[k]||0,+src[k]||0);
+    }); });
+    out.quizAttempts=qa;
+  }
+  /* 修诵进度：read 布尔取或，sectionDone 并集，fullCert 取或，fullAt 取晚 */
+  if(a.oralProgress||b.oralProgress){
+    const op={};
+    [a.oralProgress,b.oralProgress].forEach(src=>{ if(!src) return; Object.keys(src).forEach(aid=>{
+      const s=src[aid]; if(!s) return;
+      if(!op[aid]){ op[aid]=clone(s); return; }
+      const t=op[aid];
+      t.read=t.read||s.read;
+      t.sectionDone=Array.from(new Set([...(t.sectionDone||[]),...(s.sectionDone||[])]));
+      if((s.fullAt||"")>(t.fullAt||"")){ t.fullAt=s.fullAt; t.fullCert=s.fullCert; }
+      else if(!t.fullCert&&s.fullCert){ t.fullCert=true; if(!t.fullAt) t.fullAt=s.fullAt; }
+    }); });
+    out.oralProgress=op;
+  }
   /* SRS：每张卡 due 取晚、tier 取高 */
   const srs={};
   [a.srs,b.srs].forEach(src=>{ if(!src) return; Object.keys(src).forEach(k=>{
@@ -167,7 +206,16 @@ function mergeSave(ra,rb){
     }); });
     out.questLines=ql;
   }
-  /* 其余键（对话流/运行时排程/题池等）：基底优先，补远端有而本地无的 */
+  /* 对话流历史：按 at+role+text 去重并集（保留近 500） */
+  if(Array.isArray(a.dialogue)||Array.isArray(b.dialogue)){
+    const all=(a.dialogue||[]).concat(b.dialogue||[]);
+    const seen=new Set(); out.dialogue=[];
+    all.forEach(m=>{ const sig=(m.at||"")+"|"+(m.role||"")+"|"+(m.text||"").slice(0,50);
+      if(seen.has(sig)) return; seen.add(sig); out.dialogue.push(m); });
+    out.dialogue.sort((x,y)=>(x.at||"").localeCompare(y.at||""));
+    out.dialogue=out.dialogue.slice(-500);
+  }
+  /* 其余键（运行时排程/题池等）：基底优先，补远端有而本地无的 */
   deepFill(out,other);
   out._syncAt=new Date(Math.max(new Date(ta||0).getTime()||0,new Date(tb||0).getTime()||0,Date.now()-1)).toISOString();
   return out;
@@ -184,11 +232,14 @@ function mergeCfg(ra,rb){
   return base;
 }
 function mergeBundle(local,remote){
-  return {
+  const out={
     save:mergeSave(local.save,remote.save),
     cfg:mergeCfg(local.cfg,remote.cfg),
     at:new Date().toISOString()
   };
+  /* API key：本地优先，远端补充（新设备恢复时不用重输密钥） */
+  out.dsKey=(local&&local.dsKey)||""||(remote&&remote.dsKey)||"";
+  return out;
 }
 
 /* ---------- Gist 网络层 ---------- */
@@ -213,9 +264,10 @@ function bundleFromLS(){
   let save=null, cfg=null;
   try{ save=JSON.parse(lsGet(SAVE_KEY)||"null"); }catch(e){}
   try{ cfg=JSON.parse(lsGet(CFG_KEY)||"null"); }catch(e){}
-  /* 同步前脱敏：密钥与违规日志绝不出本机 */
+  /* 同步前脱敏：存档内残留 dsKey（旧版）与违规日志绝不出本机；API key 从独立键读取加密同步 */
   if(save){ delete save.dsKey; delete save.clauseLog; }
-  return {v:1,at:new Date().toISOString(),save,cfg};
+  const dsKey=lsGet("wdzx.dskey")||"";
+  return {v:1,at:new Date().toISOString(),save,cfg,dsKey};
 }
 function sizeOfBundle(){ return (lsGet(SAVE_KEY)||"").length+(lsGet(CFG_KEY)||"").length; }
 
@@ -302,6 +354,8 @@ const WDSync={
     const merged=mergeBundle(local,remote);
     if(merged.save) lsSet(SAVE_KEY,JSON.stringify(merged.save));
     if(merged.cfg) lsSet(CFG_KEY,JSON.stringify(merged.cfg));
+    /* API key：本地优先，仅当本地为空时才从远端恢复 */
+    if(merged.dsKey){ const oldKey=lsGet("wdzx.dskey")||""; if(!oldKey) lsSet("wdzx.dskey",merged.dsKey); }
     c.lastPull=new Date().toISOString(); saveSyncCfg(c);
     this._markMemory(merged.save&&merged.save._syncAt||new Date().toISOString());
     return {ok:true,merged};
@@ -359,6 +413,7 @@ const WDSync={
     const merged=mergeBundle(local,o);
     if(merged.save) lsSet(SAVE_KEY,JSON.stringify(merged.save));
     if(merged.cfg) lsSet(CFG_KEY,JSON.stringify(merged.cfg));
+    if(merged.dsKey){ const oldKey=lsGet("wdzx.dskey")||""; if(!oldKey) lsSet("wdzx.dskey",merged.dsKey); }
     this._markMemory(merged.save&&merged.save._syncAt||new Date().toISOString());
     return {ok:true};
   },
