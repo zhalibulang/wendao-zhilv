@@ -112,6 +112,138 @@ const driver=`
   run('renderSave',()=>{reset();renderSave();});
   run('buildQuestTree',()=>{reset();const t=buildQuestTree();if(t.length!==5)throw new Error('acts='+t.length);});
   run('buildCardPool数量',()=>{reset();const c=buildCardPool();if(c.length<500)throw new Error('cards='+c.length);});
+  run('v62 Task6 题量 b=round(2.2a)/覆盖/去重',()=>{
+    reset();
+    if(quizTargetN(1)!==2||quizTargetN(4)!==9||quizTargetN(5)!==11||quizTargetN(6)!==13)throw new Error('quizTargetN 公式异常');
+    /* 抽前 40 个常规（非 boss/验界/守关）任务核对题量/全覆盖/题面无重复 */
+    let n=0;
+    for(const q of Object.values(QMAP)){
+      const quiz=D.quizzes[q.id]||[];
+      if(!quiz.length) continue;
+      if(/(BOSS|验界|守关)/.test(q.id+(q.name||""))) continue;
+      if(q.flow&&q.flow[q.flow.length-1]==="battle") continue;
+      const pids=quizBankPids(q), expect=quizTargetN(pids.length);
+      if(quiz.length!==expect) throw new Error(q.id+' b='+quiz.length+' expect='+expect);
+      const pidSet=new Set(quiz.map(z=>z.pid).filter(Boolean));
+      if(pids.some(p=>!pidSet.has(p))) throw new Error(q.id+' 条目未全覆盖');
+      const qs=quiz.map(z=>z.kind+":"+z.q);
+      if(new Set(qs).size!==qs.length) throw new Error(q.id+' 题面重复');
+      /* fallbackQuiz 离线路径同样满足三件套 */
+      const fb=fallbackQuiz(q);
+      if(fb.length!==expect) throw new Error(q.id+' fallback b='+fb.length+' expect='+expect);
+      const fbQs=fb.map(z=>z.kind+":"+z.q);
+      if(new Set(fbQs).size!==fbQs.length) throw new Error(q.id+' fallback 题面重复');
+      const fbPidSet=new Set(fb.map(z=>z.pid).filter(Boolean));
+      if(pids.some(p=>!fbPidSet.has(p))) throw new Error(q.id+' fallback 未全覆盖');
+      n++;
+      if(n>=40) break;
+    }
+    if(n<40) throw new Error('常规任务抽样不足：'+n);
+    /* quizBankDraw：构造每 pid 3 题（题型轮换）的确定性题库，抽取 b 题须覆盖全部 pid 且不重复
+       v69：同 pid 同题型只取 1 题——夹具按 judge/blank/choice 轮换，保证 3 题/.pid 均可入池 */
+    const qt=Object.values(QMAP).find(x=>!/(BOSS|验界|守关)/.test(x.id+(x.name||""))&&(D.quizzes[x.id]||[]).length>=5&&quizBankPids(x).length>=3);
+    if(!qt) throw new Error('未找到 quizBankDraw 样板任务');
+    const tPids=quizBankPids(qt), tExpect=quizTargetN(tPids.length);
+    st.quizBank={[qt.id]:tPids.flatMap((p,i)=>[0,1,2].map(k=>({kind:['judge','blank','choice'][k],q:'BANK'+i+'-'+k,pid:p,a:k===0?true:'答案'+k,accept:['答案'+k],why:'x'})))};
+    const drawn=quizBankDraw(qt.id,tPids,tExpect);
+    if(drawn.length!==tExpect) throw new Error('quizBankDraw 数量='+drawn.length+' expect='+tExpect);
+    if(new Set(drawn.map(z=>z.q)).size!==drawn.length) throw new Error('quizBankDraw 题面重复');
+    tPids.forEach(p=>{ if(!drawn.some(z=>z.pid===p)) throw new Error('quizBankDraw 未覆盖 '+p); });
+  });
+  run('v62 Task7 错题解析参数/题型分支/受控markdown',()=>{
+    reset();
+    const oqSrc=openQuest.toString();
+    if(!oqSrc.includes('max_tokens:isOptKind?700:500')) throw new Error('aiWrongReply max_tokens 未提升到 500（选项题 700）');
+    if(oqSrc.includes('slice(0,120)')) throw new Error('120 字硬截断未移除');
+    if(!oqSrc.includes('quizMdLite')) throw new Error('AI 返回未走受控 markdown 渲染');
+    /* system 五题型结构要求齐全（v69：讲解必须落到具体词句，禁真/伪标签式与 emoji） */
+    ['引用题面中被改错的原词','错误项一个都不许跳过','指出真正错误项错在哪个词','分「漏选」与「错选」','逐空讲解','严禁输出任何 emoji'].forEach(k=>{
+      if(!oqSrc.includes(k)) throw new Error('aiWrongReply 缺题型要求：'+k);
+    });
+    /* 本地兜底五题型要素（v69 文案） */
+    ['不成立哦。正确概念是','错点就在','站不住','答非本题所问','要找的错误项','漏了','多挑了','空缺应填'].forEach(k=>{
+      if(!oqSrc.includes(k)) throw new Error('wrongLocalReply 缺要素：'+k);
+    });
+    /* quizMdLite 白名单：<b> 放行、其余标签转义、换行转换、不平衡补齐 */
+    const m1=quizMdLite('你好\\n<b>关键</b>');
+    if(!m1.includes('你好<br>')||!m1.includes('<b style="color:var(--gold)">关键</b>')) throw new Error('quizMdLite 基本转换异常：'+m1);
+    const m2=quizMdLite('<script>bad<b>x');
+    if(m2.includes('<script>')||!m2.includes('</b>')) throw new Error('quizMdLite 标签白名单/补齐失效：'+m2);
+  });
+  run('v69 出题防重复/题型轮换/填空换位/解析高亮/自愈/iPhone滚动',()=>{
+    reset();
+    /* 1. distortTxt2：篡改必真实发生；无法篡改返回 null */
+    const d1=distortTxt2('故宫于1925年成立博物院',['故宫']);
+    if(!d1||d1.s==='故宫于1925年成立博物院'||!d1.mod) throw new Error('distortTxt2 未真实篡改');
+    const d2=distortTxt2('短短',['不存在的词']);
+    if(d2!==null) throw new Error('distortTxt2 无法篡改时应返回 null');
+    /* 2. judge 伪题必真实篡改且带 mod——绝不原句判伪 */
+    const pt0=D.pointsLib.find(p=>/^S1-/.test(p.id)&&p.text&&p.text.length>60);
+    const kw0=extractKeyWords(pt0.text,pt0.exam_tip,pt0.anchor);
+    let sawFalse=false;
+    for(let i=0;i<40;i++){
+      const z=sanitizeQuiz(genQuestion('judge',pt0,kw0,pt0.id,[],[]));
+      if(z.a===false){
+        sawFalse=true;
+        if(quizNormTxt(z.q)===quizNormTxt(z.fact||'')) throw new Error('伪题原句判伪');
+        if(!z.mod) throw new Error('伪题缺 mod 错点记录');
+      }
+    }
+    if(!sawFalse) throw new Error('judge 抽样未见伪题');
+    /* 3. sanitizeQuiz 自愈：原句判伪脏题翻正 */
+    const healed=sanitizeQuiz({kind:'judge',q:'甲规定出于乙年（判断正误）',a:false,fact:'甲规定出于乙年',pid:'X'});
+    if(healed.a!==true) throw new Error('原句判伪未翻正');
+    const keepFalse=sanitizeQuiz({kind:'judge',q:'甲规定出于丙年（判断正误）',a:false,fact:'甲规定出于乙年',pid:'X'});
+    if(keepFalse.a!==false) throw new Error('真实伪题被误翻正');
+    /* 4. quizNormKey 归一化去重：标点微调不算新题 */
+    if(quizNormKey({kind:'judge',q:'甲，乙。'})!==quizNormKey({kind:'judge',q:'甲乙'})) throw new Error('归一化去重失效');
+    /* 5. fallbackQuiz 同轮题面零重复（归一化口径） */
+    const qq=Object.values(QMAP).find(x=>!/(BOSS|验界|守关)/.test(x.id+(x.name||""))&&quizBankPids(x).length>=3);
+    const fb=fallbackQuiz(qq);
+    if(!fb.length) throw new Error('fallbackQuiz 空池');
+    const allK=fb.map(quizNormKey);
+    if(new Set(allK).size!==allK.length) throw new Error('fallbackQuiz 同轮题面重复');
+    /* 6. quizExplainHtml：judge 错点划线+正确处标金；choice 逐项归因 */
+    const jz=sanitizeQuiz({kind:'judge',q:'故宫于1421年迁都（判断正误）',a:false,fact:'故宫于1420年建成',mod:{from:'1420年',to:'1421年'},pid:pt0.id});
+    const jh=quizExplainHtml(jz,'伪','伪');
+    if(!jh.includes('<s style="color:var(--danger)">1421年</s>')||!jh.includes('<b style="color:var(--gold)">1420年</b>')) throw new Error('judge 解析未划错点/未标正确处');
+    const cz={kind:'choice',q:'关于「测试」以下说法正确的是？',opts:['正确说法甲','正确说法乙','错误说法丙','此项为无关叙述'],ometa:[null,{t:'other',pid:pt0.id},{t:'bad',from:'正确写法',to:'错误写法'},{t:'fill'}],a:'正确说法甲',pid:pt0.id};
+    const ch=quizExplainHtml(cz,'正确说法甲','错误说法丙');
+    if(!ch.includes('其他选项逐项说明')||!ch.includes('应为')||!ch.includes('答非本题所问')) throw new Error('choice 解析缺逐项归因');
+    if(ch.includes('正确说法：<span style="color:var(--fg)">正确说法甲</span>')) throw new Error('choice 解析仍含与正确答案重复的“正确说法”行');
+    /* 7. quizMdLite emoji 剥离 */
+    if(/[\u{1F300}-\u{1FAFF}]/u.test(quizMdLite('好的👻同学'))) throw new Error('quizMdLite 未剥离 emoji');
+    /* 8. blank 换词换位：同考点连出两道填空不得同词同面 */
+    const used=[];
+    const b1=genQuestion('blank',pt0,kw0,pt0.id,[],used);
+    if(b1&&b1.kind==='blank'&&b1.a){
+      used.push(b1.a);
+      const b2=genQuestion('blank',pt0,kw0,pt0.id,[],used);
+      if(b2&&b2.kind==='blank'&&b2.a===b1.a&&b2.q===b1.q) throw new Error('填空未换词换位');
+    }
+    /* 9. iPhone 滚动 CSS + sw 缓存版本 */
+    const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    if(!htmlSrc.includes('.dlg.gal{overflow-y:auto;-webkit-overflow-scrolling:touch}')) throw new Error('≤899px 缺 .dlg.gal 滚动修复');
+    const sw=fs.readFileSync(require('path').join(__dirname,'sw.js'),'utf8');
+    if(!/wdzx-v(69|70)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
+  });
+  run('v71 选择题AI逐项解析 + 手机端任务页滚动根治',()=>{
+    reset();
+    const oqSrc=openQuest.toString();
+    /* 1. AI 讲解：全部选项清单始终随 user 消息传给模型（不再仅依赖 ometa） */
+    if(!oqSrc.includes('全部选项清单（逐项讲评，错误项一个都不许漏）')) throw new Error('aiWrongReply 缺全部选项清单注入');
+    if(!oqSrc.includes('无预设归因')) throw new Error('缺无归因选项的推断指令');
+    /* 2. 选项类题型字数上限放宽 + token 提升 */
+    if(!oqSrc.includes('160～340')) throw new Error('选项题字数上限未放宽至 160～340');
+    /* 3. 手机端滚动根治：gal-right 不得带内联 overflow:hidden/max-height（v69 媒体查询此前被内联样式压制） */
+    const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    if(/class="gal-right"\s+style="[^"]*overflow\s*:\s*hidden/.test(htmlSrc)) throw new Error('gal-right 仍带内联 overflow:hidden');
+    if(/class="gal-right"\s+style="[^"]*max-height/.test(htmlSrc)) throw new Error('gal-right 仍带内联 max-height');
+    /* 4. gal-right 基础布局已移到媒体查询外（窄屏 flex 列布局生效） */
+    if(!/\.dlg\.gal \.gal-right\{position:relative;display:flex;flex-direction:column;overflow:hidden/.test(htmlSrc)) throw new Error('gal-right 基础布局未移出媒体查询');
+    /* 5. 窄屏媒体查询的解禁规则仍在 */
+    if(!htmlSrc.includes('.dlg.gal .gal-right{max-height:none;overflow:visible}')) throw new Error('≤899px 缺 gal-right 解禁规则');
+  });
   run('buildWorldBrief',()=>{const b=buildWorldBrief();if(!b.NPC基础信息.length)throw 0;});
   run('openQuest D01M',()=>{reset();openQuest('D01M');});
   run('openQuest D01S1已解锁',()=>{reset();st.done['D01M']=true;reconcile();openQuest('D01S1');});
@@ -304,14 +436,14 @@ const driver=`
   /* ===== 自由发言路由 + NPC 名链接（需求四/五）===== */
   run('自由发言智能路由：职能关键词命中',()=>{
     reset(); st.unlocked=1;
-    if(routeNpc('法条处罚是怎么规定的')!=='tiemian')throw new Error('法条类应路由铁面');
-    if(routeNpc('颐和园长廊建筑')!=='moxiaogu')throw new Error('建筑遗迹类应路由小骨');
-    if(routeNpc('英文单词背不下来')!=='xuanji')throw new Error('背诵错题类应路由玄机');
+    if(routeNpc('法条处罚是怎么规定的')!=='shenzhao')throw new Error('法条类应路由沈昭');
+    if(routeNpc('颐和园长廊建筑')!=='wantang')throw new Error('建筑遗迹类应路由晚棠');
+    if(routeNpc('错题总是记不住怎么办')!=='tina')throw new Error('背诵错题类应路由缇娜');
   });
-  run('自由发言智能路由：无关卡内容→云蘅兜底',()=>{
+  run('自由发言智能路由：无关卡内容→云汀兜底',()=>{
     reset();
     for(let day=1;day<=45;day++)for(const q of byDay[day].quests)st.done[q.id]=new Date().toISOString();
-    if(routeNpc('今天天气不错随便聊聊')!=='yunheng')throw new Error('无关闲聊应由云蘅兜底');
+    if(routeNpc('今天天气不错随便聊聊')!=='yunting')throw new Error('无关闲聊应由云汀兜底');
   });
   run('NPC 名开场白生成',()=>{
     reset(); st.unlocked=1;
@@ -442,7 +574,7 @@ const driver=`
     // genQuestBrief 的 sys prompt（从函数源码取）须含淘汰词禁令
     const qsrc=genQuestBrief.toString();
     if(!qsrc.includes('严禁使用已淘汰的旧概念')) throw new Error('任务说明prompt缺旧概念禁令');
-    if(!qsrc.includes('导游异次元')) throw new Error('任务说明prompt缺新世界观锚点');
+    if(!qsrc.includes('导游世界')) throw new Error('任务说明prompt缺新世界观锚点');
     // wd-chat 旧概念禁令位于 user 尾消息（postHistoryRules，v2 架构）
     const r=WDChat.postHistoryRules('qingxuan');
     if(!r.includes('已淘汰旧概念禁用')) throw new Error('postHistoryRules缺旧概念禁令');
@@ -523,9 +655,9 @@ const driver=`
     if(!qb||!qb[0].includes('WDChat.masterRule')) throw new Error('genQuestBrief 缺 masterRule 注入');
     if(!htmlSrc.includes('WDChat.masterRule?WDChat.masterRule():""')&&htmlSrc.match(/aiWrongReply[\s\S]{0,2000}/)[0].indexOf('masterRule')<0)
       throw new Error('aiWrongReply 缺 masterRule 注入');
-    /* refineYunheng 与每日引导场景经守卫注入 */
-    const yh=htmlSrc.match(/function refineYunheng[\\s\\S]{0,4000}/);
-    if(!yh||!yh[0].includes('masterRule')) throw new Error('refineYunheng 缺 masterRule 注入');
+    /* refineYunting 与每日引导场景经守卫注入 */
+    const yh=htmlSrc.match(/function refineYunting[\\s\\S]{0,4000}/);
+    if(!yh||!yh[0].includes('masterRule')) throw new Error('refineYunting 缺 masterRule 注入');
     const guide=htmlSrc.match(/所有发言像一群熟人在现场[\\s\\S]{0,400}/);
     if(!guide||!guide[0].includes('masterRule')) throw new Error('每日引导场景缺 masterRule 注入');
   });
@@ -783,10 +915,46 @@ const driver=`
     if(!s.includes('老青'))throw new Error('自定义名字未注入prompt');
     if(!s.includes('沉稳寡言的剑客'))throw new Error('自定义人设未注入prompt');
   });
-  /* ===== 云蘅结算接棒 + 任务树可点 + 置底任务卡 + 折叠（本轮需求）===== */
-  run('云蘅五幕引路词全覆盖',()=>{
-    for(let a=1;a<=5;a++) if(!NPC_MATRIX.yunheng['act'+a])throw new Error('云蘅缺 act'+a+' 引路词');
-    if(!npcActTopic('yunheng'))throw new Error('云蘅当前幕话题缺失');
+  /* ===== v62 Task14：旧 NPC id/人名存档迁移（TR-14.2）===== */
+  run('v62 存档迁移：旧 NPC id/人名全量迁移且幂等',()=>{
+    reset();
+    st.seenHearts={yunheng:[1,2],yunting:[3]};
+    st.npcGrowth={yunheng:{talks:7,story:['旧档故事']},shenzhao:{talks:1,story:[]}};
+    st.privateChat={
+      qingxuan:[{role:'npc',npc:'qingxuan',text:'青玄先生翻过一页'}],
+      yunheng:[{role:'npc',npc:'yunheng',text:'云蘅在雾里等你'}]
+    };
+    st.dailyCtx={'yunheng@D1':{weather:'阴云'},'tiemian@D2':{weather:'薄雾'},'yunting@D1':{weather:'晴朗'}};
+    st.dialogue=[
+      {role:'sys',text:'灵脉暂时中断，请稍后再试'},
+      {role:'npc',npc:'yunheng',text:'云蘅提灯前行'},
+      {role:'npc',npc:'xuanji',text:'璇玑记录错题'}
+    ];
+    reconcile();
+    if(st.seenHearts.yunheng)throw new Error('seenHearts 旧键未删除');
+    if(st.seenHearts.yunting.join(',')!=='3,1,2')throw new Error('seenHearts 未合并：'+JSON.stringify(st.seenHearts));
+    if(st.npcGrowth.yunheng||!st.npcGrowth.yunting||st.npcGrowth.yunting.talks!==7)throw new Error('npcGrowth 未合并');
+    if(st.npcGrowth.shenzhao.talks!==1)throw new Error('npcGrowth 新键丢失');
+    const pc=st.privateChat;
+    if(pc.yunheng||pc.qingxuan)throw new Error('privateChat 旧键未删除');
+    if(!Array.isArray(pc.yunting)||pc.yunting.length!==2)throw new Error('privateChat 未合并：'+JSON.stringify(Object.keys(pc)));
+    if(pc.yunting.some(m=>m.npc!=='yunting'))throw new Error('私聊消息 npc 未迁移');
+    if(pc.yunting.some(m=>/云蘅|青玄/.test(m.text)))throw new Error('私聊文本人名未迁移');
+    if(st.dailyCtx['yunheng@D1']||st.dailyCtx['tiemian@D2'])throw new Error('dailyCtx 旧键未删除');
+    if(!st.dailyCtx['shenzhao@D2'])throw new Error('dailyCtx 未迁移 shenzhao@D2');
+    if(st.dailyCtx['yunting@D1'].weather!=='晴朗')throw new Error('dailyCtx 已有新键应保留不覆盖');
+    if(st.dialogue.some(m=>m.role==='sys'&&/灵脉暂时中断/.test(m.text||'')))throw new Error('旧灵脉中断提示未清除');
+    if(st.dialogue.some(m=>m.npc==='yunheng'||m.npc==='xuanji'))throw new Error('dialogue 旧 npc 未迁移');
+    if(st.dialogue.some(m=>/云蘅|璇玑/.test(m.text||'')))throw new Error('dialogue 人名未迁移');
+    /* 幂等：再跑一次结果不变 */
+    reconcile();
+    if(st.dialogue.filter(m=>m.role==='npc').length!==2)throw new Error('幂等性破坏：dialogue 重复迁移');
+    if(pc.yunting.length!==2)throw new Error('幂等性破坏：privateChat 重复迁移');
+  });
+  /* ===== 云汀结算接棒 + 任务树可点 + 置底任务卡 + 折叠 ===== */
+  run('云汀五幕引路词全覆盖',()=>{
+    for(let a=1;a<=5;a++) if(!NPC_MATRIX.yunting['act'+a])throw new Error('云汀缺 act'+a+' 引路词');
+    if(!npcActTopic('yunting'))throw new Error('云汀当前幕话题缺失');
   });
   run('任务树叶子可点击（data-leaf 不被 data-toggle 拦截）',()=>{
     reset();
@@ -803,31 +971,31 @@ const driver=`
     const gdHtml=renderTreeNode(gdNode);
     if(!gdHtml.includes('data-toggle='))throw new Error('游戏日节点缺 data-toggle（折叠失效）');
   });
-  run('云蘅结算回应：任务NPC之后接棒，占位含口播名且不念数值',async ()=>{
+  run('云汀结算回应：任务NPC之后接棒，占位含口播名且不念数值',async ()=>{
     reset(); st.unlocked=1;
     const q=D.quests.find(x=>x.id==='D01M');
     await settleQuest(q,true,null);
     const idxAck=st.dialogue.findIndex(m=>m.role==='npc'&&m.npc===q.npc);
-    const idxYh=st.dialogue.findIndex(m=>m.role==='npc'&&m.npc==='yunheng');
+    const idxYh=st.dialogue.findIndex(m=>m.role==='npc'&&m.npc==='yunting');
     if(idxAck<0)throw new Error('任务NPC结算回复缺失');
-    if(idxYh<0)throw new Error('云蘅结算回应缺失');
-    if(idxYh<idxAck)throw new Error('云蘅必须在任务NPC结算回复之后接棒');
+    if(idxYh<0)throw new Error('云汀结算回应缺失');
+    if(idxYh<idxAck)throw new Error('云汀必须在任务NPC结算回复之后接棒');
     const ym=st.dialogue[idxYh], t=ym.text;
-    /* v35：占位含关卡名，AI(refineYunheng)异步替换；占位不含数值 */
+    /* v35：占位含关卡名，AI(refineYunting)异步替换；占位不含数值 */
     if(!t.includes(WDChat.questDisplayName(q)))throw new Error('缺关卡口播名：'+t);
     if(/[SDE]\\d+-\\d+|\\+\\d+修行/.test(t))throw new Error('结算台词不应念编号或数值：'+t);
-    if(!ym.refs||!ym.refs.some(x=>x.qid===q.id))throw new Error('云蘅回应缺已完成任务ref');
-    if(typeof refineYunheng!=='function')throw new Error('refineYunheng AI 路径应存在');
+    if(!ym.refs||!ym.refs.some(x=>x.qid===q.id))throw new Error('云汀回应缺已完成任务ref');
+    if(typeof refineYunting!=='function')throw new Error('refineYunting AI 路径应存在');
     if(!qDone(q.id)||st.xp<q.xp)throw new Error('结算未生效（done/修行）');
   });
-  run('云蘅结算回应：AI 路径 refineYunheng 存在（有错时由 AI 生成复盘引导）',async ()=>{
+  run('云汀结算回应：AI 路径 refineYunting 存在（有错时由 AI 生成复盘引导）',async ()=>{
     reset(); st.unlocked=1;
     const q=D.quests.find(x=>x.id==='D01M');
     await settleQuest(q,false,null);
-    const yhMsgs=st.dialogue.filter(m=>m.role==='npc'&&m.npc==='yunheng');
-    if(!yhMsgs.length)throw new Error('云蘅结算消息未落流');
-    /* v35：有错时的复盘引导由 refineYunheng(AI)生成；无 AI 时保留占位。验证函数已挂载。 */
-    if(typeof refineYunheng!=='function')throw new Error('refineYunheng 应存在');
+    const yhMsgs=st.dialogue.filter(m=>m.role==='npc'&&m.npc==='yunting');
+    if(!yhMsgs.length)throw new Error('云汀结算消息未落流');
+    /* v35：有错时的复盘引导由 refineYunting(AI)生成；无 AI 时保留占位。验证函数已挂载。 */
+    if(typeof refineYunting!=='function')throw new Error('refineYunting 应存在');
   });
   run('v58c：对话流当前纪日索引卡（取代旧置底单卡）',()=>{
     reset(); st.unlocked=1; reconcile(); installRuntimePlan();
@@ -1068,7 +1236,7 @@ const driver=`
   });
   run('WDQuiz NPC职能标签体系',()=>{
     const m=WDQuiz.NPC_TOPIC_MAP;
-    if(!m.smq||!m.tiemian||!m.liuruyan||!m.moxiaogu||!m.xuanji||!m.qingxuan) throw new Error('缺核心NPC职能映射');
+    if(!m.wantang||!m.shenzhao||!m.chengxiu||!m.tina||!m.yunting) throw new Error('缺核心NPC职能映射');
   });
   run('WDQuiz ask 生成认知递进提问',()=>{
     reset();
@@ -1088,15 +1256,15 @@ const driver=`
     if(!q.refText) throw new Error('缺参考原文');
   });
   run('WDQuiz matchNpc 按知识点匹配NPC',()=>{
-    /* S1前缀应匹配山河导游 smq */
+    /* S1前缀应匹配英语导游 wantang */
     const npc=WDQuiz.matchNpc('S1-01-01','长城');
-    if(npc!=='smq') throw new Error('S1匹配应为smq，实际'+npc);
-    /* S3前缀应匹配律法导游 tiemian */
+    if(npc!=='wantang') throw new Error('S1匹配应为wantang，实际'+npc);
+    /* S3前缀应匹配藏经阁阁主 shenzhao */
     const npc2=WDQuiz.matchNpc('S3-01-01','法条');
-    if(npc2!=='tiemian') throw new Error('S3匹配应为tiemian，实际'+npc2);
-    /* 兜底应为 xuanji */
+    if(npc2!=='shenzhao') throw new Error('S3匹配应为shenzhao，实际'+npc2);
+    /* 兜底应为 tina */
     const npc3=WDQuiz.matchNpc('XX-99','');
-    if(npc3!=='xuanji') throw new Error('兜底应为xuanji，实际'+npc3);
+    if(npc3!=='tina') throw new Error('兜底应为tina，实际'+npc3);
   });
   run('WDQuiz record 更新能力模型与进度',()=>{
     reset();
@@ -1161,10 +1329,10 @@ const driver=`
     if(st.dialogueInitDay!==st.day) throw new Error('引导对话生成后应标记当日');
     if(st.dialogue.length<6) throw new Error('引导对话至少6条消息，实际'+st.dialogue.length);
     /* 验证三类互动都存在 */
-    const hasYunheng=st.dialogue.some(m=>m.npc==='yunheng');
+    const hasYunheng=st.dialogue.some(m=>m.npc==='yunting');
     const hasPlayer=st.dialogue.some(m=>m.role==='player');
-    const hasFuncNpc=st.dialogue.some(m=>m.npc!=='yunheng'&&m.role==='npc');
-    if(!hasYunheng) throw new Error('缺云蘅发言');
+    const hasFuncNpc=st.dialogue.some(m=>m.npc!=='yunting'&&m.role==='npc');
+    if(!hasYunheng) throw new Error('缺云汀发言');
     if(!hasPlayer) throw new Error('缺玩家发言');
     if(!hasFuncNpc) throw new Error('缺职能NPC发言');
   });
@@ -1175,22 +1343,22 @@ const driver=`
     ensureGuidanceScene();  // 再次调用不应重复生成
     if(st.dialogue.length!==cnt1) throw new Error('同日重复调用不应新增消息');
   });
-  run('对话初始化：引导对话含云蘅-玩家互动',()=>{
+  run('对话初始化：引导对话含云汀-玩家互动',()=>{
     reset(); st.unlocked=1;
     ensureGuidanceScene();
-    /* 云蘅的消息后紧跟玩家消息 → 云蘅-玩家互动 */
-    const yhIdx=st.dialogue.findIndex(m=>m.npc==='yunheng');
-    if(yhIdx<0) throw new Error('缺云蘅消息');
+    /* 云汀的消息后紧跟玩家消息 → 云汀-玩家互动 */
+    const yhIdx=st.dialogue.findIndex(m=>m.npc==='yunting');
+    if(yhIdx<0) throw new Error('缺云汀消息');
     const playerIdx=st.dialogue.findIndex(m=>m.role==='player');
     if(playerIdx<0) throw new Error('缺玩家消息');
   });
-  run('对话初始化：引导对话含云蘅-其他NPC互动',()=>{
+  run('对话初始化：引导对话含云汀-其他NPC互动',()=>{
     reset(); st.unlocked=1;
     ensureGuidanceScene();
-    /* 云蘅引荐职能NPC：云蘅消息后应有职能NPC回应 */
-    const yhMsgs=st.dialogue.filter(m=>m.npc==='yunheng'&&m.role==='npc');
-    const funcMsgs=st.dialogue.filter(m=>m.npc!=='yunheng'&&m.role==='npc');
-    if(yhMsgs.length<2) throw new Error('云蘅至少2条消息');
+    /* 云汀引荐职能NPC：云汀消息后应有职能NPC回应 */
+    const yhMsgs=st.dialogue.filter(m=>m.npc==='yunting'&&m.role==='npc');
+    const funcMsgs=st.dialogue.filter(m=>m.npc!=='yunting'&&m.role==='npc');
+    if(yhMsgs.length<2) throw new Error('云汀至少2条消息');
     if(funcMsgs.length<1) throw new Error('职能NPC至少1条消息');
   });
   run('对话初始化：引导对话含玩家-其他NPC互动',()=>{
@@ -1199,7 +1367,7 @@ const driver=`
     /* 玩家主动向职能NPC提问 */
     const playerMsgs=st.dialogue.filter(m=>m.role==='player');
     if(playerMsgs.length<2) throw new Error('玩家至少2条消息（含向NPC提问）');
-    const funcReply=st.dialogue.filter(m=>m.npc!=='yunheng'&&m.role==='npc');
+    const funcReply=st.dialogue.filter(m=>m.npc!=='yunting'&&m.role==='npc');
     if(funcReply.length<1) throw new Error('职能NPC至少有1条回应玩家');
   });
   run('对话初始化：引导对话消息标记guidance=true',()=>{
@@ -1288,24 +1456,24 @@ const driver=`
     const g=refineGuidanceScene.toString();
     if(!g.includes('不许重演初见')) throw new Error('引导润色应声明绑定仪式已结束、不重演初见');
     if(!g.includes('obsoleteTerms')) throw new Error('引导润色应注入注册表淘汰词');
-    if(!refineAction.toString().includes('引魂灯')) throw new Error('战报润色应禁引魂灯等淘汰概念');
+    if(!refineAction.toString().includes('OBSOLETE_TERMS')) throw new Error('战报润色应注入淘汰概念黑名单');
   });
-  run('judgeDomain：法条关键词强匹配铁面',()=>{
+  run('judgeDomain：法条关键词强匹配沈昭',()=>{
     reset();
-    if(WDChat.judgeDomain('法条规定了什么')!=='tiemian') throw new Error('法条应路由到铁面');
+    if(WDChat.judgeDomain('法条规定了什么')!=='shenzhao') throw new Error('法条应路由到沈昭');
   });
-  run('judgeDomain：山河关键词强匹配司马青衫',()=>{
+  run('judgeDomain：山河关键词强匹配晚棠',()=>{
     reset();
-    if(WDChat.judgeDomain('长城的地理特征')!=='smq') throw new Error('山河应路由到司马青衫');
+    if(WDChat.judgeDomain('长城的地理特征')!=='wantang') throw new Error('山河应路由到晚棠');
   });
-  run('judgeDomain：无明确指向默认云蘅',()=>{
+  run('judgeDomain：无明确指向默认云汀',()=>{
     reset();
-    if(WDChat.judgeDomain('今天天气怎么样')!=='yunheng') throw new Error('无明确指向应默认云蘅');
+    if(WDChat.judgeDomain('今天天气怎么样')!=='yunting') throw new Error('无明确指向应默认云汀');
   });
   run('judgeDomain：NPC名直接点名强匹配',()=>{
     reset();
-    WDCfg.setNpcName('tiemian','铁老');
-    if(WDChat.judgeDomain('铁老你说说')!=='tiemian') throw new Error('点名应强匹配到铁面');
+    WDCfg.setNpcName('shenzhao','沈老');
+    if(WDChat.judgeDomain('沈老你说说')!=='shenzhao') throw new Error('点名应强匹配到沈昭');
   });
   /* ===== v30：voice 语言人格档案 + 群聊导演 ===== */
   run('WDRegistry voice语言人格档案全员完整',()=>{
@@ -1360,12 +1528,12 @@ const driver=`
   run('routeNpc 使用judgeDomain评分路由',()=>{
     reset();
     const id=routeNpc('法条规定了什么处罚');
-    if(id!=='tiemian') throw new Error('法条应路由到铁面，实际'+id);
+    if(id!=='shenzhao') throw new Error('法条应路由到沈昭，实际'+id);
   });
-  run('routeNpc 无明确指向默认云蘅',()=>{
+  run('routeNpc 无明确指向默认云汀',()=>{
     reset();
     const id=routeNpc('你好啊');
-    if(id!=='yunheng') throw new Error('无指向应默认云蘅');
+    if(id!=='yunting') throw new Error('无指向应默认云汀');
   });
   /* v35 异步收尾：respond 未配置 AI 时返回空文本+error（不再本地兜底，永不 reject） */
   (async()=>{
@@ -1609,7 +1777,7 @@ const driver=`
       reconcile();
       /* 离线终态句不含加载态/省略号兜底 */
       const fakeQ={id:"T-FAKE-SETTLE",npc:"shenzhao",tlabel:"理经"};
-      const local=yunhengSettleLocal(fakeQ);
+      const local=yuntingSettleLocal(fakeQ);
       if(!YT_SETTLE_POOL.includes(local)) throw new Error("离线句不在池中: "+local);
       if(/正在接话|交割了……/.test(local)) throw new Error("离线句仍含穿帮文本: "+local);
       /* 旧存档穿帮消息迁移 */
@@ -1628,10 +1796,10 @@ const driver=`
       if(!src.includes('pendingAI:dsReady()')) throw new Error("ymsg 缺 pendingAI 标记");
       if(!src.includes('q.npc!=="yunting"')) throw new Error("缺云汀任务防重复守卫");
       if(!src.includes('m.id===ackId')) throw new Error("fallback 替换未按 id 锚定");
-      const rs=refineYunheng.toString();
-      if(!rs.includes('if(!m0.pendingAI) return')) throw new Error("refineYunheng 缺幂等守卫");
+      const rs=refineYunting.toString();
+      if(!rs.includes('if(!m0.pendingAI) return')) throw new Error("refineYunting 缺幂等守卫");
       if(rs.indexOf('.catch(()=>finish(""))')<0) throw new Error("AI 失败须收敛为离线终态句: "+(rs.match(/catch.{0,40}/)||["?"])[0]);
-      if(rs.includes("正在接话")) throw new Error("refineYunheng 仍含加载态文案");
+      if(rs.includes("正在接话")) throw new Error("refineYunting 仍含加载态文案");
       /* doneLine 兜底不再是旧省略号句 */
       st.questLines={};
       const dl=doneLine({id:"T-DL-1",npc:"shenzhao"});
@@ -1658,8 +1826,12 @@ const driver=`
       D.pointsLib.push(pt2);
       const z2={kind:"judge",q:"绿水青山就是金山银山。（判断正误）",a:true,pid:"S1-T-2",fact:"绿水青山就是金山银山。"};
       const html2=quizExplainHtml(z2,"真");
-      if(!html2.includes("正确说法")||!html2.includes("绿水青山")) throw new Error("判断题解析缺正确说法");
+      if(!/该说法成立|正确说法/.test(html2)||!html2.includes("绿水青山")) throw new Error("判断题解析缺正确说法");
       if(!html2.includes("知识点")||!html2.includes("生态文明")) throw new Error("解析缺知识点全文");
+      /* v62 Task7：伪命题解析须含错误表述引用 + 正确概念 */
+      const z3={kind:"judge",q:"绿水青山就是金山银山。（判断正误）",a:false,pid:"S1-T-2",fact:"绿水青山就是金山银山。"};
+      const html3=quizExplainHtml(z3,"伪");
+      if(!html3.includes("错误表述")||!html3.includes("正确概念")||!html3.includes("绿水青山")) throw new Error("伪命题解析缺错误表述/正确概念");
       D.pointsLib.pop();
       /* 多空填空：题干 N 空 → N 输入栏（源码契约，drawQuiz 为 openQuest 内嵌函数） */
       const oqSrc=openQuest.toString();
@@ -1697,7 +1869,7 @@ const driver=`
       st.questProg[probe.id]={stage:"quiz",qi:1};
       /* 未解锁时即便有 prog 也不显示已接取（边界） */
       /* 职守提示函数存在且按 NPC 过滤 */
-      if(typeof npcDutyQuest!=="function"||typeof renderPrivateChat!=="function") throw new Error("私聊函数缺失");
+      if(typeof npcTodayDuty!=="function"||typeof renderPrivateChat!=="function") throw new Error("私聊函数缺失");
       delete st.questProg[probe.id];
       /* 入口契约：群聊名字点击→私聊；cue 选项含「说点什么」 */
       if(!talkToNpc.toString().includes("renderPrivateChat")) throw new Error("群聊名字未接私聊窗");
