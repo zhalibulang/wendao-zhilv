@@ -263,7 +263,7 @@ const WDChat={
     const tail=arr.slice(s.upTo).map(m=>(m.role==="player"?"玩家：":"NPC：")+String(m.text||"").slice(0,100)).join("\n");
     const sys="你是游戏对话摘要器。把旧摘要与新增对话合并压缩为 ≤300 字的角色互动记忆摘要：只保留确定发生的事实（玩家做了什么、答应了什么、聊过什么话题、情绪状态），不要推测，不要华丽辞藻。只输出摘要正文。";
     const user="旧摘要："+(s.text||"（无）")+"\n\n新增对话：\n"+tail+"\n\n请输出合并后的新摘要（≤300字）。";
-    CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"summary"}).then(t=>{
+    CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"autoSummary",kind:"summary"}).then(t=>{
       if(t&&String(t).trim()){
         s.text=String(t).trim().slice(0,600); s.upTo=arr.length; s.at=now(); CTX.save();
       }
@@ -326,7 +326,7 @@ const WDChat={
       +"\n\n最近互动摘要：\n"+recent.map(m=>(m.role==="player"?"玩家：":"该NPC：")+m.text).join("\n")
       +"\n\n请输出JSON：{traits:[性格特质数组，3-4个短语，每个≤12字，体现细微演进]、speech:string(语言表达方式的演进，≤40字)、shift:string(行为模式的适应性调整，≤40字)、story:string(个人故事线新篇章，≤80字，与最近互动内容相关，第一人称)}";
     try{
-      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"evolve"});
+      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"evolve",kind:"evolve"});
       let o;
       try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
       catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(!m) throw e; o=JSON.parse(m[0]); }
@@ -802,7 +802,7 @@ const WDChat={
       const last=messages[messages.length-1];
       messages=messages.slice(0,-1).concat([{role:"user",content:last.content+"\n（重新生成：上一次回复违反了硬禁则，请严格遵守。）"}]);
     }
-    return await CTX.dsChat(messages,{kind:"chat"});
+    return await CTX.dsChat(messages,{ch:"chat",kind:"chat"});
   },
 
   /* ---------- 输出后去重 v2（WZ-013：开头+结尾双重检查） ---------- */
@@ -901,7 +901,7 @@ const WDChat={
       user+="\n被@的角色："+targets.map(id=>NPC[id]?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(id,NPC[id].name):NPC[id].name):id).join("、")+"——这些人通常必回应。";
     }
     try{
-      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"directorplan"});
+      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"directorPlan",kind:"directorplan"});
       let o;
       try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
       catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(!m) return null; o=JSON.parse(m[0]); }
@@ -988,7 +988,7 @@ const WDChat={
         +"\n\n近期群聊（供互文，不要重复其中说法）：\n"+(scene.map(s=>s.who+"："+s.text).join("\n")||"（无）")
         +"\n\n玩家刚发："+userText
         +"\n\n输出JSON：{\"lines\":["+cards.map(c=>"{npc:\""+c.id+"\",text:\"她的反应，2～50字，允许极短或不完整\"}").join(",")+"]}。每人一条，像同一个真实群里前后脚冒出来的消息，而不是七份问卷答案。";
-      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"director"});
+      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"directorFlow",kind:"director"});
       let o;
       try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
       catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(!m) throw e; o=JSON.parse(m[0]); }
@@ -1077,7 +1077,7 @@ const WDChat={
       const hasCustomWorld=!!((window.WDCfg&&WDCfg.customWorldBrief)?WDCfg.customWorldBrief():"").trim();
       messages.push({role:"user",content:this.buildContext(npcId,userText,null,directorHint)+"\n\n——"+((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,CTX.NPC[npcId].name):CTX.NPC[npcId].name)+"。只有确有必要核实时才调用工具；查完照常像人一样说话，不许写说明、不许罗列数据。"+this.postHistoryRules(npcId)});
       for(let round=0;round<2;round++){
-        const raw=await CTX.dsChat(messages,{kind:"chat",tools:this.toolDefs()});
+        const raw=await CTX.dsChat(messages,{ch:"chatTools",kind:"chat",tools:this.toolDefs()});
         /* dsChat 返回 content 或 {tool_calls} 结构（由 index.html dsChat v2 透传） */
         if(raw&&raw.toolCalls&&raw.toolCalls.length){
           messages.push({role:"assistant",content:raw.content||"",tool_calls:raw.toolCalls});
@@ -1246,7 +1246,7 @@ const WDChat={
       +"\n\n审核标准：pass=true 或 false。若 false，issues 列出问题，revised 给出修正版。"
       +"\n\n输出JSON：{\"pass\":true/false,\"issues\":[\"问题简述，≤30字\"],\"revised\":\"修正后的完整文本（pass=true 时与 input 相同）\"}。";
     try{
-      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"directorplan"});
+      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"directorAudit",kind:"directorplan"});
       let o;
       try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
       catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(!m) return {pass:true,issues:[],revised:text}; o=JSON.parse(m[0]); }

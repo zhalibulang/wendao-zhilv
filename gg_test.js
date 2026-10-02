@@ -225,7 +225,7 @@ const driver=`
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(!htmlSrc.includes('.dlg.gal{overflow-y:auto;-webkit-overflow-scrolling:touch}')) throw new Error('≤899px 缺 .dlg.gal 滚动修复');
     const sw=fs.readFileSync(require('path').join(__dirname,'sw.js'),'utf8');
-    if(!/wdzx-v(69|70|71)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
+    if(!/wdzx-v(69|70|71|72)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
   });
   run('v72 修诵卷底稿校订：结构审计',()=>{
     const wcOf=t=>String(t||'').trim().split(/\\s+/).filter(w=>/[A-Za-z0-9]/.test(w)).length;
@@ -290,6 +290,63 @@ const driver=`
     if(!has(st.edits,'full:temple-of-heaven:4')||!has(st.edits,'point:S1-01-01')) throw new Error('edits 无关键误动');
     reconcile();                    /* 标记已置：二次 reconcile 不得双移 */
     if(!has(st.srs,'ORB-TAN-6')||has(st.srs,'ORB-TAN-7')) throw new Error('迁移标记失效，二次执行双移');
+  });
+  run('v73 AI 通路审计体系：打标完备/注册表/覆盖层/面板',()=>{
+    reset();
+    const htmlFs=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    /* 1. 所有 dsChat 调用点均带 ch 标签（裸 {kind: 只可能是 dsChat 的 opts；mk() 任务工厂等不算） */
+    const bareRe=/\],\{kind:"/g; let bm;
+    while((bm=bareRe.exec(htmlFs))){
+      if(!htmlFs.slice(Math.max(0,bm.index-300),bm.index).includes('dsChat(')) continue; /* mk() 任务工厂等非 AI 调用 */
+      throw new Error('存在未打 ch 的 dsChat 调用（位置 '+bm.index+'）');
+    }
+    { const bare2=/\],\{kind:"/g; let m2;
+      while((m2=bare2.exec(chatSrc))){
+        if(!chatSrc.slice(Math.max(0,m2.index-300),m2.index).includes('dsChat(')) continue;
+        throw new Error('wd-chat.js 存在未打 ch 的 dsChat 调用');
+      }
+    }
+    /* 2. 打标 id 全部在注册表中有元信息 */
+    const ids=new Set([...htmlFs.matchAll(/ch:"([a-zA-Z]+)"/g)].map(m=>m[1]));
+    [...chatSrc.matchAll(/ch:"([a-zA-Z]+)"/g)].forEach(m=>ids.add(m[1]));
+    const regIds=new Set(AI_CHANNELS.map(c=>c.id));
+    const missing=[...ids].filter(id=>!regIds.has(id));
+    if(missing.length) throw new Error('打标 id 未注册: '+missing.join(','));
+    AI_CHANNELS.forEach(c=>{ if(!c.label||!c.model||!c.where||!c.trig||!c.fb) throw new Error('注册表 '+c.id+' 元信息不完整'); });
+    /* 3. 覆盖层：system/user 整体替换；无关角色不动 */
+    const msgs=[{role:'system',content:'S0'},{role:'user',content:'U0'},{role:'assistant',content:'A'}];
+    st.aiPromptOv={wrongReply:{sys:'S1',user:'U1'}};
+    const out=aiApplyChannel(msgs,{ch:'wrongReply'});
+    if(out[0].content!=='S1'||out[1].content!=='U1'||out[2].content!=='A') throw new Error('覆盖层替换异常');
+    /* 4. 单角色修订：只留 sys */
+    st.aiPromptOv={wrongReply:{sys:'S2'}};
+    const out2=aiApplyChannel(msgs,{ch:'wrongReply'});
+    if(out2[0].content!=='S2'||out2[1].content!=='U0') throw new Error('单角色修订应只替换对应角色');
+    /* 5. 无修订直通；未知通路直通 */
+    delete st.aiPromptOv.wrongReply;
+    if(aiApplyChannel(msgs,{ch:'wrongReply'})[0].content!=='S0') throw new Error('无修订应直通');
+    if(aiApplyChannel(msgs,{kind:'polish'})[0].content!=='S0') throw new Error('无 ch 时应直通');
+    /* 6. 停用开关抛专用错误（各调用点 catch 后走本地兜底） */
+    st.aiChOff={wrongReply:1};
+    let blocked=false;
+    try{ aiApplyChannel(msgs,{ch:'wrongReply'}); }catch(e){ blocked=!!e.aiChOff; }
+    if(!blocked) throw new Error('停用通路应抛 AI_CH_OFF');
+    delete st.aiChOff.wrongReply;
+    /* 7. 存取函数 */
+    saveAiPromptOv('chat',null,'UU');
+    if(!st.aiPromptOv.chat||st.aiPromptOv.chat.sys!==undefined||st.aiPromptOv.chat.user!=='UU') throw new Error('saveAiPromptOv 单角色保存异常');
+    clearAiPromptOv('chat');
+    if(st.aiPromptOv&&st.aiPromptOv.chat) throw new Error('clearAiPromptOv 未清除');
+    /* 8. 配置中心页签+面板+函数存在 */
+    if(!/data-tab="aich"/.test(htmlFs)||!/data-pane="aich"/.test(htmlFs)) throw new Error('配置中心缺 AI 通路页');
+    if(typeof renderAiChannels!=='function'||typeof openAiPromptEditor!=='function') throw new Error('面板函数缺失');
+    if(typeof aiChStats!=='function'||typeof aiSnapGet!=='function') throw new Error('统计/快照函数缺失');
+  });
+  run('v73 英文整景预告模板不再把锚点词拟人化',()=>{
+    reset(); reconcile();
+    const htmlFs=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    if(htmlFs.includes('又是谁、在哪、身上带着什么故事')) throw new Error('英文锚点词拟人化模板未清除');
+    if(!htmlFs.includes('是地名、寒暄称谓还是普通词')) throw new Error('缺英文锚点词新引导语');
   });
   run('v71 选择题AI逐项解析 + 手机端任务页滚动根治',()=>{
     reset();

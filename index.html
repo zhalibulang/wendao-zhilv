@@ -1884,7 +1884,7 @@ if(window.WDChat){
       +"\n\n最近互动摘要：\n"+recent.map(m=>(m.role==="player"?"玩家：":"该NPC：")+m.text).join("\n")
       +"\n\n请输出JSON：{traits:[性格特质数组，3-4个短语，每个≤12字，体现细微演进]、speech:string(语言表达方式的演进，≤40字)、shift:string(行为模式的适应性调整，≤40字)、story:string(个人故事线新篇章，≤80字，与最近互动内容相关，第一人称)}";
     try{
-      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"evolve"});
+      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"evolve",kind:"evolve"});
       let o;
       try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
       catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(!m) throw e; o=JSON.parse(m[0]); }
@@ -2017,7 +2017,7 @@ if(window.WDChat){
       user+="\n被@的角色："+targets.map(id=>NPC[id]?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(id,NPC[id].name):NPC[id].name):id).join("、")+"——这些人通常必回应。";
     }
     try{
-      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"directorplan"});
+      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"directorPlan",kind:"directorplan"});
       let o;
       try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
       catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(!m) return null; o=JSON.parse(m[0]); }
@@ -2065,7 +2065,7 @@ if(window.WDChat){
         +"\n\n近期群聊（供互文，不要重复其中说法）：\n"+(scene.map(s=>s.who+"："+s.text).join("\n")||"（无）")
         +"\n\n玩家刚发："+userText
         +"\n\n输出JSON：{\"lines\":["+cards.map(c=>"{npc:\""+c.id+"\",text:\"她的反应，2～50字，允许极短或不完整\"}").join(",")+"]}。每人一条，像同一个真实群里前后脚冒出来的消息，而不是几份问卷答案。";
-      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"director"});
+      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"directorFlow",kind:"director"});
       let o;
       try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
       catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(!m) throw e; o=JSON.parse(m[0]); }
@@ -2140,7 +2140,7 @@ if(window.WDChat){
       +"\n\n审核标准：pass=true 或 false。若 false，issues 列出问题，revised 给出修正版。"
       +"\n\n输出JSON：{\"pass\":true/false,\"issues\":[\"问题简述，≤30字\"],\"revised\":\"修正后的完整文本（pass=true 时与 input 相同）\"}。";
     try{
-      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"directorplan"});
+      const raw=await CTX.dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"directorAudit",kind:"directorplan"});
       let o;
       try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
       catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(!m) return {pass:true,issues:[],revised:text}; o=JSON.parse(m[0]); }
@@ -2963,13 +2963,13 @@ async function genQuestCue(q,d){
       +(recent.length?("\n你最近已经对她说过这些开场——开头、请求框架、身体意象、收尾词都不许再撞：\n"+recent.map((x,i)=>"〔"+(i+1)+"〕"+x).join("\n")):"")
       +"\n\n请只输出这一小段台词（≤70字），不要解释、不要舞台说明、不要引号以外的字。";
     const gate=t=>cueRedFlags(filterNpcText(t),npcName,recent);
-    let t=cleanCue(await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"questcue"}));
+    let t=cleanCue(await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"questCue",kind:"questcue"}));
     let flags=t?gate(t):[];
     if(t&&flags.length){
       console.warn("[cue] 红线未过，带反馈重拟一次：",flags,t);
       const t2=cleanCue(await dsChat([{role:"system",content:sys},{role:"user",
         content:user+"\n\n上一稿触犯了红线：「"+flags.join("、")+"」。请逐条避开（尤其换一个完全不同的开头、请求说法和收尾，不许再用「能陪我…吗/你在我就…」），保持请求姿态，用「我」自称，重写这一小段（≤70字）。"}],
-        {kind:"questcue"}));
+        {ch:"questCue",kind:"questcue"}));
       const f2=t2?gate(t2):[];
       if(t2&&!f2.length) t=t2; else { console.warn("[cue] 两次未过红线，本轮采用本地兜底词：",f2); t=""; }
     }
@@ -3056,12 +3056,12 @@ async function genGdCue(day,gi){
       +(recent.length?("\n最近的开场（开头/说法/收尾不许撞）：\n"+recent.map((x,i)=>"〔"+(i+1)+"〕"+x).join("\n")):"")
       +"\n只输出这一小段（≤60字），不要解释。";
     const gate=t=>cueRedFlags(filterNpcText(t),npcName,recent);
-    let t=clean(await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"questcue"}));
+    let t=clean(await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"gdCue",kind:"questcue"}));
     let fl=t?gate(t):[];
     if(t&&fl.length){
       console.warn("[gd cue] 红线未过，重拟一次：",fl,t);
       const t2=clean(await dsChat([{role:"system",content:sys},{role:"user",
-        content:user+"\n\n上一稿触犯红线：「"+fl.join("、")+"」。换一个完全不同的开头、说法和收尾，重写（≤60字）。"}],{kind:"questcue"}));
+        content:user+"\n\n上一稿触犯红线：「"+fl.join("、")+"」。换一个完全不同的开头、说法和收尾，重写（≤60字）。"}],{ch:"gdCue",kind:"questcue"}));
       const f2=t2?gate(t2):[];
       if(t2&&!f2.length) t=t2; else { console.warn("[gd cue] 两次未过，用本地兜底：",f2); t=""; }
     }
@@ -3094,7 +3094,7 @@ async function genQuestLine(q,kind){
       : "你是RPG《问道之旅·四十五日》中的任务NPC。玩家刚完成任务。请用一句有角色感的话认可或交割，≤30字，像同伴当面开口，不解释、不报编号。";
     const user=`任务名：${q.name}\n类型：${label}${q.desc?`\n任务简述：${String(q.desc).slice(0,80)}`:""}`
       +`\n姿态红线：是请求不是命令，不催促、不讲条件、不说教；自称用「我」，台词里不许出现你自己的名字「${dispName}」；禁考试/考核/复习等现实词。`;
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"questbrief"});
+    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"questLine",kind:"questbrief"});
     let t=String(raw||"").trim().replace(/^[「『"“\s]+|[」』"”\s]+$/g,"");
     t=filterNpcText(t.replace(/\n.*/s,"").slice(0,40));
     /* v58b：过红线才入缓存；不过则弃稿（调用处已有本地占位句兜底） */
@@ -3515,7 +3515,7 @@ function refineAction(id,q,extra){
   dsChat([
     {role:"system",content:"你是游戏『问道之旅·四十五日』的战斗记录官。用一句第一人称、网游战斗日志口吻总结玩家的行动。要求：导游世界游戏风，简短有力≤36字，像玩家在群里报喜不装腔；禁AI腔（不排比、不总结、不感叹过度、不用'首先/总之'）；禁教师口吻；禁止念出任务编号；禁已淘汰旧概念（"+OBSOLETE_TERMS.join("/")+"）。只输出这句话本身，不要引号。"},
     {role:"user",content:"玩家行动：完成关卡「"+qdn(q)+"」（类型："+q.tlabel+"，难度定位："+questMetaphor(q)+"，奖励：+"+q.xp+"修行 +"+q.coin+"灵铢）"+(extra||"")+"\n参考模板（可重写或另起更妙的）：我刚交割了「"+qdn(q)+"」。"}
-  ],false).then(t=>{
+  ],{ch:"refineAction"}).then(t=>{
     t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,60);
     if(!t) return;
     const m=st.dialogue.find(x=>x.id===id); if(!m) return;
@@ -3534,7 +3534,7 @@ function acceptQuestLine(q){
     dsChat([
       {role:"system",content:"你是游戏『问道之旅·四十五日』的玩家本人，刚从云汀的纪日手札上点选接下一环。用一句第一人称口语表达你接下这件事，≤30字，像顺手在群里回的话；不装腔、不喊口号、不发誓、不向NPC喊话、不感谢、不念编号与类型术语。只输出这句话本身，不要引号。"},
       {role:"user",content:"接下的事：「"+qdn(q)+"」（"+q.tlabel+"）。参考：我接了「"+qdn(q)+"」，这就去。"}
-    ],{kind:"polish"}).then(t=>{
+    ],{ch:"questAck",kind:"polish"}).then(t=>{
       t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,50);
       if(!t) return;
       const fl=cueRedFlags(filterNpcText(t),""); /* 玩家语不查自呼姓名，但拦命令/考试词等 */
@@ -4212,7 +4212,7 @@ function openQuest(qid){
       ?"你是备考游戏《问道之旅》的NPC。深入理解以下考点内容，结合你的知识库，输出两行：\n第1行：一个第二人称代入式思考题（≤30字），引导考生从实际带团场景出发思考；\n第2行：3~5个重点概念（顿号分隔），必须是考点中的核心术语，不要泛泛而谈。\n只输出两行，不输出其他内容。"
       :"你是备考游戏《问道之旅》的NPC。深入理解以下考点内容，结合你的知识库，输出四段文本：\n段前缀固定为 总结：/补充：/趣闻：/引导： ，每段≤40字。\n要求：总结要精准提炼考点核心；补充要补充考点中未展开但相关的知识；趣闻要用导游工作场景类比；引导要给出具体的下一步行动建议。\n只输出四段文本。";
     const user="考点标题："+titles.join("、")+"\n考点内容：\n"+facts.join("\n");
-    dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish",max_tokens:mode==="summary"?450:200}).then(t=>{
+    dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"bookExtra",kind:"polish",max_tokens:mode==="summary"?450:200}).then(t=>{
       if(!slot.isConnected||!t){ if(fallback) slot.textContent=fallback; return; }
       slot.textContent=t.trim();
     }).catch(()=>{ if(fallback) slot.textContent=fallback; });
@@ -4223,7 +4223,7 @@ function openQuest(qid){
     const todo=items.map((z,i)=>({i,kind:z.kind,q:z.q,a:String(z.a||"").replace(/\n【中文要点】[\s\S]*$/,""),opts:z.opts||null}));
     const sys="You are localizing a Chinese tour-guide exam mini-game into English. Return ONLY a JSON array; each item: {\"i\":index,\"q\":\"English stem\",\"a\":\"English reference answer\",\"opts\":[\"English option\"] or null}. Use correct terms (Tian'anmen Rostrum, etc.).";
     const user=JSON.stringify(todo);
-    dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish",max_tokens:1800,response_format:"json_object"}).then(t=>{
+    dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"bilingualQuiz",kind:"polish",max_tokens:1800,response_format:"json_object"}).then(t=>{
       let arr=null;
       try{ const s=String(t).trim(); const j=JSON.parse(s.slice(s.indexOf("["))); arr=Array.isArray(j)?j:null; }catch(e){}
       if(!Array.isArray(arr)) return;
@@ -4237,7 +4237,7 @@ function openQuest(qid){
     const sys="You are a tutor for a Chinese tour-guide English exam. In 2-3 short English sentences explain the key point and one common mistake, then one Chinese sentence after '中译：'. Plain text only.";
     const user="Q:"+((z._en&&z._en.q)||z.q)+"\nA:"+((z._en&&z._en.a)||z.a);
     slot.textContent="灵脉英文讲解中…";
-    dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish",max_tokens:300}).then(t=>{
+    dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"enExplain",kind:"polish",max_tokens:300}).then(t=>{
       if(slot.isConnected&&t) slot.textContent=String(t).trim();
     }).catch(()=>{ slot.textContent=""; });
   }
@@ -5441,7 +5441,7 @@ function openQuest(qid){
       +detail
       +"\n考点全文："+(pt?pt.id+"："+cleanMd(pt.text).slice(0,500):String(z.pid||""))
       +"\n该考点累计答错次数："+sameN;
-    dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish",max_tokens:isOptKind?700:500}).then(t=>{
+    dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"wrongReply",kind:"polish",max_tokens:isOptKind?700:500}).then(t=>{
       /* v69：emoji 剥离 + 实质校验——空话讲解弃用，保留本地讲解（不浪费这块版面） */
       const txt=(t||"").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu,"").trim().replace(/^["「」]+|["」]+$/g,"");
       const el=wrap&&wrap.isConnected?wrap.querySelector(".qrepl"):null;
@@ -5702,7 +5702,7 @@ function refineCutscene(id,node){
     +"但禁止多组引号分段、禁止旁白（不能出现「她心想/旁白/云汀道」）、禁止复述或发布任务、禁止预告后续、禁止念任务编号与数值。"
     +"≤80字，越像脱口而出越好。禁AI腔（首先/其次/总之）、禁教书先生口吻、禁客服腔、禁已淘汰概念（"+obsolete.join("、")+"）。只输出正文，不要引号。";
   const user="本地兜底话术：「"+cutsceneText(node)+"」\n请化写为她此刻会发出的一条消息。";
-  dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"}).then(raw=>{
+  dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"cutscene",kind:"polish"}).then(raw=>{
     let txt=(raw||"").trim();
     if(!txt||txt.length<10) return;
     /* 模型若仍输出多段引号剧本，只取第一段引号内内容；否则取第一行 */
@@ -5839,7 +5839,7 @@ function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
     +"\n6. "+dName(npc1)+"→玩家（回应/引导）"
     +(npc2?"\n7. "+dName(npc2)+" 插话":"")
     +"\n每条以「角色名：内容」格式输出，用 ||| 分隔各条。只输出消息，不要解释。";
-  dsChat([{role:"system",content:sys},{role:"user",content:user}],false).then(raw=>{
+  dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"guidance"}).then(raw=>{
     const txt=(raw||"").trim(); if(!txt||txt.length<10){ refineGuidanceSceneFail(ids); return; }
     const parts=txt.split(/\|\|\||\n{2,}/).map(s=>s.trim()).filter(s=>s);
     if(parts.length<ids.length){ refineGuidanceSceneFail(ids); return; }
@@ -5981,7 +5981,7 @@ function refineYunting(id,q,nq,perfect){
     if(t) m.text=filterNpcText(t);   /* 空返回→保留离线终态句 */
     delete m.pendingAI; save(); renderChat(true);
   };
-  dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"})
+  dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"refineYunting",kind:"polish"})
     .then(t=>finish(t))
     .catch(()=>finish(""));
 }
@@ -6630,11 +6630,11 @@ function rtOralPages(o){
   const lastSen=sentences.length>1?sentences[sentences.length-1].trim().slice(0,35):"";
   const hints=nums.slice(0,3).map(n=>"数字 "+n).concat(props);
   const prevLine=hints.length
-    ?"云汀指尖在卷上轻点，几处金字先浮了起来：「"+hints.slice(0,6).join(" · ")+"」——先和这些名字、数字打个照面，等下读正文，它们会像老朋友一样自己跳出来。（只助理解，不考原文）"
-    :"云汀轻声说：这一段没有冷僻的名字和数字，你只管跟着画面走。（只助理解，不考原文）";
+    ?"云汀指尖在卷上轻点，几处金字先浮了起来：「"+hints.slice(0,6).join(" · ")+"」——先和这些词、数字打个照面：等下读正文，留意它们在句中是什么身份，和前后文怎么咬合。（只助理解，不考原文）"
+    :"云汀轻声说：这一段没有冷僻的名字和数字，你只管跟着句子走，听清它在描述什么画面。（只助理解，不考原文）";
   const qs=[];
-  if(nums[0]) qs.push("读到「"+nums[0]+"」时停一停——它说的是年份、重量还是数量？为什么这个数字值得被记住？");
-  if(props[0]) qs.push("「"+props.slice(0,2).join("」「")+"」又是谁、在哪、身上带着什么故事？");
+  if(nums[0]) qs.push("读到「"+nums[0]+"」时停一停——它说的是年份、高度还是数量？这个数字在段里支撑什么事实？");
+  if(props[0]) qs.push("「"+props.slice(0,2).join("」「")+"」是地名、寒暄称谓还是普通词？在本段里各自扮演什么角色，读到时试着用自己的话转述。");
   qs.push("把它们串起来——这一段到底在讲什么、为什么要讲它？读完讲给我听。");
   return [
     {title:"整景理解 · "+o.name+" §"+(o.sec+1),
@@ -7936,6 +7936,77 @@ function pickFile(accept,cb){
   return inp;
 }
 function readTextFile(f,cb){ const fr=new FileReader(); fr.onload=()=>cb(String(fr.result||"")); fr.readAsText(f); }
+/* ==================== v73 AI 通路审计面板 ==================== */
+function _aiFmtTime(iso){ try{ const d=new Date(iso); return String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }catch(e){ return "—"; } }
+function renderAiChannels(ov){
+  const head=$("#aichHead",ov), list=$("#aichList",ov);
+  if(!head||!list) return;
+  head.innerHTML='<div class="cfgrow" style="gap:8px;flex-wrap:wrap">'+
+    '<span class="btn sm '+(dsReady()?"primary":"ghost")+'" style="pointer-events:none">'+(dsReady()?"● 密钥已配置":"○ 未配置密钥（全部通路走本地兜底）")+'</span>'+
+    '<span class="btn sm ghost" style="pointer-events:none">模型端点：api.deepseek.com · deepseek-chat / deepseek-reasoner(R1)</span>'+
+    '<button class="btn sm ghost" type="button" id="aichRefresh">刷新状态</button></div>'+
+    '<div class="note" style="margin-top:6px">共 '+AI_CHANNELS.length+' 条通路；提示词修订存本机存档（st.aiPromptOv），停用开关存 st.aiChOff。</div>';
+  const card=c=>{
+    const stt=aiChStats(c.id), snap=aiSnapGet(c.id), ov2=aiPromptOv(c.id), off=aiChOff(c.id);
+    const chips=[];
+    if(off) chips.push('<span style="color:var(--danger)">● 已停用</span>');
+    else if(!dsReady()) chips.push('<span style="color:var(--dim)">○ 本地兜底下</span>');
+    else chips.push('<span style="color:#7fd18a">● 可调用</span>');
+    if(ov2&&(ov2.sys!=null||ov2.user!=null)) chips.push('<span style="color:var(--gold)">修订生效中'+(snap&&snap.ov?"":"（下次调用生效）")+'</span>');
+    if(stt) chips.push('<span style="color:var(--dim)">调用 '+stt.n+' 次 · 最近 '+_aiFmtTime(stt.lastAt)+' · '+(stt.err?("失败 "+stt.err):("ok "+stt.ms+"ms"))+'</span>');
+    else chips.push('<span style="color:var(--dim)">本会话/本机暂无调用记录</span>');
+    return '<div style="border:1.5px solid var(--border);border-radius:10px;padding:9px 11px;background:rgba(255,255,255,.03)">'
+      +'<div class="cfgrow" style="justify-content:space-between;gap:8px">'
+      +'<div style="font-size:13px;color:var(--neon);font-weight:700">'+esc(c.label)+'</div>'
+      +'<div style="font-size:10.5px;color:var(--dim)">'+c.id+' · '+esc(c.model)+' · 参数档 '+c.prof+'</div></div>'
+      +'<div class="note" style="margin:3px 0">位置：'+esc(c.where)+'<br>频次：'+esc(c.trig)+'<br>兜底：'+esc(c.fb)+'</div>'
+      +'<div class="note" style="margin:2px 0 6px">'+chips.join("　")+'</div>'
+      +'<div class="cfgrow" style="gap:6px;flex-wrap:wrap">'
+      +'<button class="btn sm '+(ov2?"gold":"")+'" type="button" data-aich-edit="'+c.id+'">'+(ov2?"✎ 修订中·查看/改写":"修订提示词")+'</button>'
+      +(ov2?'<button class="btn sm ghost" type="button" data-aich-reset="'+c.id+'">恢复默认</button>':"")
+      +'<button class="btn sm ghost" type="button" data-aich-off="'+c.id+'">'+(off?"重新启用":"停用此通路")+'</button>'
+      +'</div></div>';
+  };
+  list.innerHTML=AI_CHANNELS.map(card).join("");
+  $("#aichRefresh",head).onpointerdown=()=>{ SFX.tap(); renderAiChannels(ov); };
+  list.querySelectorAll("[data-aich-edit]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); openAiPromptEditor(b.dataset.aichEdit); });
+  list.querySelectorAll("[data-aich-reset]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); clearAiPromptOv(b.dataset.aichReset); renderAiChannels(ov); toast("已恢复默认提示词"); });
+  list.querySelectorAll("[data-aich-off]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
+    if(aiChOff(b.dataset.aichOff)){ toggleAiCh(b.dataset.aichOff); toast("通路已重新启用"); }
+    else if(confirm("停用「"+(AI_CHANNEL_BY_ID[b.dataset.aichOff]||{}).label+"」？该通路将直接跳过 AI、只走本地兜底文案。")){ toggleAiCh(b.dataset.aichOff); toast("通路已停用，本地兜底下运行"); }
+    renderAiChannels(ov);
+  });
+}
+function openAiPromptEditor(id){
+  const c=AI_CHANNEL_BY_ID[id]; if(!c) return;
+  const ov0=aiPromptOv(id)||{}, snap=aiSnapGet(id);
+  const p=panel('<h2>修订提示词 · '+esc(c.label)+'</h2>'
+    +'<div class="note" style="margin:4px 0 8px">'+esc(c.where)+'　频次：'+esc(c.trig)+'</div>'
+    +(snap?('<div class="note" style="margin:6px 0">最近实发捕获：'+_aiFmtTime(snap.at)+' · '+esc(snap.model)+(snap.ov?' · <span style="color:var(--gold)">当次已带修订</span>':' · 当次为默认提示词')+'。下方只读文本即该通路<b>真实发出</b>的完整指令，可据此改写。</div>')
+     :'<div class="note" style="margin:6px 0;color:var(--dim)">本会话尚无实发记录（触发一次对应功能后即在此捕获真实提示词）；你也可以直接在下方写修订稿。</div>')
+    +'<div style="font-size:12px;color:var(--cyber);margin:8px 0 3px">System 指令（默认 · 只读）</div>'
+    +'<textarea id="ovSysRef" rows="7" readonly style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--dim);border:1.5px solid var(--border);border-radius:8px;padding:7px">'+esc(snap?snap.sys:"（尚无实发记录）")+'</textarea>'
+    +'<div class="cfgrow" style="gap:6px;margin:4px 0 8px"><button class="btn sm ghost" type="button" id="ovLoadSys">载入到修订框</button></div>'
+    +'<div style="font-size:12px;color:var(--gold);margin:6px 0 3px">System 修订稿（留空=不改；保存后整体替换默认 system，动态注入的人设/铁律不再叠加）</div>'
+    +'<textarea id="ovSys" rows="7" style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--fg);border:1.5px solid var(--gold);border-radius:8px;padding:7px">'+esc(ov0.sys!=null?ov0.sys:"")+'</textarea>'
+    +'<div style="font-size:12px;color:var(--cyber);margin:10px 0 3px">User 内容（默认 · 只读，含动态变量）</div>'
+    +'<textarea id="ovUserRef" rows="5" readonly style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--dim);border:1.5px solid var(--border);border-radius:8px;padding:7px">'+esc(snap?snap.user:"（尚无实发记录）")+'</textarea>'
+    +'<div class="cfgrow" style="gap:6px;margin:4px 0 8px"><button class="btn sm ghost" type="button" id="ovLoadUser">载入到修订框</button></div>'
+    +'<div style="font-size:12px;color:var(--gold);margin:6px 0 3px">User 修订稿（留空=不改；多数通路的动态上下文都在 user 里，改写后变量将被静态文本替代）</div>'
+    +'<textarea id="ovUser" rows="5" style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--fg);border:1.5px solid var(--gold);border-radius:8px;padding:7px">'+esc(ov0.user!=null?ov0.user:"")+'</textarea>'
+    +'<div class="savegrid" style="margin-top:12px"><button class="btn sm primary" type="button" id="ovSave">保存并立即生效</button>'
+    +'<button class="btn sm ghost" type="button" id="ovReset">恢复默认</button>'
+    +'<button class="btn sm ghost" type="button" id="ovClose">关闭</button></div>');
+  $("#ovLoadSys",p).onpointerdown=()=>{ SFX.tap(); $("#ovSys",p).value=$("#ovSysRef",p).value.startsWith("（尚无")?"":$("#ovSysRef",p).value; };
+  $("#ovLoadUser",p).onpointerdown=()=>{ SFX.tap(); $("#ovUser",p).value=$("#ovUserRef",p).value.startsWith("（尚无")?"":$("#ovUserRef",p).value; };
+  $("#ovSave",p).onpointerdown=()=>{ SFX.tap();
+    const sys=$("#ovSys",p).value, user=$("#ovUser",p).value;
+    saveAiPromptOv(id, sys.trim()?sys:null, user.trim()?user:null);
+    toast("已保存，下一次调用该通路即生效"); p.remove(); if(typeof view!=="undefined"&&view==="cfg") renderCfg();
+  };
+  $("#ovReset",p).onpointerdown=()=>{ SFX.tap(); if(confirm("删除该通路的全部修订、恢复默认提示词？")){ clearAiPromptOv(id); toast("已恢复默认"); p.remove(); if(typeof view!=="undefined"&&view==="cfg") renderCfg(); } };
+  $("#ovClose",p).onpointerdown=()=>{ SFX.tap(); p.remove(); };
+}
 const STYLE_OPTS={tone:[["formal","正式恭敬"],["casual","随意亲近"]],humor:[["humor","幽默诙谐"],["serious","严肃凝练"]],depth:[["deep","进阶深入"],["basic","基础口诀"]]};
 function renderCfg(){
   SFX.tap();
@@ -7957,6 +8028,7 @@ function renderCfg(){
     <button data-tab="attr" type="button">初始属性</button>
     <button data-tab="data" type="button">数据</button>
     <button data-tab="agent" type="button">实验特性</button>
+    <button data-tab="aich" type="button">AI 通路</button>
   </div>
 
   <div class="cfgpane" data-pane="agent">
@@ -7977,6 +8049,11 @@ function renderCfg(){
       </div>
       <div class="note">范围 ${TW_SPEED_MAX}ms～${TW_SPEED_MIN}ms（10倍加速），默认 200ms；即时生效，持久化到本机。</div>
     </div>
+  </div>
+  <div class="cfgpane" data-pane="aich">
+    <div id="aichHead"></div>
+    <div class="note" style="margin:6px 0 10px">每条通路标注了位置（函数@文件）、模型、触发频次、提示词（实发捕获）与离线兜底。点「修订提示词」可直接改写该通路的 system/user 指令，保存后<b>下一次调用立即生效</b>；修订是整体替换，动态注入的人设/铁律将不再叠加，恢复默认即还原。</div>
+    <div id="aichList" style="display:flex;flex-direction:column;gap:8px"></div>
   </div>
   <div class="cfgpane on" data-pane="av">
     <div class="note">JPG / PNG，≤5MB，分辨率不低于 200×200；上传后居中方形裁剪并压缩为 240px 存于本机，离线可用。拍摄照片会抹除 EXIF 定位信息。</div>
@@ -8136,6 +8213,8 @@ function renderCfg(){
   /* v64：设备同步入口 */
   const syBtn=$("#cfgSync",ov);
   if(syBtn) syBtn.onpointerdown=()=>{ SFX.tap(); renderSync(); };
+  /* v73：AI 通路审计页 */
+  renderAiChannels(ov);
 
   /* ---- 头像 / 立绘 ---- */
   function paintGrid(){
@@ -9152,6 +9231,79 @@ const DS_PROFILES={
   quizbank:  {temperature:0.7,max_tokens:4000,response_format:{type:"json_object"}}
 };
 
+/* ==================== AI 通路注册表（配置中心「AI 通路」页的真源） ====================
+   id 与各 dsChat 调用点 opts.ch 一一对应；where=函数@文件；trig=触发时机/频次；
+   fb=离线/失败时的本地兜底。默认提示词不在这里抄录——面板展示的是实发捕获（_aiSnap），
+   修订覆盖存 st.aiPromptOv[id]={sys?,user?}；停用存 st.aiChOff[id]=1 */
+const AI_CHANNELS=[
+  {id:"chat",        label:"私聊回复",            model:"deepseek-chat",      prof:"chat",         where:"WDChat.respond → _chatWithRetry @wd-chat.js", trig:"玩家每条私聊消息（严格模式重试≤1次）", fb:"本地口癖短句兜底"},
+  {id:"chatTools",   label:"私聊·工具调用",       model:"deepseek-chat",      prof:"chat",         where:"WDChat.respondWithTools @wd-chat.js",        trig:"实验特性开启时，每轮对话≤2次模型往返",     fb:"降级为无工具普通回复"},
+  {id:"autoSummary", label:"私聊自动压缩",        model:"deepseek-chat",      prof:"summary",      where:"WDChat 自动摘要 @wd-chat.js",                trig:"未总结消息≥10条时",                       fb:"保留原文不压缩"},
+  {id:"evolve",      label:"人设演化",            model:"deepseek-chat",      prof:"evolve",       where:"WDChat.evolve（index 补丁版）",               trig:"私聊≥5轮或手动触发",                      fb:"沿用旧人设卡"},
+  {id:"directorPlan",label:"导演规划",            model:"deepseek-chat",      prof:"directorplan", where:"WDChat.directorPlan（index 补丁版）",        trig:"每次导演群聊/剧情前 1 次（JSON）",        fb:"无导演规划，逐人独立回复"},
+  {id:"directorFlow",label:"导演群聊",            model:"deepseek-chat",      prof:"director",     where:"WDChat.directorFlow（index 补丁版）",         trig:"多人在场群聊/剧情上演时 1 次",            fb:"本地剧情模板"},
+  {id:"directorAudit",label:"四维审核",           model:"deepseek-chat",      prof:"directorplan", where:"WDChat.directorAudit（index 补丁版）",       trig:"brief/flow/respond 内部校验，每条 1 次",   fb:"fail-open：审核不过不阻断"},
+  {id:"questCue",    label:"任务开场 cue",        model:"deepseek-chat",      prof:"questcue",     where:"genQuestCue @index.html",                    trig:"每个正修任务开场 1 次，红线重试 1 次",    fb:"本地 cue 模板池"},
+  {id:"gdCue",       label:"纪日里程碑 cue",      model:"deepseek-chat",      prof:"questcue",     where:"genGdCue @index.html",                       trig:"纪日里程碑首次到达 1 次，重试 1 次",      fb:"本地里程碑模板"},
+  {id:"questLine",   label:"任务发布行",          model:"deepseek-chat",      prof:"questcue",     where:"genQuestLine @index.html",                    trig:"接取任务线时 1 次",                       fb:"本地发布行模板"},
+  {id:"questBrief",  label:"任务剧情简介（四段）",model:"deepseek-chat",      prof:"questbrief",   where:"genQuestBrief @index.html",                  trig:"打开任务且无 v3 缓存时 1 次（JSON）",     fb:"旧缓存/本地 fallback 对白"},
+  {id:"questAck",    label:"任务完成 NPC 接报",   model:"deepseek-chat",      prof:"polish",       where:"acceptQuestLine @index.html",                trig:"每次完成任务 1 次",                       fb:"无 AI 接报"},
+  {id:"refineAction",label:"战斗日志润色",        model:"deepseek-chat",      prof:"chat(默认档)", where:"refineAction @index.html",                  trig:"完成任务后 1 次",                         fb:"保留原始玩家行动语"},
+  {id:"refineYunting",label:"云汀结算润色",        model:"deepseek-chat",      prof:"polish",       where:"refineYunting @index.html",                  trig:"结算后云汀消息 1 次（不耗灵力）",         fb:"本地云汀模板"},
+  {id:"wrongReply",  label:"试炼错答讲解",        model:"deepseek-chat",      prof:"polish",       where:"aiWrongReply @index.html",                    trig:"答错后每题 1 次（选项题 700tok）",       fb:"wrongLocalReply 即时本地讲解"},
+  {id:"bookExtra",   label:"书页预告/卷尾总结",   model:"deepseek-chat",      prof:"polish",       where:"aiBookExtra @index.html",                    trig:"每个修诵任务在线时 2 段",                fb:"localPreview/本地总结，不阻断"},
+  {id:"bilingualQuiz",label:"问契批量英化",       model:"deepseek-chat",      prof:"polish",       where:"aiBilingualQuiz @index.html",                trig:"b 类试炼题进入时 1 次（JSON）",           fb:"保留中文题并挂待补标注"},
+  {id:"enExplain",   label:"英文题讲解",          model:"deepseek-chat",      prof:"polish",       where:"aiEnExplain @index.html",                    trig:"英文题揭示要点后 1 次",                  fb:"不显示讲解"},
+  {id:"oralReview",  label:"修诵复述评测",        model:"deepseek-chat",      prof:"polish",       where:"aiOralReview @index.html",                   trig:"每次复述提交 1 次",                      fb:"仅本地评分"},
+  {id:"reciteReview",label:"背诵评测",            model:"deepseek-chat",      prof:"polish",       where:"aiReciteReview @index.html",                trig:"每次背诵提交 1 次",                      fb:"仅本地评分"},
+  {id:"transReview", label:"传译评测",            model:"deepseek-chat",      prof:"polish",       where:"aiTransReview @index.html",                  trig:"每次传译提交 1 次",                      fb:"仅本地评分"},
+  {id:"oralStory",   label:"整景趣味扩写",        model:"deepseek-chat",      prof:"chat",         where:"aiOralStory @index.html",                    trig:"藏经阁手动点击 1 次",                    fb:"无扩写"},
+  {id:"cardExpand",  label:"卡片 AI 扩写",        model:"deepseek-chat",      prof:"chat",         where:"aiCardExpand @index.html",                  trig:"藏经阁手动点击 1 次",                     fb:"无扩写"},
+  {id:"cutscene",    label:"剧情 CG 文案润色",    model:"deepseek-chat",      prof:"polish",       where:"refineCutscene @index.html",                 trig:"剧情工坊手动 1 次",                       fb:"保留原文案"},
+  {id:"guidance",    label:"每日引导润色",        model:"deepseek-chat",      prof:"chat(默认档)", where:"refineGuidanceScene @index.html",            trig:"每日引导生成后 1 次",                     fb:"本地引导文案"},
+  {id:"savePersona", label:"存档·生成人设",       model:"deepseek-chat",      prof:"polish",       where:"renderSave 内生成按钮 @index.html",          trig:"存档页手动 1 次",                        fb:"沿用内置人设"},
+  {id:"persona",     label:"NPC 人设卡生成",      model:"deepseek-reasoner",  prof:"persona_r1",  where:"genPersona @index.html",                    trig:"NPC 面板手动（重新）生成 1 次（R1）",     fb:"内置人设卡"},
+  {id:"biasText",    label:"R1 阶段总结/群聊引导",model:"deepseek-reasoner",  prof:"persona_r1",  where:"r1StageSummaryChat / r1GroupChatGuide @index.html", trig:"生成人设流程内部 3 次（R1）",      fb:"中断人设生成"},
+  {id:"keyPing",     label:"连接测试 ping",        model:"deepseek-chat",      prof:"polish",       where:"dsKeyGate / reconnectAi / 存档测试 @index.html", trig:"仅手动点测试/重连时",              fb:"不涉及"}
+];
+const AI_CHANNEL_BY_ID=Object.fromEntries(AI_CHANNELS.map(c=>[c.id,c]));
+/* 运行时实发捕获（仅内存；面板据此展示"真发了什么"，避免静态抄录 30 套提示词失真） */
+const _aiSnap={};
+function aiSnapGet(id){ return _aiSnap[id]||null; }
+function aiChStats(id){
+  const all=(_callLog||[]).concat(safeCallLogDisk());
+  const rows=all.filter(e=>e&&e.ch===id);
+  if(!rows.length) return null;
+  const last=rows[rows.length-1];
+  return {n:rows.length,lastAt:last.t,ms:last.ms,err:last.err||"",cached:last.cached||0,retry:last.retry||0};
+}
+function safeCallLogDisk(){ try{ return JSON.parse(localStorage.getItem("wdzx.calllog")||"[]"); }catch(e){ return []; } }
+function aiPromptOv(id){ return (st&&st.aiPromptOv&&st.aiPromptOv[id])||null; }
+function saveAiPromptOv(id,sys,user){
+  st.aiPromptOv=st.aiPromptOv||{};
+  const cur=st.aiPromptOv[id]||{};
+  const next={};
+  if(sys!=null) next.sys=sys; else if(cur.sys!=null) next.sys=cur.sys;
+  if(user!=null) next.user=user; else if(cur.user!=null) next.user=cur.user;
+  if(!("sys"in next)&&!("user"in next)) delete st.aiPromptOv[id]; else st.aiPromptOv[id]=next;
+  save();
+}
+function clearAiPromptOv(id){ if(st.aiPromptOv){ delete st.aiPromptOv[id]; save(); } }
+function aiChOff(id){ return !!(st&&st.aiChOff&&st.aiChOff[id]); }
+function toggleAiCh(id){ st.aiChOff=st.aiChOff||{}; st.aiChOff[id]=aiChOff(id)?0:1; if(!st.aiChOff[id]) delete st.aiChOff[id]; save(); }
+/* dsChat 入口统一应用：通路停用 → 抛错（各调用点 fail-open 落本地兜底）；提示词修订 → 按角色整体替换 */
+function aiApplyChannel(messages,opts){
+  const o=opts||{}; const id=o.ch||o.kind||"chat";
+  if(aiChOff(id)){ const e=new Error("AI_CH_OFF:"+id); e.aiChOff=true; throw e; }
+  const ov=aiPromptOv(id);
+  if(!ov) return messages;
+  return messages.map(m=>{
+    if(m.role==="system"&&ov.sys!=null) return Object.assign({},m,{content:ov.sys});
+    if(m.role==="user"&&ov.user!=null) return Object.assign({},m,{content:ov.user});
+    return m;
+  });
+}
+
 /* v2：callLog（R1.3d）——耗时/缓存命中/重试/错误码，内存环队列 + 截断落盘 */
 let _callLog=[];
 function callLog(entry){
@@ -9174,6 +9326,8 @@ async function dsChat(messages, opts, onDelta){
   if(!dsReady()) throw new Error("未配置密钥");
   const o=(opts===true)?{kind:"evolve"}:((opts&&typeof opts==="object")?opts:{});
   const kind=o.kind||"chat";
+  const ch=o.ch||kind;
+  messages=aiApplyChannel(messages,o);   /* v73：通路停用拦截 + 提示词修订覆盖 */
   const profile=Object.assign({},DS_PROFILES[kind]||DS_PROFILES.chat);
   const key=dsKeyGet().trim();
   const wantTools=!!o.tools;
@@ -9185,6 +9339,11 @@ async function dsChat(messages, opts, onDelta){
     const t0=Date.now();
     try{
       const model=o.model||profile.model||DS_MODEL;
+      /* v73：实发提示词快照（面板审计真源——看到的就是实际发出去的） */
+      _aiSnap[ch]={at:new Date().toISOString(),model,kind,
+        sys:(messages.find(m=>m.role==="system")||{}).content||"",
+        user:([...messages].reverse().find(m=>m.role==="user")||{}).content||"",
+        ov:!!aiPromptOv(ch)};
       const body={model,messages,
         ...(profile.temperature!=null?{temperature:profile.temperature}:{}),
         max_tokens:o.max_tokens||profile.max_tokens,
@@ -9199,10 +9358,10 @@ async function dsChat(messages, opts, onDelta){
         body:JSON.stringify(body),
         signal:ctrl.signal});
       clearTimeout(t);
-      if(r.status===401){ aiHealth="error"; callLog({kind,err:401,ms:Date.now()-t0}); throw new Error("密钥无效(401)"); }
-      if(r.status===402||r.status===403){ aiHealth="error"; callLog({kind,err:r.status,ms:Date.now()-t0}); throw new Error("额度不足或禁止("+r.status+")"); }
+      if(r.status===401){ aiHealth="error"; callLog({ch,kind,err:401,ms:Date.now()-t0}); throw new Error("密钥无效(401)"); }
+      if(r.status===402||r.status===403){ aiHealth="error"; callLog({ch,kind,err:r.status,ms:Date.now()-t0}); throw new Error("额度不足或禁止("+r.status+")"); }
       if(_retryable(r.status)){ throw Object.assign(new Error("可重试("+r.status+")"),{status:r.status}); }
-      if(!r.ok){ callLog({kind,err:r.status,ms:Date.now()-t0}); throw new Error("接口异常("+r.status+")"); }
+      if(!r.ok){ callLog({ch,kind,err:r.status,ms:Date.now()-t0}); throw new Error("接口异常("+r.status+")"); }
       aiHealth="ok";
       /* ===== 流式读取（R1.2b：SSE 逐 delta） ===== */
       if(wantStream){
@@ -9226,14 +9385,14 @@ async function dsChat(messages, opts, onDelta){
             }catch(e){ /* SSE 心跳/半截块非合法 JSON 属正常，仅调试期留痕 */ if(payload&&payload!=="[DONE]") console.warn('[ds stream] 坏块已跳过',String(payload).slice(0,80)); }
           }
         }
-        callLog({kind,ms:Date.now()-t0,stream:true,cached:usage&&usage.prompt_cache_hit_tokens||0});
+        callLog({ch,kind,ms:Date.now()-t0,stream:true,cached:usage&&usage.prompt_cache_hit_tokens||0});
         const c=full.trim();
         if(!c) throw new Error("返回为空");
         return c;
       }
       /* ===== 非流式 ===== */
       const j=await r.json();
-      callLog({kind,ms:Date.now()-t0,cached:j.usage&&j.usage.prompt_cache_hit_tokens||0,retry:attempt>0});
+      callLog({ch,kind,ms:Date.now()-t0,cached:j.usage&&j.usage.prompt_cache_hit_tokens||0,retry:attempt>0});
       const msg=j.choices&&j.choices[0]&&j.choices[0].message;
       if(!msg) throw new Error("返回为空");
       if(msg.tool_calls&&msg.tool_calls.length){
@@ -9248,7 +9407,7 @@ async function dsChat(messages, opts, onDelta){
       const isAbort=/abort/i.test(String(e&&e.name||e));
       if(isAbort||e&&e.status&&_retryable(e.status)){
         if(attempt<1){ attempt++; await new Promise(rs=>setTimeout(rs,_backoffMs(attempt))); continue; }
-        aiHealth="down"; callLog({kind,err:isAbort?"timeout":"net",ms:Date.now()-t0,retried:1});
+        aiHealth="down"; callLog({ch,kind,err:isAbort?"timeout":"net",ms:Date.now()-t0,retried:1});
         throw new Error("网络超时或限流，重试后仍失败");
       }
       throw e;
@@ -9319,7 +9478,7 @@ async function genPersona(npcId, feedback){
     +"\n  relations: [{name,rel}],"
     +"\n  goal: 个人目标30字内,"
     +"\n  arc: 角色弧线40字内(渐进不突兀)";
-  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {kind:"persona_r1"});
+  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {ch:"persona",kind:"persona_r1"});
   let card;
   try{ card=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) card=JSON.parse(m[0]); else throw e; }
@@ -9378,7 +9537,7 @@ async function genQuestBrief(q){
     +(oralInfo?("\n\n涉及英文导游词："+oralInfo):"")
     +"\n\n注意：「关卡定位」由隐喻引擎给出，只作氛围参考（战斗关才有雾怪层级；非战斗关如整备/夜巡/拓片不得写战斗）。围绕当前任务本身叙事，自然借用定位中的意象即可，不要复读定位文字。"
     +"\n\n请输出JSON：{scene:string(一页轻小说式的场景画面，≤80字),dialog:[{s:\"n\"或\"p\",t:string(台词)}](4～9条完整剧情互动，总字数250～400，NPC台词s为\"n\"、玩家台词s为\"p\"),necessity:string(此行为何:像同行者低声说的话,点出就职典礼只认她这个域外之人,≤70字),impact:string(雾散之后:云汀圣女之力复苏与驱雾救世的进展,≤70字),reward:string(此行所得:修行/灵铢/新的路如何通向归乡,≤70字,不写数字),metaphor:string(有余韵的轻小说式旁注,≤30字)}。";
-  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {kind:"questbrief"});
+  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {ch:"questBrief",kind:"questbrief"});
   let o;
   try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else throw e; }
@@ -9555,7 +9714,7 @@ async function aiReciteReview(key, text, container){
     +"只输出不超过 220 字的简洁文本，不要标题、不要编号、不要 markdown。";
   const user="段落标题："+(o?o.name+" §"+(o.sec+1):key)+"\n原文：\n"+text.slice(0,800)+"\n请评讲。";
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"});
+    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"reciteReview",kind:"polish"});
     const txt=(raw||"").trim().slice(0,260);
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon);font-size:13px">${esc(txt)}</div>`;
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉评讲暂不可用——离线模式下自评结果已入档，继续即可。</div>`; }
@@ -9570,7 +9729,7 @@ async function aiTransReview(src, mine, ref, dir, key, container){
     +"只输出不超过 220 字的简洁文本，不要标题、不要编号、不要 markdown。";
   const user="方向："+(dir==="zh2en"?"中译英":"英译中")+"\n原文：\n"+src.slice(0,400)+"\n参考译文：\n"+ref.slice(0,400)+"\n考生译文：\n"+mine.slice(0,400)+"\n请评讲。";
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"});
+    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"transReview",kind:"polish"});
     const txt=(raw||"").trim().slice(0,260);
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon);font-size:13px">${esc(txt)}</div>`;
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉评讲暂不可用——离线模式下自评结果已入档，继续即可。</div>`; }
@@ -9585,7 +9744,7 @@ async function aiOralStory(oa, container){
     +"4. 不超过 300 字，不要标题、不要编号、不要 markdown。";
   const user="景点："+oa.name+"\n段落："+oa.h+"\n原文：\n"+oa.text.slice(0,800)+"\n请讲这个故事。";
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"chat"});
+    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"oralStory",kind:"chat"});
     const txt=(raw||"").trim().slice(0,360);
     container.innerHTML=`<div class="note" style="border-left-color:var(--cyber);font-size:13px">
       <div style="font-size:12px;color:var(--dim);margin-bottom:4px">「${esc(oa.name||"景点")}」的身体故事</div>
@@ -9600,7 +9759,7 @@ async function aiCardExpand(text, card, container, textarea, markDirty){
     +"要求：\n1. 扩写内容不得超过原文的 3 倍长度\n2. 保持导游考试知识准确性\n3. 语言通俗自然，像同伴分享知识\n4. 不输出 markdown，纯文本\n5. 只输出扩写后的完整内容（原文+补充），不解释、不编号、不总结。";
   const user="类型："+(card.catLabel||card.cat||"考点")+"\n编号："+(card.id||"")+"\n原文：\n"+text.slice(0,1200)+"\n请扩写。";
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"chat"});
+    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"cardExpand",kind:"chat"});
     let txt=(raw||"").trim();
     if(txt.length>maxOut) txt=txt.slice(0,maxOut)+"…";
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon)">
@@ -9626,7 +9785,7 @@ async function aiOralReview(q, a, ref, container){
     +"只输出不超过 180 字的简洁文本，不要标题、不要编号、不要 markdown。";
   const user="问题：\n"+q.slice(0,300)+"\n考生回答：\n"+a.slice(0,600)+"\n参考材料：\n"+(ref||"无").slice(0,300)+"\n请协判。";
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"});
+    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"oralReview",kind:"polish"});
     const txt=(raw||"").trim().slice(0,220);
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon);font-size:13px">${esc(txt)}</div>`;
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉协判暂不可用——请对照参考材料自行核对。</div>`; }
@@ -9663,7 +9822,7 @@ async function r1StageSummaryChat(newStage, oldStage, bias){
     +"向玩家总结这一阶段的游戏情况，点出她擅长和吃力的任务类别，给出一条互动建议。只输出 1-3 句对白，不超过 100 字。";
   const user="偏差数据（正=比预估慢，负=比预估快）：\n"+biasText(bias);
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"persona_r1"});
+    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"biasText",kind:"persona_r1"});
     const text=String(raw||"").slice(0,200);
     if(text){ st.dialogue.push({role:"npc",npc:"yunting",text,at:new Date().toISOString(),day:st.day,kind:"sys"}); save(); toast("云汀对白已生成"); }
   }catch(e){}
@@ -9696,7 +9855,7 @@ async function r1GroupChatGuide(stage, bias){
     +biasText(bias)
     +"\n请生成群聊指导。";
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"persona_r1"});
+    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"biasText",kind:"persona_r1"});
     let o;
     try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
     catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else return; }
@@ -9727,7 +9886,7 @@ async function r1TransQuizGen(stage){
     +"\n双语句库参考：\n"+JSON.stringify(sample125.slice(0,8))
     +"\n请生成 5 道传译题。";
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"persona_r1"});
+    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"biasText",kind:"persona_r1"});
     let o;
     try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
     catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else return; }
@@ -9796,7 +9955,7 @@ function renderSave(){
               const batch=toRewrite.slice(0,40);
               const sys="你是日式RPG《问道之旅·四十五日》的剧本导演。下面是一段玩家与NPC的对话记录，腔调与新版人设不符。请逐条重写为日漫/GAL/轻小说风格的中文对白。硬性要求：①保持每条消息的 role 与 npc 不变；②保留原意和关键信息；③禁止半文半白古风腔（约莫/几桩/未了/可好/快些/光景/桩要紧事/已了/尚余/待您出手等）；④禁止教师腔/客服腔/心理医生腔/AI腔；⑤符合角色专属约束与语言法铁律。只输出 JSON 数组，每个元素含 i（原索引）、text（重写后文本）。";
               const user=JSON.stringify(batch);
-              const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{kind:"polish"});
+              const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"savePersona",kind:"polish"});
               let arr=null;
               try{ arr=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }catch(e){}
               if(!Array.isArray(arr)) throw new Error("返回格式非数组");
@@ -9821,7 +9980,7 @@ function renderSave(){
     }
     const s=$("#dsStatus",ov);
     if(dsReady()){ s.className="estatus saved"; s.textContent="● 已保存 · 正在连通性测试…";
-      dsChat([{role:"user",content:"只回复：ok"}],{kind:"polish"}).then(()=>{ s.textContent="● 已配置并连通 · AI 功能可用"; s.className="estatus saved"; toast("密钥有效"); })
+      dsChat([{role:"user",content:"只回复：ok"}],{ch:"keyPing",kind:"polish"}).then(()=>{ s.textContent="● 已配置并连通 · AI 功能可用"; s.className="estatus saved"; toast("密钥有效"); })
         .catch(e=>{ s.textContent="● 已保存，但调用失败："+e.message+"（仍可离线使用）"; s.className="estatus dirty"; toast("连通测试失败："+e.message); });
     } else { s.className="estatus dirty"; s.textContent="○ 未配置 · 使用内置内容"; toast("已清除密钥"); }
     $("#dsPersona",ov).disabled=!dsReady();
@@ -10316,7 +10475,7 @@ function dsKeyGate(after, opts){
     dsKeySet(v); SFX.tap();
     if(dsReady()){
       s.className="estatus saved"; s.textContent="● 已保存 · 灵脉连通测试中…";
-      dsChat([{role:"user",content:"只回复：ok"}],{kind:"polish"}).then(()=>{
+      dsChat([{role:"user",content:"只回复：ok"}],{ch:"keyPing",kind:"polish"}).then(()=>{
         aiHealth="ok";
         s.className="estatus saved"; s.textContent="● 已连通 · 灵脉已通"; toast("密钥有效，灵脉已通");
         if(blocking) ov.remove();
@@ -10391,7 +10550,7 @@ async function reconnectAi(){
   aiHealth="down";
   toast("正在重连灵脉…");
   try{
-    await dsChat([{role:"user",content:"只回复：ok"}],{kind:"polish"});
+    await dsChat([{role:"user",content:"只回复：ok"}],{ch:"keyPing",kind:"polish"});
     aiHealth="ok"; toast("灵脉已通");
   }catch(e){
     aiHealth="error"; toast("重连失败："+(e.message||e));
