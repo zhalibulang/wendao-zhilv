@@ -2370,6 +2370,54 @@ function migrateNpcIds(){
   if(st.privateChat&&typeof st.privateChat==="object")
     Object.keys(st.privateChat).forEach(id=>{ const arr=st.privateChat[id]; if(Array.isArray(arr)) arr.forEach(fixMsg); });
 }
+/* v72 修诵卷底稿校订迁移：WAL/TOM 删「卷首」空段后索引整体前移（1..10→0..9）；
+   TAN §5 拆成两段后 5..7→6..8（0..4 不动，旧 §5 进度挂在拆分后的圜丘坛段上）。
+   同步迁移 ORB key（srs/recTimes/rtPlan cards）与 edits uid（full:{id}:{sec}），从高往低防碰撞 */
+function migrateOralIdx(){
+  if(!st||st._orbMigV71) return;
+  st._orbMigV71=1;
+  const IDX=[[10,9],[9,8],[8,7],[7,6],[6,5],[5,4],[4,3],[3,2],[2,1],[1,0]];
+  const MV={WAL:IDX,TOM:IDX,TAN:[[7,8],[6,7],[5,6]]};
+  const rekey=k=>{
+    const m=/^ORB-([A-Z]+)-(\d+)$/.exec(k||""); if(!m) return k;
+    const mv=MV[m[1]]; if(!mv) return k;
+    const hit=mv.find(p=>p[0]===+m[2]);
+    return hit?("ORB-"+m[1]+"-"+hit[1]):k;
+  };
+  ["srs","recTimes"].forEach(f=>{
+    const obj=st[f]; if(!obj||typeof obj!=="object") return;
+    const out={};
+    Object.keys(obj).forEach(k=>{ const nk=rekey(k); if(nk!==k&&out[nk]) return; out[nk]=obj[k]; });
+    st[f]=out;
+  });
+  if(st.rtPlan&&typeof st.rtPlan==="object")
+    Object.keys(st.rtPlan).forEach(id=>{
+      const p=st.rtPlan[id];
+      if(p&&Array.isArray(p.cards)) p.cards=p.cards.map(rekey);
+    });
+  if(st.edits&&typeof st.edits==="object"){
+    const EIDX=[[10,9],[9,8],[8,7],[7,6],[6,5],[5,4],[4,3],[3,2],[2,1],[1,0],[0,-1]]; /* 0→-1=旧卷首段已删，丢弃 */
+    const EM=[["full:great-wall:",EIDX],["full:ming-tombs:",EIDX],["full:temple-of-heaven:",[[7,8],[6,7],[5,6]]]];
+    const out={};
+    Object.keys(st.edits).forEach(k=>{
+      let nk=k;
+      for(const [pre,map] of EM){
+        if(!k.startsWith(pre)) continue;
+        const sfx=k.slice(pre.length);
+        if(/^\d+$/.test(sfx)){
+          const i=+sfx, hit=map.find(p=>p[0]===i);
+          if(hit&&hit[1]>=0) nk=pre+hit[1];
+          else if(hit&&hit[1]<0) return; /* 旧「卷首」段已删，丢弃其校订 */
+        }
+        break;
+      }
+      if(nk!==k&&out[nk]) return;
+      out[nk]=st.edits[k];
+    });
+    st.edits=out;
+  }
+  save();
+}
 function reconcile(){
   if(!st) return;
   /* 旧存档迁移：补齐新版本字段，杜绝下游渲染空引用 */
@@ -2398,6 +2446,8 @@ function reconcile(){
   migrateSettlePlaceholders();
   /* v62 Task14：旧 NPC id/人名存档迁移（幂等） */
   migrateNpcIds();
+  /* v72：修诵卷底稿校订后的 ORB 索引迁移（幂等） */
+  migrateOralIdx();
   /* v53：清除旧出题算法留在错题本里的碎段形式题（选项含 * 或 choice 选项不足 6 字）。
      知识点记录（pid/topic/seen）保留，forms 清空后下次进入按完整句新题重造（上限 5） */
   if(Array.isArray(st.wrong)){

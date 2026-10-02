@@ -225,7 +225,71 @@ const driver=`
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(!htmlSrc.includes('.dlg.gal{overflow-y:auto;-webkit-overflow-scrolling:touch}')) throw new Error('≤899px 缺 .dlg.gal 滚动修复');
     const sw=fs.readFileSync(require('path').join(__dirname,'sw.js'),'utf8');
-    if(!/wdzx-v(69|70)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
+    if(!/wdzx-v(69|70|71)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
+  });
+  run('v72 修诵卷底稿校订：结构审计',()=>{
+    const wcOf=t=>String(t||'').trim().split(/\\s+/).filter(w=>/[A-Za-z0-9]/.test(w)).length;
+    for(const o of D.oralFull){
+      if(o.sections[0].h!=='Welcome') throw new Error(o.id+' 首段标题应为 Welcome，实为 '+o.sections[0].h);
+      let sum=0,expect=1;
+      o.sections.forEach((s,i)=>{
+        const tx=String(s.text||'');
+        if(!s.h||!tx.trim()) throw new Error(o.id+' §'+(i+1)+' 空标题/空文本');
+        if(tx.trim()==='---') throw new Error(o.id+' §'+(i+1)+' 仍为垃圾段');
+        const wc=wcOf(tx);
+        if(wc<30) throw new Error(o.id+' §'+(i+1)+' 仅'+wc+'词（<30 不应成段）');
+        sum+=wc;
+        const m=/^(\\d+)\\. /.exec(s.h);
+        if(m){ if(+m[1]!==expect) throw new Error(o.id+' §'+(i+1)+' 标题跳号: '+s.h); expect++; }
+      });
+      if(o.words!==sum) throw new Error(o.id+' words 声明'+o.words+'≠实际'+sum);
+    }
+    const tan=D.oralFull.find(o=>o.id==='temple-of-heaven');
+    if(tan.sections.length!==9) throw new Error('天坛应为 9 段，实为 '+tan.sections.length);
+    if(tan.sections[4].h!=='4. The Circular Mound Altar'||tan.sections[5].h!=='5. The Echo Wall and the Imperial Vault')
+      throw new Error('天坛 §5 拆分标题缺失');
+    if(!tan.sections[4].text.includes('Go on, try it.')||!tan.sections[5].text.startsWith('South of the Hall of Prayer'))
+      throw new Error('天坛拆分点错误');
+    const cntOf=id=>D.oralFull.find(o=>o.id===id).sections.length;
+    if(cntOf('great-wall')!==10||cntOf('ming-tombs')!==10) throw new Error('长城/明十三陵删卷首后应为 10 段');
+    /* 调度池与卡池同构：RTINDEX 全量入排，卡池 full 全量展示 */
+    const idxCnt=RTINDEX.oral.length, poolCnt=buildCardPool().filter(c=>c.cat==='full').length;
+    if(idxCnt!==poolCnt) throw new Error('RTINDEX('+idxCnt+')≠卡池full('+poolCnt+')');
+    if(!rtOralOf('ORB-TAN-4')||rtOralOf('ORB-TAN-4').h!=='4. The Circular Mound Altar') throw new Error('ORB-TAN-4 读取异常');
+    if(!rtOralOf('ORB-WAL-0')||rtOralOf('ORB-WAL-0').h!=='Welcome') throw new Error('ORB-WAL-0 应为 Welcome');
+  });
+  run('v72 ORB 索引迁移 migrateOralIdx',()=>{
+    reset(); reconcile();          /* 先跑一次置标记，再重置标记种旧数据实测迁移 */
+    delete st._orbMigV71;
+    st.srs={}; st.recTimes={}; st.rtPlan={}; st.edits={};
+    st.srs['ORB-WAL-1']={tier:2}; st.srs['ORB-WAL-10']={tier:1};
+    st.srs['ORB-TOM-3']={tier:2}; st.srs['ORB-TAN-4']={tier:3}; st.srs['ORB-TAN-5']={tier:1};
+    st.srs['ORB-TAN-7']={tier:1}; st.srs['ORB-GUG-2']={tier:2}; st.srs['S1-01-01']={tier:1};
+    st.recTimes['ORB-WAL-2']={last:30,best:30,n:1,sum:30};
+    st.rtPlan['X1']={cat:'c',cards:['ORB-TAN-5','ORB-WAL-1','S1-01-01']};
+    st.edits['full:great-wall:3']=[{at:'',text:'E3'}];
+    st.edits['full:great-wall:0']=[{at:'',text:'卷首旧校订'}];
+    st.edits['full:temple-of-heaven:5']=[{at:'',text:'E5'}];
+    st.edits['full:temple-of-heaven:4']=[{at:'',text:'E4'}];
+    st.edits['point:S1-01-01']=[{at:'',text:'P'}];
+    migrateOralIdx();
+    const has=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
+    if(!has(st.srs,'ORB-WAL-0')||st.srs['ORB-WAL-0'].tier!==2) throw new Error('WAL 1→0 未迁');
+    if(!has(st.srs,'ORB-WAL-9')) throw new Error('WAL 10→9 未迁');
+    if(!has(st.srs,'ORB-TOM-2')) throw new Error('TOM 3→2 未迁');
+    if(!has(st.srs,'ORB-TAN-4')||st.srs['ORB-TAN-4'].tier!==3) throw new Error('TAN 4 应原位不动');
+    if(!has(st.srs,'ORB-TAN-6')) throw new Error('TAN 5→6 未迁');
+    if(!has(st.srs,'ORB-TAN-8')) throw new Error('TAN 7→8 未迁');
+    if(!has(st.srs,'ORB-GUG-2')||!has(st.srs,'S1-01-01')) throw new Error('无关 key 误动');
+    if(has(st.srs,'ORB-WAL-1')||has(st.srs,'ORB-TAN-5')||has(st.srs,'ORB-TAN-7')) throw new Error('旧 key 残留');
+    if(!has(st.recTimes,'ORB-WAL-1')) throw new Error('recTimes 2→1 未迁');
+    if(st.rtPlan.X1.cards.join(',')!=='ORB-TAN-6,ORB-WAL-0,S1-01-01') throw new Error('rtPlan cards 未迁: '+st.rtPlan.X1.cards.join(','));
+    if(!has(st.edits,'full:great-wall:2')) throw new Error('edits WAL 3→2 未迁');
+    if(has(st.edits,'full:great-wall:0')) throw new Error('旧卷首校订应丢弃');
+    if(!has(st.edits,'full:temple-of-heaven:6')) throw new Error('edits TAN 5→6 未迁');
+    if(!has(st.edits,'full:temple-of-heaven:4')||!has(st.edits,'point:S1-01-01')) throw new Error('edits 无关键误动');
+    reconcile();                    /* 标记已置：二次 reconcile 不得双移 */
+    if(!has(st.srs,'ORB-TAN-6')||has(st.srs,'ORB-TAN-7')) throw new Error('迁移标记失效，二次执行双移');
   });
   run('v71 选择题AI逐项解析 + 手机端任务页滚动根治',()=>{
     reset();
@@ -237,8 +301,8 @@ const driver=`
     if(!oqSrc.includes('160～340')) throw new Error('选项题字数上限未放宽至 160～340');
     /* 3. 手机端滚动根治：gal-right 不得带内联 overflow:hidden/max-height（v69 媒体查询此前被内联样式压制） */
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
-    if(/class="gal-right"\s+style="[^"]*overflow\s*:\s*hidden/.test(htmlSrc)) throw new Error('gal-right 仍带内联 overflow:hidden');
-    if(/class="gal-right"\s+style="[^"]*max-height/.test(htmlSrc)) throw new Error('gal-right 仍带内联 max-height');
+    if(/class="gal-right"\\s+style="[^"]*overflow\\s*:\\s*hidden/.test(htmlSrc)) throw new Error('gal-right 仍带内联 overflow:hidden');
+    if(/class="gal-right"\\s+style="[^"]*max-height/.test(htmlSrc)) throw new Error('gal-right 仍带内联 max-height');
     /* 4. gal-right 基础布局已移到媒体查询外（窄屏 flex 列布局生效） */
     if(!/\.dlg\.gal \.gal-right\{position:relative;display:flex;flex-direction:column;overflow:hidden/.test(htmlSrc)) throw new Error('gal-right 基础布局未移出媒体查询');
     /* 5. 窄屏媒体查询的解禁规则仍在 */
