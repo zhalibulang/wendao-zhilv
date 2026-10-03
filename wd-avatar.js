@@ -112,13 +112,18 @@ const SPR={
 
 const _cache={};
 
+/* v74：旧 NPC id → 新 id（遗留存档/消息仍可能带旧 id；与 wd-cfg.js NPC_ID_REMAP 同源） */
+const AV_ALIAS={qingxuan:"yunting",yunheng:"yunting",tiemian:"shenzhao",
+  liuruyan:"chengxiu",xuanji:"tina",smq:"wantang",moxiaogu:"wantang"};
+
 const WDAvatar={
   SPR,
+  ALIAS:AV_ALIAS,
   /* NPC/玩家头像 dataURL（PNG，scale=每逻辑像素边长，默认 3 → 36×36）；结果按 key 缓存 */
   avatarURL(id,scale){
     const s=scale||3, key=id+"_"+s;
     if(_cache[key]) return _cache[key];
-    const spr=SPR[id]||SPR.yunting;
+    const spr=SPR[id]||SPR[AV_ALIAS[id]]||SPR.yunting;
     const c=document.createElement("canvas"); c.width=12*s; c.height=12*s;
     const g=c.getContext("2d");
     spr.p.forEach((row,ry)=>{ for(let rx=0;rx<row.length;rx++){

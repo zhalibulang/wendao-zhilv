@@ -140,11 +140,36 @@ function processPortraitFile(file,opt){
     return {url:url2, w:w0, h:h0, kb:Math.round(url2.length/1024)};
   });
 }
+/* v62 NPC id 重映射（与 index.html NPC_REMAP 同源；本表改动时两处同步）。
+   头像/立绘按 NPC id 存桶，id 体系换新后旧桶若不迁移，玩家已上传的图会"丢失"。
+   多对一（qingxuan/yunheng→yunting、smq/moxiaogu→wantang）：目标键已有值则新值优先，旧值丢弃。 */
+const NPC_ID_REMAP={qingxuan:"yunting",yunheng:"yunting",tiemian:"shenzhao",
+  liuruyan:"chengxiu",xuanji:"tina",smq:"wantang",moxiaogu:"wantang"};
+function migrateNpcMedia(o){
+  if(!o||typeof o!=="object") return false;
+  let touched=false;
+  ["npcAvatar","npcPortrait"].forEach(bucket=>{
+    const b=o[bucket]; if(!b||typeof b!=="object") return;
+    Object.keys(NPC_ID_REMAP).forEach(oldId=>{
+      if(!(oldId in b)) return;
+      const newId=NPC_ID_REMAP[oldId], old=b[oldId];
+      delete b[oldId]; touched=true;
+      if(old&&!b[newId]) b[newId]=old;   /* 新键已有值=新体系下重传，优先保留新值 */
+    });
+  });
+  return touched;
+}
 function load(){
+  let migrated=false;
   try{
     const r=localStorage.getItem(KEY);
     if(r){ const o=JSON.parse(r);
-      if(o&&o.ver===VER){ cfg=Object.assign(defaults(),o); sanitize(true); return; }
+      if(o&&o.ver===VER){
+        migrated=migrateNpcMedia(o);       /* 落盘前迁移旧 id 头像/立绘桶 */
+        cfg=Object.assign(defaults(),o); sanitize(true);
+        if(migrated){ try{ save(); }catch(e){} }
+        return;
+      }
     }
   }catch(e){}
   cfg=defaults();

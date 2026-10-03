@@ -8218,7 +8218,12 @@ function renderCfg(){
 
   /* ---- 头像 / 立绘 ---- */
   function paintGrid(){
-    const list=[{id:"_player",name:"我的头像",noPortrait:true}].concat(D.npcs.map(n=>({id:n.id,name:WDCfg.npcName(n.id,n.name)})));
+    /* v74：头像网格必须与游戏实际 NPC 体系同源（WDRegistry 新六角色）；
+       旧 D.npcs 是已淘汰 id（qingxuan/smq…），按旧 id 上传的图游戏内读不到 */
+    const reg=(window.WDRegistry&&WDRegistry.all())||{};
+    const npcList=Object.keys(reg).length?Object.values(reg).map(r=>({id:r.id,name:WDCfg.npcName(r.id,r.name)}))
+      :D.npcs.map(n=>({id:n.id,name:WDCfg.npcName(n.id,n.name)}));
+    const list=[{id:"_player",name:"我的头像",noPortrait:true}].concat(npcList);
     const g=$("#avGrid",ov);
     g.innerHTML=list.map(x=>{
       const p=WDCfg.portraitURL?WDCfg.portraitURL(x.id):null;

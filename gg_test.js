@@ -225,7 +225,7 @@ const driver=`
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(!htmlSrc.includes('.dlg.gal{overflow-y:auto;-webkit-overflow-scrolling:touch}')) throw new Error('≤899px 缺 .dlg.gal 滚动修复');
     const sw=fs.readFileSync(require('path').join(__dirname,'sw.js'),'utf8');
-    if(!/wdzx-v(69|70|71|72)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
+    if(!/wdzx-v(69|70|71|72|73)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
   });
   run('v72 修诵卷底稿校订：结构审计',()=>{
     const wcOf=t=>String(t||'').trim().split(/\\s+/).filter(w=>/[A-Za-z0-9]/.test(w)).length;
@@ -347,6 +347,41 @@ const driver=`
     const htmlFs=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(htmlFs.includes('又是谁、在哪、身上带着什么故事')) throw new Error('英文锚点词拟人化模板未清除');
     if(!htmlFs.includes('是地名、寒暄称谓还是普通词')) throw new Error('缺英文锚点词新引导语');
+  });
+  run('v74 头像/立绘旧 NPC id 迁移与网格同源',()=>{
+    /* 1. cfg 旧 id 桶迁移：新键优先、多对一、幂等 */
+    localStorage.removeItem('wdzx.cfg.v1');
+    localStorage.setItem('wdzx.cfg.v1',JSON.stringify({ver:1,
+      npcAvatar:{qingxuan:'A',yunheng:'B',smq:'C',tiemian:'T',shenzhao:'NEW',xuanji:'X'},
+      npcPortrait:{tiemian:'P',liuruyan:'L'},
+      userAvatar:'ME'}));
+    WDCfg.init();
+    const c1=WDCfg.all();
+    if(c1.npcAvatar.yunting!=='A') throw new Error('qingxuan 头像应迁入 yunting，实得 '+c1.npcAvatar.yunting);
+    if('yunheng' in c1.npcAvatar||'qingxuan' in c1.npcAvatar||'smq' in c1.npcAvatar||'tiemian' in c1.npcAvatar||'xuanji' in c1.npcAvatar)
+      throw new Error('旧 id 头像键残留');
+    if(c1.npcAvatar.shenzhao!=='NEW') throw new Error('新键已有值时应优先保留（tiemian 不得覆盖）');
+    if(c1.npcAvatar.wantang!=='C'||c1.npcAvatar.tina!=='X') throw new Error('smq/xuanji 未迁入');
+    if(c1.npcPortrait.shenzhao!=='P'||c1.npcPortrait.chengxiu!=='L') throw new Error('立绘桶未迁移');
+    if(c1.userAvatar!=='ME') throw new Error('玩家自己头像不得受影响');
+    /* 落盘持久化 */
+    const disk=JSON.parse(localStorage.getItem('wdzx.cfg.v1'));
+    if(disk.npcAvatar.yunting!=='A'||'qingxuan' in disk.npcAvatar) throw new Error('迁移未持久化到 localStorage');
+    /* 幂等：二次 init 不变化不报错 */
+    WDCfg.init();
+    const c2=WDCfg.all();
+    if(c2.npcAvatar.yunting!=='A'||c2.npcPortrait.shenzhao!=='P') throw new Error('二次 init 迁移结果漂移');
+    localStorage.removeItem('wdzx.cfg.v1');
+    /* 2. 配置中心头像网格数据源 = WDRegistry（新体系），不再用已淘汰的 D.npcs */
+    const htmlFs=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
+    if(!/function paintGrid[\\s\\S]{0,400}?WDRegistry\.all\(\)/.test(htmlFs)) throw new Error('paintGrid 未改用 WDRegistry');
+    /* 3. WDAvatar 旧 id 别名：旧 id 解析到新内置像素像，不再塌成默认 yunting 误植 */
+    if(typeof WDAvatar.ALIAS!=='object'||WDAvatar.ALIAS.qingxuan!=='yunting') throw new Error('WDAvatar.ALIAS 缺失');
+    if(WDAvatar.avatarURL('tiemian')!==WDAvatar.avatarURL('shenzhao')) throw new Error('旧 id tiemian 应解析到 shenzhao 内置像');
+    /* 4. 注册表六角色均可取到头像/立绘桶位（不抛错） */
+    Object.keys(WDRegistry.all()).forEach(id=>{
+      if(typeof WDAvatar.avatarURL(id)!=='string'||!WDAvatar.avatarURL(id)) throw new Error('注册角色 '+id+' 无内置头像');
+    });
   });
   run('v71 选择题AI逐项解析 + 手机端任务页滚动根治',()=>{
     reset();
