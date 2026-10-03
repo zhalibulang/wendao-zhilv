@@ -152,7 +152,7 @@ const driver=`
   });
   run('v62 Task7 错题解析参数/题型分支/受控markdown',()=>{
     reset();
-    const oqSrc=openQuest.toString();
+    const oqSrc=openQuest.toString()+'\\n'+buildWrongReplyMsgs.toString();
     if(!oqSrc.includes('max_tokens:isOptKind?700:500')) throw new Error('aiWrongReply max_tokens 未提升到 500（选项题 700）');
     if(oqSrc.includes('slice(0,120)')) throw new Error('120 字硬截断未移除');
     if(!oqSrc.includes('quizMdLite')) throw new Error('AI 返回未走受控 markdown 渲染');
@@ -225,7 +225,7 @@ const driver=`
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(!htmlSrc.includes('.dlg.gal{overflow-y:auto;-webkit-overflow-scrolling:touch}')) throw new Error('≤899px 缺 .dlg.gal 滚动修复');
     const sw=fs.readFileSync(require('path').join(__dirname,'sw.js'),'utf8');
-    if(!/wdzx-v(69|70|71|72|73|74|75|76)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
+    if(!/wdzx-v(69|70|71|72|73|74|75|76|77)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
   });
   run('v72 修诵卷底稿校订：结构审计',()=>{
     const wcOf=t=>String(t||'').trim().split(/\\s+/).filter(w=>/[A-Za-z0-9]/.test(w)).length;
@@ -451,7 +451,7 @@ const driver=`
     st.aiChOff={};
     localStorage.removeItem(AI_SNAP_KEY);
     const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
-    if(!/wdzx-v76/.test(sw)) throw new Error('sw.js 未升至 v76');
+    if(!/wdzx-v77/.test(sw)) throw new Error('sw.js 未升至 v77');
   });
   run('v77 返回键严格上一步/修诵先显原句/排序题逐项归因',()=>{
     const oqSrc=openQuest.toString();
@@ -480,9 +480,51 @@ const driver=`
     if(/所述事实不符/.test(html)) throw new Error('排序题解析仍出现无信息量空话');
     /* 4. SW 随本批 +1（v76 断言在 v76 块内） */
   });
+  run('v78 AI 通路一键预演：dryRun/builder/preview 快照/UI（静态部分）',()=>{
+    const path=require('path');
+    const htmlFs=fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
+    const chatFs=fs.readFileSync(path.join(__dirname,'wd-chat.js'),'utf8');
+    /* 1. 总工厂 + dsChat dryRun 分支 + UI 入口齐备 */
+    if(typeof aiPreviewChannel!=='function') throw new Error('aiPreviewChannel 未定义');
+    if(!/o\\.dryRun/.test(dsChat.toString())) throw new Error('dsChat 缺 dryRun 分支');
+    if(!/AI_DRY_RUN/.test(dsChat.toString())) throw new Error('dryRun 未在 fetch 前抛 AI_DRY_RUN');
+    if(!htmlFs.includes('data-aich-preview')) throw new Error('卡片缺预览按钮 data-aich-preview');
+    if(!htmlFs.includes('👁 预览当前指令')) throw new Error('缺预览按钮文案');
+    /* 2. index.html 22 组 builder 全部存在（实发/预演单一事实源） */
+    ['buildQuestCueMsgs','buildGdCueMsgs','buildQuestLineMsgs','buildQuestBriefMsgs','buildWrongReplyMsgs',
+     'buildRefineActionMsgs','buildQuestAckMsgs','buildBookExtraMsgs','buildBilingualQuizMsgs','buildEnExplainMsgs',
+     'buildCutsceneMsgs','buildGuidanceMsgs','buildRefineYuntingMsgs','buildPersonaMsgs','buildBiasStageMsgs',
+     'buildBiasGroupMsgs','buildOralReviewMsgs','buildReciteReviewMsgs','buildTransReviewMsgs','buildOralStoryMsgs',
+     'buildCardExpandMsgs','buildSavePersonaMsgs','buildKeyPingMsgs'].forEach(fn=>{
+      if(typeof eval(fn)!=='function') throw new Error('builder 缺失：'+fn);
+    });
+    /* 3. wd-chat 七通道 previewBuild */
+    if(typeof WDChat.previewBuild!=='function') throw new Error('WDChat.previewBuild 未定义');
+    ['chat','chatTools','autoSummary','evolve','directorPlan','directorFlow','directorAudit'].forEach(id=>{
+      const b=WDChat.previewBuild(id);
+      if(!b||!Array.isArray(b.messages)||!b.messages.length||!b.opts) throw new Error('previewBuild 空组装：'+id);
+      if(!b.messages.some(m=>m.role==='system'||m.role==='user')) throw new Error('previewBuild 无消息：'+id);
+    });
+    /* 4. wrongReply 单一事实源：builder 含全员铁律与逐项讲评结构 */
+    const wr=buildWrongReplyMsgs.toString();
+    if(!wr.includes('WDChat.masterRule')) throw new Error('wrongReply builder 未注入 masterRule');
+    if(!wr.includes('逐项讲评全部选项')) throw new Error('wrongReply builder 缺选择题逐项讲评规则');
+    /* 5. 实发路径确实复用 builder（不是另抄一份） */
+    if(!genQuestCue.toString().includes('buildQuestCueMsgs')) throw new Error('genQuestCue 未复用 builder');
+    if(!/function aiWrongReply[\\s\\S]{0,300}buildWrongReplyMsgs/.test(htmlFs)) throw new Error('aiWrongReply 未复用 builder');
+    /* 6. preview 快照字段持久化 */
+    localStorage.removeItem(AI_SNAP_KEY);
+    _aiSnapPut('pvch',{preview:true,sys:'PSYS',user:'PUSER',model:'deepseek-chat',kind:'polish',off:true,ov:false});
+    const pv=aiSnapGet('pvch');
+    if(pv.preview!==true||pv.sys!=='PSYS'||pv.off!==true) throw new Error('preview 快照字段异常');
+    localStorage.removeItem(AI_SNAP_KEY);
+    /* 7. SW 升 v77 */
+    const sw=fs.readFileSync(path.join(__dirname,'sw.js'),'utf8');
+    if(!/wdzx-v77/.test(sw)) throw new Error('sw.js 未升至 v77');
+  });
   run('v71 选择题AI逐项解析 + 手机端任务页滚动根治',()=>{
     reset();
-    const oqSrc=openQuest.toString();
+    const oqSrc=openQuest.toString()+'\\n'+buildWrongReplyMsgs.toString();
     /* 1. AI 讲解：全部选项清单始终随 user 消息传给模型（不再仅依赖 ometa） */
     if(!oqSrc.includes('全部选项清单（逐项讲评，错误项一个都不许漏）')) throw new Error('aiWrongReply 缺全部选项清单注入');
     if(!oqSrc.includes('无预设归因')) throw new Error('缺无归因选项的推断指令');
@@ -825,7 +867,7 @@ const driver=`
   run('人设/任务生成prompt含旧概念硬约束',()=>{
     reset();
     // genQuestBrief 的 sys prompt（从函数源码取）须含淘汰词禁令
-    const qsrc=genQuestBrief.toString();
+    const qsrc=genQuestBrief.toString()+'\\n'+buildQuestBriefMsgs.toString();
     if(!qsrc.includes('严禁使用已淘汰的旧概念')) throw new Error('任务说明prompt缺旧概念禁令');
     if(!qsrc.includes('导游世界')) throw new Error('任务说明prompt缺新世界观锚点');
     // wd-chat 旧概念禁令位于 user 尾消息（postHistoryRules，v2 架构）
@@ -835,7 +877,7 @@ const driver=`
   /* ===== 剧情先行 + 任务说明三要素（v27 建立 / v33 轻小说化）===== */
   run('genQuestBrief prompt含剧情先行顺序与轻小说约束（v33）',()=>{
     reset();
-    const qsrc=genQuestBrief.toString();
+    const qsrc=genQuestBrief.toString()+'\\n'+buildQuestBriefMsgs.toString();
     if(!qsrc.includes('剧情先行·任务发布顺序')) throw new Error('任务说明prompt缺剧情先行顺序约束');
     /* 三要素字段须在 schema 中明确要求 */
     if(!qsrc.includes('necessity')) throw new Error('schema缺necessity字段');
@@ -848,7 +890,7 @@ const driver=`
   });
   run('genQuestBrief prompt含核心世界观三逻辑（v33）',()=>{
     reset();
-    const qsrc=genQuestBrief.toString();
+    const qsrc=genQuestBrief.toString()+'\\n'+buildQuestBriefMsgs.toString();
     /* 玩家是唯一具备就职仪式资格的域外之人 */
     if(!qsrc.includes('域外之人')) throw new Error('缺"域外之人"硬约束');
     if(!qsrc.includes('就职仪式')) throw new Error('缺"就职仪式"硬约束');
@@ -902,17 +944,11 @@ const driver=`
   });
   run('masterRule 注入 index.html 生成点（任务简报/试炼错题回复/云蘅结算/每日引导）',()=>{
     reset();
-    const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
-    /* genQuestBrief 与 aiWrongReply 必须直接调用 masterRule */
-    const qb=htmlSrc.match(/async function genQuestBrief[\\s\\S]{0,16000}?\\n\\}/);
-    if(!qb||!qb[0].includes('WDChat.masterRule')) throw new Error('genQuestBrief 缺 masterRule 注入');
-    if(!htmlSrc.includes('WDChat.masterRule?WDChat.masterRule():""')&&htmlSrc.match(/aiWrongReply[\s\S]{0,2000}/)[0].indexOf('masterRule')<0)
-      throw new Error('aiWrongReply 缺 masterRule 注入');
-    /* refineYunting 与每日引导场景经守卫注入 */
-    const yh=htmlSrc.match(/function refineYunting[\\s\\S]{0,4000}/);
-    if(!yh||!yh[0].includes('masterRule')) throw new Error('refineYunting 缺 masterRule 注入');
-    const guide=htmlSrc.match(/所有发言像一群熟人在现场[\\s\\S]{0,400}/);
-    if(!guide||!guide[0].includes('masterRule')) throw new Error('每日引导场景缺 masterRule 注入');
+    /* v78：提示词全部抽到 buildXxxMsgs builder（实发/预演单一事实源），断言查 builder */
+    if(!buildQuestBriefMsgs.toString().includes('WDChat.masterRule')) throw new Error('buildQuestBriefMsgs 缺 masterRule 注入');
+    if(!buildWrongReplyMsgs.toString().includes('WDChat.masterRule')) throw new Error('buildWrongReplyMsgs 缺 masterRule 注入');
+    if(!buildRefineYuntingMsgs.toString().includes('masterRule')) throw new Error('buildRefineYuntingMsgs 缺 masterRule 注入');
+    if(!buildGuidanceMsgs.toString().includes('masterRule')) throw new Error('buildGuidanceMsgs 缺 masterRule 注入');
   });
   run('任务页四阶段：无导航栏、点击推进链完整（v44）',()=>{
     reset();
@@ -930,11 +966,12 @@ const driver=`
   });
   run('剧情互动多段对话：genQuestBrief v3 要求 4~9 条 dialog 且仿聊天逐条弹出（v45）',()=>{
     reset();
-    const qsrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8').match(/async function genQuestBrief[\\s\\S]{0,16000}?\\n\\}/)[0];
-    if(!qsrc.includes('dialog')) throw new Error('schema 缺 dialog 多段对话');
-    if(!qsrc.includes('4～9')&&!qsrc.includes('4~9')) throw new Error('未约束对话条数 4~9');
-    if(!qsrc.includes('250～400')&&!qsrc.includes('250~400')) throw new Error('未约束总字数 250~400');
-    if(!qsrc.includes('o.v=3')) throw new Error('未打 v3 schema 标记');
+    /* v78：提示词约束在 buildQuestBriefMsgs，schema 标记 o.v=3 仍在 genQuestBrief */
+    const psrc=buildQuestBriefMsgs.toString();
+    if(!psrc.includes('dialog')) throw new Error('schema 缺 dialog 多段对话');
+    if(!psrc.includes('4～9')&&!psrc.includes('4~9')) throw new Error('未约束对话条数 4~9');
+    if(!psrc.includes('250～400')&&!psrc.includes('250~400')) throw new Error('未约束总字数 250~400');
+    if(!genQuestBrief.toString().includes('o.v=3')) throw new Error('未打 v3 schema 标记');
     /* v45：剧情互动改为仿聊天逐条弹出，不再接打字机 */
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(!htmlSrc.includes('revealDialogLine')) throw new Error('缺逐条弹出函数 revealDialogLine');
@@ -1701,15 +1738,15 @@ const driver=`
   });
   run('v31 过场润色去剧本化：arrive 不派任务、只出一条口语',()=>{
     if(!CUTSCENE_HINT.arrive.includes('禁止交代任务')) throw new Error('arrive 节点必须禁止加戏派任务');
-    const code=refineCutscene.toString();
+    const code=refineCutscene.toString()+'\\n'+buildCutsceneMsgs.toString();
     if(!code.includes('禁止多组引号')) throw new Error('过场润色应禁止剧本式多引号分段');
     if(!/≤\s*80字/.test(code)) throw new Error('过场润色应限制为一条短消息（≤80字）');
   });
   run('v31 引导润色/战报 prompt 禁淘汰概念与重演初见',()=>{
-    const g=refineGuidanceScene.toString();
+    const g=refineGuidanceScene.toString()+'\\n'+buildGuidanceMsgs.toString();
     if(!g.includes('不许重演初见')) throw new Error('引导润色应声明绑定仪式已结束、不重演初见');
     if(!g.includes('obsoleteTerms')) throw new Error('引导润色应注入注册表淘汰词');
-    if(!refineAction.toString().includes('OBSOLETE_TERMS')) throw new Error('战报润色应注入淘汰概念黑名单');
+    if(!(refineAction.toString()+buildRefineActionMsgs.toString()).includes('OBSOLETE_TERMS')) throw new Error('战报润色应注入淘汰概念黑名单');
   });
   run('judgeDomain：法条关键词强匹配沈昭',()=>{
     reset();
@@ -1835,7 +1872,7 @@ const driver=`
     }catch(e){ errors.push('v36 voiceBlock => '+e.message); console.log('FAIL  v36 voiceBlock : '+e.message); }
     /* v36：genPersona prompt 含 goal/arc */
     try{
-      const src=genPersona.toString();
+      const src=genPersona.toString()+'\\n'+buildPersonaMsgs.toString();
       if(!/goal/.test(src)) throw new Error('genPersona 未要求 goal');
       if(!/arc/.test(src)) throw new Error('genPersona 未要求 arc');
       if(!src.includes('arcSeedOf')) throw new Error('genPersona 未引用 arcSeedOf 基线');
@@ -1961,7 +1998,7 @@ const driver=`
         try{ cnt+=(fs.readFileSync(f,'utf8').match(/啃/g)||[]).length; }catch(e){}
       });
       if(cnt!==8) throw new Error("源文本「啃」计数异常(期望8处防御性定义): "+cnt);
-      const cueSrc=genQuestCue.toString();
+      const cueSrc=genQuestCue.toString()+'\\n'+buildQuestCueMsgs.toString();
       if(!cueSrc.includes("cueV===CUE_V")) throw new Error("cue 缓存未走版本常量 CUE_V");
       if(!cueSrc.includes("cueRedFlags")) throw new Error("cue 生成缺红线扫描/重拟闭环");
       if(cueSrc.includes("雾正在啃")) throw new Error("cue prompt 仍在示范啃字");
@@ -2480,6 +2517,51 @@ const driver=`
       if(!isNew(pool.find(c=>c.key===k2))) throw new Error("今日新入档应带新到角标");
       console.log('PASS  v54 b2 藏经阁索引：子类/档位/掌握/新到');
     }catch(e){ errors.push('v54 b2 libidx => '+e.message); console.log('FAIL  v54 b2 libidx : '+e.message); }
+
+    /* v78：AI 通路一键预演运行时——29 通道全部可在无密钥下组装、零网络、落 preview 快照 */
+    try{
+      reset(); reconcile();
+      delete st.aiPromptOv; delete st.aiChOff;
+      localStorage.removeItem(AI_SNAP_KEY);
+      let fetchCalls=0;
+      const __ofetch=global.fetch;
+      global.fetch=(...a)=>{ fetchCalls++; return Promise.reject(new Error('测试环境禁止联网')); };
+      const ids=AI_CHANNELS.map(c=>c.id);
+      if(ids.length!==29) throw new Error('通路表应为 29 条，实为 '+ids.length);
+      for(const id of ids){
+        const snap=await aiPreviewChannel(id);
+        if(!snap||snap.preview!==true) throw new Error(id+' 未落 preview 快照');
+        if(!snap.sys&&!snap.user) throw new Error(id+' 快照 system/user 全空');
+        if(snap.model!=='deepseek-chat'&&snap.model!=='deepseek-reasoner') throw new Error(id+' 模型字段异常：'+snap.model);
+      }
+      /* keyPing 无 system，user 必须保留 */
+      if(aiSnapGet('keyPing').user!=='只回复：ok') throw new Error('keyPing 预演稿异常');
+      /* 修订覆盖在 dryRun 同样生效 */
+      st.aiPromptOv={wrongReply:{sys:'OV-S-78',user:null}};
+      await aiPreviewChannel('wrongReply');
+      if(aiSnapGet('wrongReply').sys!=='OV-S-78') throw new Error('dryRun 未应用 aiPromptOv 覆盖');
+      if(aiSnapGet('wrongReply').ov!==true) throw new Error('preview 快照未标 ov');
+      delete st.aiPromptOv;
+      /* 停用通道：dryRun 不抛 aiChOff，仅标注 off */
+      st.aiChOff={chat:1};
+      let offErr=null;
+      try{ await aiPreviewChannel('chat'); }catch(e){ offErr=e; }
+      if(offErr) throw new Error('停用通道 dryRun 不应抛错：'+offErr.message);
+      if(aiSnapGet('chat').off!==true) throw new Error('停用通道预演未标 off');
+      delete st.aiChOff;
+      /* wrongReply 预演稿含全员铁律注入与样例题面 */
+      await aiPreviewChannel('wrongReply');
+      const wrSnap=aiSnapGet('wrongReply');
+      if(!wrSnap.sys.includes('全员语言最高准则')) throw new Error('wrongReply 预演缺 masterRule 注入');
+      if(!wrSnap.sys.includes('逐项讲评')) throw new Error('wrongReply 预演缺题型规则');
+      if(!wrSnap.user.includes('下列关于')) throw new Error('wrongReply 预演 user 缺样例题面');
+      /* chatTools 预演必须带 tools 标记 */
+      if(aiSnapGet('chatTools').tools!==true) throw new Error('chatTools 预演未标 tools');
+      global.fetch=__ofetch;
+      if(fetchCalls!==0) throw new Error('预演触发了 '+fetchCalls+' 次网络请求（必须为 0）');
+      localStorage.removeItem(AI_SNAP_KEY);
+      console.log('PASS  v78 29 通路一键预演：无密钥/零联网/修订覆盖/停用标注/铁律注入');
+    }catch(e){ errors.push('v78 aiPreview runtime => '+e.message); console.log('FAIL  v78 aiPreview runtime : '+e.message); }
 
     console.log('\\n===== RESULT =====');
     if(skipCount) console.log('SKIPPED '+skipCount+' （v45+ 体系改造后过时断言，已登记 LEGACY_SKIP）');

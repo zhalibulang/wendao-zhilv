@@ -2883,6 +2883,72 @@ function cueText(q,d){
    注入完整角色铁律（soulField/请求姿态/禁令）＋全量语言铁律＋正反例；
    产出过 cueRedFlags 红线：命中带反馈重拟一次，二次仍中则弃稿用本地池，绝不带病缓存。
    无 API 静默（本地 buildQuestCue 兜底）。 */
+/* v78：任务开场 cue 提示词组装（实发/预演共用，单一事实源）。
+   返回 messages/opts 与 gate（红线校验器，实发路径重拟时用）。 */
+function buildQuestCueMsgs(q,d){
+  const stage=stageOfDay(q.day||st.day||1);
+  const pc=personaTermOf(q.npc);
+  const iron=langIronRules();
+  const b=buildQuestCue(q,d);
+  const npcName=((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(q.npc,(NPC[q.npc]&&NPC[q.npc].name)||q.npc):((NPC[q.npc]&&NPC[q.npc].name)||q.npc));
+  const smp=(window.WDTerms&&WDTerms.styleSamples)?WDTerms.styleSamples(q.npc):[];
+  /* 跨稿去重数据源：同一 NPC 已采用的 cue（仅当前版本），取最近 6 条 */
+  const recent=Object.keys(st.questLines||{})
+    .filter(id=>id!==q.id&&QMAP[id]&&QMAP[id].npc===q.npc)
+    .map(id=>st.questLines[id])
+    .filter(r=>r&&r.cueV===CUE_V&&r.cue).slice(-6).map(r=>r.cue);
+  /* 任务类别→画面边界（修诵才许写精灵/夺回气力，问契/传译不许串画面） */
+  const cat=q.rtCat||({study:"a",review:"rev",oral:"c",trans:"d",boss:"exam"}[q.type]||"a");
+  const SCENE_BOUND={
+    a:"理经/新学：画面只能围绕经匣、节点卡、卷轴、书页上盘踞的雾团；她在整理卡页",
+    b:"问契：画面围绕来客的问签与一问一答；她在誊写或理顺签条，不许出现景点精灵受伤、夺回气力",
+    c:"修诵：画面才允许围绕景点守护精灵与咒祷辞（协律/同调），可以写精灵被侵蚀、要帮她夺回气力",
+    d:"传译：画面围绕两本语言的通界语料、五句互译；不许出现精灵受伤或咒祷辞吟诵",
+    rev:"复习：画面是旧日净化过的节点又起雾（雾回潮），不是新的精灵受伤",
+    exam:"守城：画面是雾潮攻城与守关大阵"
+  };
+  /* 身体意象轮换：避开近期已用过的，按任务 hash 给一个新意象建议（仅供发散，禁止照抄句式） */
+  const SENS=["灯影里晃着一层湿雾","肩头落了点凉意","睫毛沾了细雾","杯里的茶凉透了","窗纸被雾气洇出印子","书页角卷着潮意","灯笼穗滴着水","靴尖沾了雾水","发梢凝着细水珠","指节有点发僵","袖口能拧出雾气","墨都研不开了"];
+  const usedSens=SENS.filter(x=>recent.join("|").includes(x.slice(0,2)));
+  const freshSens=SENS.filter(x=>!usedSens.includes(x));
+  const suggestedSens=freshSens[hash(q.id)%Math.max(1,freshSens.length)]||SENS[hash(q.id)%SENS.length];
+  let personaBlock="";
+  if(pc){
+    personaBlock="【角色铁律·不可违背】"
+      +(pc.animeShell?("原型仅借说话节奏与气质："+pc.animeShell+"；原型的身份、头衔、名号、世界观一律不得搬入。"):"")
+      +(pc.soulField&&pc.soulField.length?("灵魂领域："+pc.soulField.join("；")+"。"):"")
+      +(pc.requestPosture?("请求姿态："+pc.requestPosture+"。"):"")
+      +(pc.voice?("口吻："+pc.voice+"。"):"")
+      +(pc.forbidden&&pc.forbidden.length?("专属禁令："+pc.forbidden.join("、")+"。"):"")
+      +(pc.distinguish?("辨识锚点："+pc.distinguish+"。"):"")
+      +(pc.growthArc?("成长弧线："+pc.growthArc+"。"):"")+"\n";
+  }
+  const sys="你是日式RPG《问道之旅·四十五日》里的角色「"+npcName+"」。玩家是与你并肩同行的同伴，不是来听安排的下属。\n"
+    +"请用「"+npcName+"」的口吻，对她说一小段开场台词（1-2句，≤70字），像当季新番动画里同伴当面开口。只讲三件事："
+    +"①一个具体画面或你此刻的身体感受；②今天想请她陪你做的一件事，一句话概括；③有温度的请求式收尾。\n"
+    +"【姿态·最优先】是你在请求她帮忙，不是派发任务：商量、邀请、倾诉都可以。"
+    +"禁止命令与催促、禁止讲条件交换、禁止说教或把责任推回给她；禁止用第三人称称呼自己——台词里不许出现你的名字「"+npcName+"」，自称只用「我」。\n"
+    +"【反例·五处全错】「"+npcName+"那边等着的，别绕远路。你把那段念顺了，我就把剩下的雾再收一收——路我指了，脚得你自己迈。」\n"
+    +"【多样性·硬要求·避免千篇一律】不要每条都写「能陪我……吗？你在，我就安心/踏实/稳」——这是偷懒模板。"
+    +"请求框架要换着用，例如（仅示范结构差异，禁止照搬字句和收尾）："
+    +"①疑问邀请「……我想请你陪我去看一眼」；"
+    +"②陈述式「签我理好了，就差你这双眼睛」；"
+    +"③自言自语被她听见「（回头）你来得正好，这段我正想找人试」；"
+    +"④先吐槽自己的状态再开口「手都冻僵了……走，陪我活动活动」。"
+    +"每条的开头画面、请求说法、收尾词都要和你最近说过的开场不一样。\n"
+    +"当前阶段心境：「"+stage.name+"」。\n"
+    +personaBlock
+    +(smp.length?"【台词质感·参考节奏勿照搬字句】"+smp.slice(0,3).map(x=>"「"+x+"」").join(" ")+"\n":"")
+    +(iron.length?"【语言铁律·全员共守】\n"+iron.map((s,i)=>(i+1)+"."+s).join("\n")+"\n":"")
+    +"【本场景补充】不报任何数字（几件/几分钟/还剩几件由界面显示）；不念任务编号与标题；时间单位只能说「分钟」；雾怪对景点的动作只用「侵蚀/蚕食」，禁「咬」及撕咬类动词。";
+  const user="下一程的内容（仅供你心里有数，禁止原样念出来，尤其不许报数量、类别、耗时）：\n"+b.plan
+    +"\n画面边界（只能写这一类画面，不许串到别的任务类型）："+(SCENE_BOUND[cat]||SCENE_BOUND.a)
+    +"\n身体感受请换一个没用过的意象（给你一个方向，可自由发挥但别照抄）：「"+suggestedSens+"」"
+    +(recent.length?("\n你最近已经对她说过这些开场——开头、请求框架、身体意象、收尾词都不许再撞：\n"+recent.map((x,i)=>"〔"+(i+1)+"〕"+x).join("\n")):"")
+    +"\n\n请只输出这一小段台词（≤70字），不要解释、不要舞台说明、不要引号以外的字。";
+  const gate=t=>cueRedFlags(filterNpcText(t),npcName,recent);
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"questcue"},gate};
+}
 async function genQuestCue(q,d){
   if(!dsReady()||!q) return;
   d=d||byDay[q.day];
@@ -2895,68 +2961,9 @@ async function genQuestCue(q,d){
   c[q.id]._cueP=true;
   const cleanCue=raw=>String(raw||"").trim().replace(/^[「『"“\s]+|[」』"”\s]+$/g,"").replace(/\s*\n+\s*/g," ").slice(0,90);
   try{
-    const stage=stageOfDay(q.day||st.day||1);
-    const pc=personaTermOf(q.npc);
-    const iron=langIronRules();
-    const b=buildQuestCue(q,d);
-    const npcName=((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(q.npc,(NPC[q.npc]&&NPC[q.npc].name)||q.npc):((NPC[q.npc]&&NPC[q.npc].name)||q.npc));
-    const smp=(window.WDTerms&&WDTerms.styleSamples)?WDTerms.styleSamples(q.npc):[];
-    /* 跨稿去重数据源：同一 NPC 已采用的 cue（仅当前版本），取最近 6 条 */
-    const recent=Object.keys(st.questLines||{})
-      .filter(id=>id!==q.id&&QMAP[id]&&QMAP[id].npc===q.npc)
-      .map(id=>st.questLines[id])
-      .filter(r=>r&&r.cueV===CUE_V&&r.cue).slice(-6).map(r=>r.cue);
-    /* 任务类别→画面边界（修诵才许写精灵/夺回气力，问契/传译不许串画面） */
-    const cat=q.rtCat||({study:"a",review:"rev",oral:"c",trans:"d",boss:"exam"}[q.type]||"a");
-    const SCENE_BOUND={
-      a:"理经/新学：画面只能围绕经匣、节点卡、卷轴、书页上盘踞的雾团；她在整理卡页",
-      b:"问契：画面围绕来客的问签与一问一答；她在誊写或理顺签条，不许出现景点精灵受伤、夺回气力",
-      c:"修诵：画面才允许围绕景点守护精灵与咒祷辞（协律/同调），可以写精灵被侵蚀、要帮她夺回气力",
-      d:"传译：画面围绕两本语言的通界语料、五句互译；不许出现精灵受伤或咒祷辞吟诵",
-      rev:"复习：画面是旧日净化过的节点又起雾（雾回潮），不是新的精灵受伤",
-      exam:"守城：画面是雾潮攻城与守关大阵"
-    };
-    /* 身体意象轮换：避开近期已用过的，按任务 hash 给一个新意象建议（仅供发散，禁止照抄句式） */
-    const SENS=["灯影里晃着一层湿雾","肩头落了点凉意","睫毛沾了细雾","杯里的茶凉透了","窗纸被雾气洇出印子","书页角卷着潮意","灯笼穗滴着水","靴尖沾了雾水","发梢凝着细水珠","指节有点发僵","袖口能拧出湿气","墨都研不开了"];
-    const usedSens=SENS.filter(x=>recent.join("|").includes(x.slice(0,2)));
-    const freshSens=SENS.filter(x=>!usedSens.includes(x));
-    const suggestedSens=freshSens[hash(q.id)%Math.max(1,freshSens.length)]||SENS[hash(q.id)%SENS.length];
-    let personaBlock="";
-    if(pc){
-      personaBlock="【角色铁律·不可违背】"
-        +(pc.animeShell?("原型仅借说话节奏与气质："+pc.animeShell+"；原型的身份、头衔、名号、世界观一律不得搬入。"):"")
-        +(pc.soulField&&pc.soulField.length?("灵魂领域："+pc.soulField.join("；")+"。"):"")
-        +(pc.requestPosture?("请求姿态："+pc.requestPosture+"。"):"")
-        +(pc.voice?("口吻："+pc.voice+"。"):"")
-        +(pc.forbidden&&pc.forbidden.length?("专属禁令："+pc.forbidden.join("、")+"。"):"")
-        +(pc.distinguish?("辨识锚点："+pc.distinguish+"。"):"")
-        +(pc.growthArc?("成长弧线："+pc.growthArc+"。"):"")+"\n";
-    }
-    const sys="你是日式RPG《问道之旅·四十五日》里的角色「"+npcName+"」。玩家是与你并肩同行的同伴，不是来听安排的下属。\n"
-      +"请用「"+npcName+"」的口吻，对她说一小段开场台词（1-2句，≤70字），像当季新番动画里同伴当面开口。只讲三件事："
-      +"①一个具体画面或你此刻的身体感受；②今天想请她陪你做的一件事，一句话概括；③有温度的请求式收尾。\n"
-      +"【姿态·最优先】是你在请求她帮忙，不是派发任务：商量、邀请、倾诉都可以。"
-      +"禁止命令与催促、禁止讲条件交换、禁止说教或把责任推回给她；禁止用第三人称称呼自己——台词里不许出现你的名字「"+npcName+"」，自称只用「我」。\n"
-      +"【反例·五处全错】「"+npcName+"那边等着的，别绕远路。你把那段念顺了，我就把剩下的雾再收一收——路我指了，脚得你自己迈。」\n"
-      +"【多样性·硬要求·避免千篇一律】不要每条都写「能陪我……吗？你在，我就安心/踏实/稳」——这是偷懒模板。"
-      +"请求框架要换着用，例如（仅示范结构差异，禁止照搬字句和收尾）："
-      +"①疑问邀请「……我想请你陪我去看一眼」；"
-      +"②陈述式「签我理好了，就差你这双眼睛」；"
-      +"③自言自语被她听见「（回头）你来得正好，这段我正想找人试」；"
-      +"④先吐槽自己的状态再开口「手都冻僵了……走，陪我活动活动」。"
-      +"每条的开头画面、请求说法、收尾词都要和你最近说过的开场不一样。\n"
-      +"当前阶段心境：「"+stage.name+"」。\n"
-      +personaBlock
-      +(smp.length?"【台词质感·参考节奏勿照搬字句】"+smp.slice(0,3).map(x=>"「"+x+"」").join(" ")+"\n":"")
-      +(iron.length?"【语言铁律·全员共守】\n"+iron.map((s,i)=>(i+1)+"."+s).join("\n")+"\n":"")
-      +"【本场景补充】不报任何数字（几件/几分钟/还剩几件由界面显示）；不念任务编号与标题；时间单位只能说「分钟」；雾怪对景点的动作只用「侵蚀/蚕食」，禁「咬」及撕咬类动词。";
-    const user="下一程的内容（仅供你心里有数，禁止原样念出来，尤其不许报数量、类别、耗时）：\n"+b.plan
-      +"\n画面边界（只能写这一类画面，不许串到别的任务类型）："+(SCENE_BOUND[cat]||SCENE_BOUND.a)
-      +"\n身体感受请换一个没用过的意象（给你一个方向，可自由发挥但别照抄）：「"+suggestedSens+"」"
-      +(recent.length?("\n你最近已经对她说过这些开场——开头、请求框架、身体意象、收尾词都不许再撞：\n"+recent.map((x,i)=>"〔"+(i+1)+"〕"+x).join("\n")):"")
-      +"\n\n请只输出这一小段台词（≤70字），不要解释、不要舞台说明、不要引号以外的字。";
-    const gate=t=>cueRedFlags(filterNpcText(t),npcName,recent);
-    let t=cleanCue(await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"questCue",kind:"questcue"}));
+    const built=buildQuestCueMsgs(q,d);
+    const sys=built.messages[0].content, user=built.messages[1].content, gate=built.gate;
+    let t=cleanCue(await dsChat(built.messages,Object.assign({ch:"questCue"},built.opts)));
     let flags=t?gate(t):[];
     if(t&&flags.length){
       console.warn("[cue] 红线未过，带反馈重拟一次：",flags,t);
@@ -3024,32 +3031,39 @@ function ensureGdMilestone(day){
 }
 /* 纪日 cue 生成：云汀以「派发手札」口吻说一小段，过同套红线/跨稿去重/双稿重拟。
    内容边界按该纪日任务构成（验界/修诵/理经/传译/问契），不报数量。 */
+/* v78：纪日里程碑 cue 提示词组装（实发/预演共用） */
+function buildGdCueMsgs(day,gi){
+  const {gd}=gdRec(day,gi);
+  const npcName="云汀";
+  const qs=gdQuests(day,gi);
+  const kinds=[...new Set(qs.map(q=>({c:"修诵",d:"传译",b:"问契",rev:"消印",exam:"验界"}[q.rtCat]||"理经")))];
+  const isBoss=qs.some(q=>q.type==="boss");
+  const recent=Object.keys(st.questLines||{}).filter(k=>k.indexOf("gd:")===0)
+    .map(k=>st.questLines[k]).filter(r=>r.cueV===CUE_V&&r.cue).slice(-6).map(r=>r.cue);
+  const sys="你是日式RPG《问道之旅·四十五日》里的圣女「云汀」，你把这一纪日要做的事誊在手札上，当面递给同伴。"
+    +"请说一小段开场白（1-2句，≤60字）：先一个画面或此刻状态，再说「今天这一环有这些事，你挑顺手的来」，不催促、不命令。"
+    +"自称只用「我」，台词里不许出现「云汀」二字；禁止报数量、耗时、任务编号；不要每条都写「能陪我…吗/你在我就…」；"
+    +"请求/陈述/自言自语换着来。雾怪只用侵蚀/蚕食，禁「咬/啃/撕」。禁AI腔、教师腔、客服腔、半文半白。";
+  const scene=isBoss
+    ?"今天是周五验界：守关大阵起雾，云汀把手札最后一栏递到你手里，语气比平时郑重，但不许喊口号、不许说「你一定可以」。"
+    :"这一环包含的事类（心里有数即可，不许原样报类别清单和数量）："+kinds.join("、")+"。";
+  const user="纪日：第"+day+"周 · "+GD_LABELS[gi]+"（纪日总序号"+gd+"）。\n"+scene
+    +(recent.length?("\n最近的开场（开头/说法/收尾不许撞）：\n"+recent.map((x,i)=>"〔"+(i+1)+"〕"+x).join("\n")):"")
+    +"\n只输出这一小段（≤60字），不要解释。";
+  const gate=t=>cueRedFlags(filterNpcText(t),npcName,recent);
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"questcue"},gate};
+}
 async function genGdCue(day,gi){
   if(!dsReady()) return;
-  const {rec,gd}=gdRec(day,gi);
+  const {rec}=gdRec(day,gi);
   if(rec._cueP||(rec.cueV===CUE_V&&rec.cue)) return;
   if(rec.cueV!==CUE_V) delete rec.cue;
   rec._cueP=true;
   const clean=raw=>String(raw||"").trim().replace(/^[「『"“\s]+|[」』"”\s]+$/g,"").replace(/\s*\n+\s*/g," ").slice(0,90);
   try{
-    const npcName="云汀";
-    const qs=gdQuests(day,gi);
-    const kinds=[...new Set(qs.map(q=>({c:"修诵",d:"传译",b:"问契",rev:"消印",exam:"验界"}[q.rtCat]||"理经")))];
-    const isBoss=qs.some(q=>q.type==="boss");
-    const recent=Object.keys(st.questLines||{}).filter(k=>k.indexOf("gd:")===0)
-      .map(k=>st.questLines[k]).filter(r=>r.cueV===CUE_V&&r.cue).slice(-6).map(r=>r.cue);
-    const sys="你是日式RPG《问道之旅·四十五日》里的圣女「云汀」，你把这一纪日要做的事誊在手札上，当面递给同伴。"
-      +"请说一小段开场白（1-2句，≤60字）：先一个画面或此刻状态，再说「今天这一环有这些事，你挑顺手的来」，不催促、不命令。"
-      +"自称只用「我」，台词里不许出现「云汀」二字；禁止报数量、耗时、任务编号；不要每条都写「能陪我…吗/你在我就…」；"
-      +"请求/陈述/自言自语换着来。雾怪只用侵蚀/蚕食，禁「咬/啃/撕」。禁AI腔、教师腔、客服腔、半文半白。";
-    const scene=isBoss
-      ?"今天是周五验界：守关大阵起雾，云汀把手札最后一栏递到你手里，语气比平时郑重，但不许喊口号、不许说「你一定可以」。"
-      :"这一环包含的事类（心里有数即可，不许原样报类别清单和数量）："+kinds.join("、")+"。";
-    const user="纪日：第"+day+"周 · "+GD_LABELS[gi]+"（纪日总序号"+gd+"）。\n"+scene
-      +(recent.length?("\n最近的开场（开头/说法/收尾不许撞）：\n"+recent.map((x,i)=>"〔"+(i+1)+"〕"+x).join("\n")):"")
-      +"\n只输出这一小段（≤60字），不要解释。";
-    const gate=t=>cueRedFlags(filterNpcText(t),npcName,recent);
-    let t=clean(await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"gdCue",kind:"questcue"}));
+    const built=buildGdCueMsgs(day,gi);
+    const sys=built.messages[0].content, user=built.messages[1].content, gate=built.gate;
+    let t=clean(await dsChat(built.messages,Object.assign({ch:"gdCue"},built.opts)));
     let fl=t?gate(t):[];
     if(t&&fl.length){
       console.warn("[gd cue] 红线未过，重拟一次：",fl,t);
@@ -3071,6 +3085,17 @@ function doneLine(q,d){
   const pool=(QUIZ_PRAISE&&QUIZ_PRAISE[q.npc])||QUIZ_INTROS_FALLBACK;
   return pool[hash((q.id||"done")+((st&&st.day)||0))%pool.length];
 }
+/* v78：任务发布/交割行提示词组装（实发/预演共用；kind: pub 接取 / done 交割） */
+function buildQuestLineMsgs(q,kind){
+  const label=Q_TYPE_LABEL[q.type]||q.type;
+  const dispName=((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(q.npc,(NPC[q.npc]&&NPC[q.npc].name)||q.npc):((NPC[q.npc]&&NPC[q.npc].name)||q.npc));
+  const sys=kind==="pub"
+    ? "你是RPG《问道之旅·四十五日》中的任务NPC。玩家即将接取任务。请用一句有角色感的话发出请求，≤30字，像同伴当面开口，不解释、不报编号、不抒情。"
+    : "你是RPG《问道之旅·四十五日》中的任务NPC。玩家刚完成任务。请用一句有角色感的话认可或交割，≤30字，像同伴当面开口，不解释、不报编号。";
+  const user=`任务名：${q.name}\n类型：${label}${q.desc?`\n任务简述：${String(q.desc).slice(0,80)}`:""}`
+    +`\n姿态红线：是请求不是命令，不催促、不讲条件、不说教；自称用「我」，台词里不许出现你自己的名字「${dispName}」；禁考试/考核/复习等现实词。`;
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"questbrief"},dispName};
+}
 async function genQuestLine(q,kind){
   if(!dsReady()||!q) return;
   const c=st.questLines||(st.questLines={});
@@ -3080,14 +3105,9 @@ async function genQuestLine(q,kind){
   if(c[q.id][flag]) return;
   c[q.id][flag]=true;
   try{
-    const label=Q_TYPE_LABEL[q.type]||q.type;
-    const dispName=((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(q.npc,(NPC[q.npc]&&NPC[q.npc].name)||q.npc):((NPC[q.npc]&&NPC[q.npc].name)||q.npc));
-    const sys=kind==="pub"
-      ? "你是RPG《问道之旅·四十五日》中的任务NPC。玩家即将接取任务。请用一句有角色感的话发出请求，≤30字，像同伴当面开口，不解释、不报编号、不抒情。"
-      : "你是RPG《问道之旅·四十五日》中的任务NPC。玩家刚完成任务。请用一句有角色感的话认可或交割，≤30字，像同伴当面开口，不解释、不报编号。";
-    const user=`任务名：${q.name}\n类型：${label}${q.desc?`\n任务简述：${String(q.desc).slice(0,80)}`:""}`
-      +`\n姿态红线：是请求不是命令，不催促、不讲条件、不说教；自称用「我」，台词里不许出现你自己的名字「${dispName}」；禁考试/考核/复习等现实词。`;
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"questLine",kind:"questbrief"});
+    const built=buildQuestLineMsgs(q,kind);
+    const dispName=built.dispName;
+    const raw=await dsChat(built.messages,Object.assign({ch:"questLine"},built.opts));
     let t=String(raw||"").trim().replace(/^[「『"“\s]+|[」』"”\s]+$/g,"");
     t=filterNpcText(t.replace(/\n.*/s,"").slice(0,40));
     /* v58b：过红线才入缓存；不过则弃稿（调用处已有本地占位句兜底） */
@@ -3503,12 +3523,17 @@ function pushAction(text){
   if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
   return m.id;
 }
-function refineAction(id,q,extra){
-  if(!dsReady()) return;
-  dsChat([
+/* v78：战斗日志润色提示词组装（实发与配置中心预演共用，单一事实源） */
+function buildRefineActionMsgs(q,extra){
+  return {messages:[
     {role:"system",content:"你是游戏『问道之旅·四十五日』的战斗记录官。用一句第一人称、网游战斗日志口吻总结玩家的行动。要求：导游世界游戏风，简短有力≤36字，像玩家在群里报喜不装腔；禁AI腔（不排比、不总结、不感叹过度、不用'首先/总之'）；禁教师口吻；禁止念出任务编号；禁已淘汰旧概念（"+OBSOLETE_TERMS.join("/")+"）。只输出这句话本身，不要引号。"},
     {role:"user",content:"玩家行动：完成关卡「"+qdn(q)+"」（类型："+q.tlabel+"，难度定位："+questMetaphor(q)+"，奖励：+"+q.xp+"修行 +"+q.coin+"灵铢）"+(extra||"")+"\n参考模板（可重写或另起更妙的）：我刚交割了「"+qdn(q)+"」。"}
-  ],{ch:"refineAction"}).then(t=>{
+  ],opts:{}};
+}
+function refineAction(id,q,extra){
+  if(!dsReady()) return;
+  const {messages,opts}=buildRefineActionMsgs(q,extra);
+  dsChat(messages,Object.assign({ch:"refineAction"},opts)).then(t=>{
     t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,60);
     if(!t) return;
     const m=st.dialogue.find(x=>x.id===id); if(!m) return;
@@ -3517,6 +3542,93 @@ function refineAction(id,q,extra){
 }
 /* v58c：玩家从纪日索引卡「接取」任务——幂等落一条玩家行动（模拟玩家机制保留），
    AI 在线时异步润色为第一人称接取语，≤30字，不装腔、不喊口号。 */
+/* v78：任务完成玩家接取语提示词组装（实发/预演共用） */
+function buildQuestAckMsgs(q){
+  return {messages:[
+    {role:"system",content:"你是游戏『问道之旅·四十五日』的玩家本人，刚从云汀的纪日手札上点选接下一环。用一句第一人称口语表达你接下这件事，≤30字，像顺手在群里回的话；不装腔、不喊口号、不发誓、不向NPC喊话、不感谢、不念编号与类型术语。只输出这句话本身，不要引号。"},
+    {role:"user",content:"接下的事：「"+qdn(q)+"」（"+q.tlabel+"）。参考：我接了「"+qdn(q)+"」，这就去。"}
+  ],opts:{kind:"polish"}};
+}
+/* v78：书页预告/卷尾总结提示词组装（实发/预演共用；pts 为考点条目数组） */
+function buildBookExtraMsgs(mode,pts){
+  pts=pts||[];
+  const titles=pts.slice(0,6).map(p=>ptTitle(p,p.id));
+  const facts=pts.slice(0,3).map(p=>cleanMd(p.text).slice(0,100));
+  const sys=mode==="preview"
+    ?"你是备考游戏《问道之旅》的NPC。深入理解以下考点内容，结合你的知识库，输出两行：\n第1行：一个第二人称代入式思考题（≤30字），引导考生从实际带团场景出发思考；\n第2行：3~5个重点概念（顿号分隔），必须是考点中的核心术语，不要泛泛而谈。\n只输出两行，不输出其他内容。"
+    :"你是备考游戏《问道之旅》的NPC。深入理解以下考点内容，结合你的知识库，输出四段文本：\n段前缀固定为 总结：/补充：/趣闻：/引导： ，每段≤40字。\n要求：总结要精准提炼考点核心；补充要补充考点中未展开但相关的知识；趣闻要用导游工作场景类比；引导要给出具体的下一步行动建议。\n只输出四段文本。";
+  const user="考点标题："+titles.join("、")+"\n考点内容：\n"+facts.join("\n");
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish",max_tokens:mode==="summary"?450:200}};
+}
+/* v78：问契批量英化提示词组装（实发/预演共用） */
+function buildBilingualQuizMsgs(items){
+  const todo=items.map((z,i)=>({i,kind:z.kind,q:z.q,a:String(z.a||"").replace(/\n【中文要点】[\s\S]*$/,""),opts:z.opts||null}));
+  const sys="You are localizing a Chinese tour-guide exam mini-game into English. Return ONLY a JSON array; each item: {\"i\":index,\"q\":\"English stem\",\"a\":\"English reference answer\",\"opts\":[\"English option\"] or null}. Use correct terms (Tian'anmen Rostrum, etc.).";
+  const user=JSON.stringify(todo);
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish",max_tokens:1800,response_format:"json_object"}};
+}
+/* v78：英文题讲解提示词组装（实发/预演共用） */
+function buildEnExplainMsgs(z){
+  const sys="You are a tutor for a Chinese tour-guide English exam. In 2-3 short English sentences explain the key point and one common mistake, then one Chinese sentence after '中译：'. Plain text only.";
+  const user="Q:"+((z._en&&z._en.q)||z.q)+"\nA:"+((z._en&&z._en.a)||z.a);
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish",max_tokens:300}};
+}
+/* v78：试炼错答讲解提示词组装（实发/预演共用；npc 为当前陪练 NPC，q 为任务） */
+function buildWrongReplyMsgs(z,mine,okA,npc,q){
+  const nid=(npc&&npc.id)||"yunting";
+  const pt=D.pointsLib.find(p=>p.id===z.pid);
+  const sameN=(st.wrong||[]).filter(w=>w.pid===z.pid).length;
+  const isOptKind=(z.kind==="choice"||z.kind==="wrongone"||z.kind==="multi");
+  const kindRule=
+    z.kind==="judge"
+      ?"先用引号引用题面中被改错的原词（指出题面把什么写成了什么），一句话点明错在哪，再给出正确写法（用<b>标出），最后给一个记忆抓手。绝不允许只说「答案为伪」或只复述题面。"
+    :z.kind==="choice"
+      ?"逐项讲评全部选项：正确项说明它为何是答案（关键内容用<b>标出）；每一个错误项都必须交代——本身表述有误的指出错在哪个词（应为X），本身没错的说明它属于哪个考点、为何答非本题所问。错误项一个都不许跳过，更不许只讲玩家选中的那一项。"
+    :z.kind==="wrongone"
+      ?"指出真正错误项错在哪个词（应为X，用<b>标出），并逐项说明其余选项为什么是正确陈述（各属什么考点）。错误项以外的每一项也都要讲到，不许跳过。"
+    :z.kind==="multi"
+      ?"分「漏选」与「错选」两小类，逐项给出依据；正确项内容用<b>标出。"
+      :"逐空讲解——先指出该空的正确内容（用<b>标出），再给记忆或词源线索；多空分条换行。";
+  const sys="你是日式RPG《问道之旅·四十五日》中的NPC「"+dName(nid)+"·"+dTitle(nid)+"」，刚目睹玩家答错一道试炼题。\n"
+    +(window.WDChat&&WDChat.masterRule?WDChat.masterRule():"")
+    +"\n输出要求：\n"
+    +"1. 开头用 ≤12 字先接住情绪，严禁指责/讽刺/施压/PUA；\n"
+    +"2. 严格按本题型结构讲解，讲解必须落到题面的具体词句与考点内容，正确与关键内容统一用 <b>…</b> 标出；\n"
+    +"3. 严禁输出任何 emoji 表情符号；严禁空泛口号（如「加油哦」「再接再厉」凑字数）；严禁只复述答案标签；\n"
+    +"4. 总字数 "+(isOptKind?"160～340":"120～240")+" 字，可用换行分条，不要标题，不要用引号包裹全文；\n"
+    +"5. "+kindRule;
+  let detail="";
+  if(z.kind==="judge"){
+    const fact=quizFactOf(z);
+    const stem=String(z.q).replace(/（判断正误）$/,"");
+    const frag=(z.mod&&z.mod.from)?z.mod:judgeDiffFrag(fact,stem);
+    detail=frag&&frag.to!==frag.from
+      ?`\n错点定位（可直接引用）：题面把「${frag.from}」写成了「${frag.to}」，正确写法是「${frag.from}」`:"";
+  } else if(z.kind==="choice"||z.kind==="wrongone"||z.kind==="multi"){
+    const ansSet=z.kind==="multi"?new Set((z.a||[]).map(String)):new Set([String(z.a)]);
+    const rows=(z.opts||[]).map((o,i)=>{
+      const m=Array.isArray(z.ometa)?z.ometa[i]:null;
+      const isAns=ansSet.has(String(o));
+      let why="";
+      if(m&&m.t==="bad") why=`本身有误：把「${m.from}」写成了「${m.to}」`;
+      else if(m&&m.t==="other") why=`本身没错，属「${quizOptPname(m.pid)}」考点（答非本题所问）`;
+      else if(m&&m.t==="fill") why="凑数项，与本题考点无关";
+      else if(m&&m.t==="mismatch") why="与本题考点事实不符";
+      else if(!isAns) why="（无预设归因——请依据考点全文判断：表述有误就指出错词，表述无误就说明它为何不是本题所问）";
+      return `${i+1}. ${isAns?"【正确项】":"【错误项】"}「${String(o)}」${why?("——"+why):""}`;
+    });
+    if(rows.length) detail="\n全部选项清单（逐项讲评，错误项一个都不许漏）：\n"+rows.join("\n");
+  }
+  const user="任务："+qdn(q)+"\n题目："+z.q
+    +"\n玩家的回答："+(mine==null||mine===""?"（空白）":mine)
+    +"\n正确答案："+okA
+    +"\n解析："+(z.why||"")
+    +"\n判断依据/正确说法："+(quizFactOf(z)||z.a)
+    +detail
+    +"\n考点全文："+(pt?pt.id+"："+cleanMd(pt.text).slice(0,500):String(z.pid||""))
+    +"\n该考点累计答错次数："+sameN;
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish",max_tokens:isOptKind?700:500}};
+}
 function acceptQuestLine(q){
   st.accepted=st.accepted||{};
   if(st.accepted[q.id]||qDone(q.id)) return;
@@ -3524,10 +3636,8 @@ function acceptQuestLine(q){
   const id=pushAction("我接了「"+qdn(q)+"」，这就去。");
   save();
   if(dsReady()){
-    dsChat([
-      {role:"system",content:"你是游戏『问道之旅·四十五日』的玩家本人，刚从云汀的纪日手札上点选接下一环。用一句第一人称口语表达你接下这件事，≤30字，像顺手在群里回的话；不装腔、不喊口号、不发誓、不向NPC喊话、不感谢、不念编号与类型术语。只输出这句话本身，不要引号。"},
-      {role:"user",content:"接下的事：「"+qdn(q)+"」（"+q.tlabel+"）。参考：我接了「"+qdn(q)+"」，这就去。"}
-    ],{ch:"questAck",kind:"polish"}).then(t=>{
+    const {messages,opts}=buildQuestAckMsgs(q);
+    dsChat(messages,Object.assign({ch:"questAck"},opts)).then(t=>{
       t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,50);
       if(!t) return;
       const fl=cueRedFlags(filterNpcText(t),""); /* 玩家语不查自呼姓名，但拦命令/考试词等 */
@@ -4194,19 +4304,14 @@ function openQuest(qid){
     const concepts=pts.slice(0,5).map(p=>ptTitle(p,p.id));
     return q0+"\n"+(concepts.length?("重点概念："+concepts.join("、")):"重点概念已在书页内标出，留意金色字样。");
   }
+  /* v78：书页预告/卷尾总结提示词组装提为全局（实发/预演共用，单一事实源） */
   /* 灵脉补注（在线才调用，不阻塞本地呈现；输出纯文本就地替换） */
   function aiBookExtra(mode, slot, fallback){
     if(!slot) return;
     if(!dsReady()){ if(fallback) slot.textContent=fallback; return; }
     slot.textContent="灵脉拟稿中…";
-    const pts=questPoints();
-    const titles=pts.slice(0,6).map(p=>ptTitle(p,p.id));
-    const facts=pts.slice(0,3).map(p=>cleanMd(p.text).slice(0,100));
-    const sys=mode==="preview"
-      ?"你是备考游戏《问道之旅》的NPC。深入理解以下考点内容，结合你的知识库，输出两行：\n第1行：一个第二人称代入式思考题（≤30字），引导考生从实际带团场景出发思考；\n第2行：3~5个重点概念（顿号分隔），必须是考点中的核心术语，不要泛泛而谈。\n只输出两行，不输出其他内容。"
-      :"你是备考游戏《问道之旅》的NPC。深入理解以下考点内容，结合你的知识库，输出四段文本：\n段前缀固定为 总结：/补充：/趣闻：/引导： ，每段≤40字。\n要求：总结要精准提炼考点核心；补充要补充考点中未展开但相关的知识；趣闻要用导游工作场景类比；引导要给出具体的下一步行动建议。\n只输出四段文本。";
-    const user="考点标题："+titles.join("、")+"\n考点内容：\n"+facts.join("\n");
-    dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"bookExtra",kind:"polish",max_tokens:mode==="summary"?450:200}).then(t=>{
+    const built=buildBookExtraMsgs(mode,questPoints());
+    dsChat(built.messages,Object.assign({ch:"bookExtra"},built.opts)).then(t=>{
       if(!slot.isConnected||!t){ if(fallback) slot.textContent=fallback; return; }
       slot.textContent=t.trim();
     }).catch(()=>{ if(fallback) slot.textContent=fallback; });
@@ -4214,10 +4319,8 @@ function openQuest(qid){
   /* v62 Task12：灵脉批量英化 b 类试炼（JSON；离线/失败静默，保留本地+待补标注） */
   function aiBilingualQuiz(items,onReady){
     if(!dsReady()) return;
-    const todo=items.map((z,i)=>({i,kind:z.kind,q:z.q,a:String(z.a||"").replace(/\n【中文要点】[\s\S]*$/,""),opts:z.opts||null}));
-    const sys="You are localizing a Chinese tour-guide exam mini-game into English. Return ONLY a JSON array; each item: {\"i\":index,\"q\":\"English stem\",\"a\":\"English reference answer\",\"opts\":[\"English option\"] or null}. Use correct terms (Tian'anmen Rostrum, etc.).";
-    const user=JSON.stringify(todo);
-    dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"bilingualQuiz",kind:"polish",max_tokens:1800,response_format:"json_object"}).then(t=>{
+    const built=buildBilingualQuizMsgs(items);
+    dsChat(built.messages,Object.assign({ch:"bilingualQuiz"},built.opts)).then(t=>{
       let arr=null;
       try{ const s=String(t).trim(); const j=JSON.parse(s.slice(s.indexOf("["))); arr=Array.isArray(j)?j:null; }catch(e){}
       if(!Array.isArray(arr)) return;
@@ -4228,10 +4331,9 @@ function openQuest(qid){
   /* 英文 AI 讲解（揭示要点后；附中译一句；离线静默） */
   function aiEnExplain(z,slot){
     if(!dsReady()||!slot) return;
-    const sys="You are a tutor for a Chinese tour-guide English exam. In 2-3 short English sentences explain the key point and one common mistake, then one Chinese sentence after '中译：'. Plain text only.";
-    const user="Q:"+((z._en&&z._en.q)||z.q)+"\nA:"+((z._en&&z._en.a)||z.a);
+    const built=buildEnExplainMsgs(z);
     slot.textContent="灵脉英文讲解中…";
-    dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"enExplain",kind:"polish",max_tokens:300}).then(t=>{
+    dsChat(built.messages,Object.assign({ch:"enExplain"},built.opts)).then(t=>{
       if(slot.isConnected&&t) slot.textContent=String(t).trim();
     }).catch(()=>{ slot.textContent=""; });
   }
@@ -5393,62 +5495,8 @@ function openQuest(qid){
   }
   function aiWrongReply(z,mine,okA,wrap){
     if(!dsReady()) return;
-    const pt=D.pointsLib.find(p=>p.id===z.pid);
-    const sameN=st.wrong.filter(w=>w.pid===z.pid).length;
-    /* v69：讲解结构按题型落到具体词句——禁止只复述“真/伪”答案标签；错点必须引用题面原文
-       v71：选择题强制逐项讲评全部错误选项——不允许只讲玩家选中的那一项 */
-    const isOptKind=(z.kind==="choice"||z.kind==="wrongone"||z.kind==="multi");
-    const kindRule=
-      z.kind==="judge"
-        ?"先用引号引用题面中被改错的原词（指出题面把什么写成了什么），一句话点明错在哪，再给出正确写法（用<b>标出），最后给一个记忆抓手。绝不允许只说「答案为伪」或只复述题面。"
-      :z.kind==="choice"
-        ?"逐项讲评全部选项：正确项说明它为何是答案（关键内容用<b>标出）；每一个错误项都必须交代——本身表述有误的指出错在哪个词（应为X），本身没错的说明它属于哪个考点、为何答非本题所问。错误项一个都不许跳过，更不许只讲玩家选中的那一项。"
-      :z.kind==="wrongone"
-        ?"指出真正错误项错在哪个词（应为X，用<b>标出），并逐项说明其余选项为什么是正确陈述（各属什么考点）。错误项以外的每一项也都要讲到，不许跳过。"
-      :z.kind==="multi"
-        ?"分「漏选」与「错选」两小类，逐项给出依据；正确项内容用<b>标出。"
-        :"逐空讲解——先指出该空的正确内容（用<b>标出），再给记忆或词源线索；多空分条换行。";
-    const sys="你是日式RPG《问道之旅·四十五日》中的NPC「"+dName(npc.id)+"·"+dTitle(npc.id)+"」，刚目睹玩家答错一道试炼题。\n"
-      +(window.WDChat&&WDChat.masterRule?WDChat.masterRule():"")
-      +"\n输出要求：\n"
-      +"1. 开头用 ≤12 字先接住情绪，严禁指责/讽刺/施压/PUA；\n"
-      +"2. 严格按本题型结构讲解，讲解必须落到题面的具体词句与考点内容，正确与关键内容统一用 <b>…</b> 标出；\n"
-      +"3. 严禁输出任何 emoji 表情符号；严禁空泛口号（如「加油哦」「再接再厉」凑字数）；严禁只复述答案标签；\n"
-      +"4. 总字数 "+(isOptKind?"160～340":"120～240")+" 字，可用换行分条，不要标题，不要用引号包裹全文；\n"
-      +"5. "+kindRule;
-    /* v69：错点/错因作为事实喂给模型——AI 只需组织语言，不允许其凭空发挥
-       v71：选择/选错/多选始终附全部选项清单（标注正误），无预设归因的项让 AI 依据考点全文推断 */
-    let detail="";
-    if(z.kind==="judge"){
-      const fact=quizFactOf(z);
-      const stem=String(z.q).replace(/（判断正误）$/,"");
-      const frag=(z.mod&&z.mod.from)?z.mod:judgeDiffFrag(fact,stem);
-      detail=frag&&frag.to!==frag.from
-        ?`\n错点定位（可直接引用）：题面把「${frag.from}」写成了「${frag.to}」，正确写法是「${frag.from}」`:"";
-    } else if(z.kind==="choice"||z.kind==="wrongone"||z.kind==="multi"){
-      const ansSet=z.kind==="multi"?new Set((z.a||[]).map(String)):new Set([String(z.a)]);
-      const rows=(z.opts||[]).map((o,i)=>{
-        const m=Array.isArray(z.ometa)?z.ometa[i]:null;
-        const isAns=ansSet.has(String(o));
-        let why="";
-        if(m&&m.t==="bad") why=`本身有误：把「${m.from}」写成了「${m.to}」`;
-        else if(m&&m.t==="other") why=`本身没错，属「${quizOptPname(m.pid)}」考点（答非本题所问）`;
-        else if(m&&m.t==="fill") why="凑数项，与本题考点无关";
-        else if(m&&m.t==="mismatch") why="与本题考点事实不符";
-        else if(!isAns) why="（无预设归因——请依据考点全文判断：表述有误就指出错词，表述无误就说明它为何不是本题所问）";
-        return `${i+1}. ${isAns?"【正确项】":"【错误项】"}「${String(o)}」${why?("——"+why):""}`;
-      });
-      if(rows.length) detail="\n全部选项清单（逐项讲评，错误项一个都不许漏）：\n"+rows.join("\n");
-    }
-    const user="任务："+qdn(q)+"\n题目："+z.q
-      +"\n玩家的回答："+(mine==null||mine===""?"（空白）":mine)
-      +"\n正确答案："+okA
-      +"\n解析："+(z.why||"")
-      +"\n判断依据/正确说法："+(quizFactOf(z)||z.a)
-      +detail
-      +"\n考点全文："+(pt?pt.id+"："+cleanMd(pt.text).slice(0,500):String(z.pid||""))
-      +"\n该考点累计答错次数："+sameN;
-    dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"wrongReply",kind:"polish",max_tokens:isOptKind?700:500}).then(t=>{
+    const built=buildWrongReplyMsgs(z,mine,okA,npc,q);
+    dsChat(built.messages,Object.assign({ch:"wrongReply"},built.opts)).then(t=>{
       /* v69：emoji 剥离 + 实质校验——空话讲解弃用，保留本地讲解（不浪费这块版面） */
       const txt=(t||"").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu,"").trim().replace(/^["「」]+|["」]+$/g,"");
       const el=wrap&&wrap.isConnected?wrap.querySelector(".qrepl"):null;
@@ -5704,17 +5752,23 @@ const CUTSCENE_HINT={
   final:"就职已成、临别在即，只说此刻的心情，不再安排任何事。"
 };
 /* 剧情过场 AI 润色：把本地兜底化进云汀本人的一段口语（不是剧本串、不是任务发布） */
-function refineCutscene(id,node){
-  if(!window.WDChat||!WDChat.sysPrompt||!dsReady()) return;
-  const cs=CUTSCENE_NODES[node]; if(!cs) return;
+/* v78：剧情 CG 文案润色提示词组装（实发/预演共用） */
+function buildCutsceneMsgs(node){
+  const cs=CUTSCENE_NODES[node];
   const obsolete=(window.WDRegistry&&WDRegistry.obsoleteTerms)?WDRegistry.obsoleteTerms():["提灯","引灯","引魂灯","问道录","仙侠","仙师","封妖塔","掌灯"];
-  const sys=WDChat.sysPrompt("yunting",false)
+  const sys=(window.WDChat?WDChat.sysPrompt("yunting",false):"")
     +"\n\n【剧情过场任务】这是「"+cs.label+"」节点的剧情过场。"+(CUTSCENE_HINT[node]||"写她对当下变故的一段真实反应。")
     +"\n写法：把兜底话术化进云汀本人当面对玩家说的一段话——就是一条聊天消息，不是小说剧本。可以有一个短问句、半句停顿，"
     +"但禁止多组引号分段、禁止旁白（不能出现「她心想/旁白/云汀道」）、禁止复述或发布任务、禁止预告后续、禁止念任务编号与数值。"
     +"≤80字，越像脱口而出越好。禁AI腔（首先/其次/总之）、禁教书先生口吻、禁客服腔、禁已淘汰概念（"+obsolete.join("、")+"）。只输出正文，不要引号。";
   const user="本地兜底话术：「"+cutsceneText(node)+"」\n请化写为她此刻会发出的一条消息。";
-  dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"cutscene",kind:"polish"}).then(raw=>{
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish"}};
+}
+function refineCutscene(id,node){
+  if(!window.WDChat||!WDChat.sysPrompt||!dsReady()) return;
+  const cs=CUTSCENE_NODES[node]; if(!cs) return;
+  const built=buildCutsceneMsgs(node);
+  dsChat(built.messages,Object.assign({ch:"cutscene"},built.opts)).then(raw=>{
     let txt=(raw||"").trim();
     if(!txt||txt.length<10) return;
     /* 模型若仍输出多段引号剧本，只取第一段引号内内容；否则取第一行 */
@@ -5826,10 +5880,10 @@ function generateGuidanceScene(){
   return ids;
 }
 /* 引导对话AI生成：直接生成全部角色对白，就地替换占位文本 */
-function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
-  if(!window.WDChat||!dsReady()||!ids.length) return;
+/* v78：每日引导润色提示词组装（实发/预演共用；msgN 为消息条数） */
+function buildGuidanceMsgs(ids,aq,npc1,npc2,dctx){
   const obsolete=(window.WDRegistry&&WDRegistry.obsoleteTerms)?WDRegistry.obsoleteTerms():["提灯","引灯","引魂灯","问道录","仙侠","仙师","封妖塔","掌灯"];
-  const sys=WDChat.sysPrompt("yunting",false)
+  const sys=(window.WDChat?WDChat.sysPrompt("yunting",false):"")
     +"\n\n【引导对话任务】这是玩家已经抵达之后、众人都认识她时的当日日常引导场景（不是初见：绑定仪式在序章已结束，不许重演初见、不许再问「你是谁/怎么出现的」、不许复述仪式）。请生成一段自然流畅的多角色互动场景，要求："
     +"1）云汀与玩家互动（玩家发言由你模拟，口吻像真实玩家而非NPC）；"
     +"2）云汀与职能NPC "+dName(npc1)+" 互动（体现两人关系与各自性格）；"
@@ -5851,7 +5905,12 @@ function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
     +"\n6. "+dName(npc1)+"→玩家（回应/引导）"
     +(npc2?"\n7. "+dName(npc2)+" 插话":"")
     +"\n每条以「角色名：内容」格式输出，用 ||| 分隔各条。只输出消息，不要解释。";
-  dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"guidance"}).then(raw=>{
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{}};
+}
+function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
+  if(!window.WDChat||!dsReady()||!ids.length) return;
+  const built=buildGuidanceMsgs(ids,aq,npc1,npc2,dctx);
+  dsChat(built.messages,Object.assign({ch:"guidance"},built.opts)).then(raw=>{
     const txt=(raw||"").trim(); if(!txt||txt.length<10){ refineGuidanceSceneFail(ids); return; }
     const parts=txt.split(/\|\|\||\n{2,}/).map(s=>s.trim()).filter(s=>s);
     if(parts.length<ids.length){ refineGuidanceSceneFail(ids); return; }
@@ -5974,11 +6033,8 @@ function yuntingSettleLocal(q,nq,perfect){
 }
 /* 云汀结算 AI 润色：就地替换离线句；像云汀本人在群里接话，不写总结报告。
    成功→换文本清 pending；任何失败→保留离线终态句并清 pending（加载态永不残留）。 */
-function refineYunting(id,q,nq,perfect){
-  if(!dsReady()) return;
-  const m0=st.dialogue.find(x=>x.id===id);
-  if(!m0) return;
-  if(!m0.pendingAI) return; /* 幂等：只润色一次，防重复调用 */
+/* v78：云汀结算润色提示词组装（实发/预演共用） */
+function buildRefineYuntingMsgs(q,nq,perfect){
   const d=byDay[q.day], p=dayProg(d);
   const total=D.quests.filter(x=>qDone(x.id)).length;
   const obsolete=(window.WDRegistry&&WDRegistry.obsoleteTerms)?WDRegistry.obsoleteTerms():["提灯","引灯","引魂灯","问道录","仙侠","仙师","封妖塔","掌灯"];
@@ -5988,12 +6044,20 @@ function refineYunting(id,q,nq,perfect){
     +"≤90字，越自然越好，允许短句和停顿；禁AI腔（首先/其次/总之）、禁教书先生口吻、禁客服腔、禁念任务编号与数值奖励、禁已淘汰概念（"+obsolete.join("、")+"）。只输出正文，不要引号。";
   const user="刚交割的关卡：「"+qdn(q)+"」（"+q.tlabel+(perfect?"，试炼全对":"，试炼有错")+"）；当日进度 "+p.n+"/"+p.all+"，全程 "+total+"/"+D.quests.length+"（这些数字只供你心里有数，台词里不许念）。"
     +(nq?("下一程在途：「"+qdn(nq)+"」（"+nq.tlabel+"），目标："+qdn({name:nq.goal||"通关"})+"——提不提随你。"):"今日没有待办，别给她排活。");
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish"}};
+}
+function refineYunting(id,q,nq,perfect){
+  if(!dsReady()) return;
+  const m0=st.dialogue.find(x=>x.id===id);
+  if(!m0) return;
+  if(!m0.pendingAI) return; /* 幂等：只润色一次，防重复调用 */
+  const built=buildRefineYuntingMsgs(q,nq,perfect);
   const finish=txt=>{ const m=st.dialogue.find(x=>x.id===id); if(!m) return;
     const t=(txt||"").trim().replace(/^["「『]+|["」』]+$/g,"").slice(0,220);
     if(t) m.text=filterNpcText(t);   /* 空返回→保留离线终态句 */
     delete m.pendingAI; save(); renderChat(true);
   };
-  dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"refineYunting",kind:"polish"})
+  dsChat(built.messages,Object.assign({ch:"refineYunting"},built.opts))
     .then(t=>finish(t))
     .catch(()=>finish(""));
 }
@@ -7994,8 +8058,9 @@ function renderAiChannels(ov){
     if(ov2&&(ov2.sys!=null||ov2.user!=null)) chips.push('<span style="color:var(--gold)">修订生效中'+(snap&&snap.ov?"":"（下次调用生效）")+'</span>');
     if(stt) chips.push('<span style="color:var(--dim)">调用 '+stt.n+' 次 · 最近 '+_aiFmtTime(stt.lastAt)+' · '+(stt.err?("失败 "+stt.err):("ok "+stt.ms+"ms"))+'</span>');
     else chips.push('<span style="color:var(--dim)">本会话/本机暂无调用记录</span>');
-    if(snap) chips.push('<span style="color:var(--cyber)">📝 已捕获'+(snap.notsent?'（停用·未发出）':'实发')+'指令 · '+_aiFmtTime(snap.at)+'，点「'+(ov2?'修订中·查看/改写':'修订提示词')+'」查看真实 system/user 与约束</span>');
-    else chips.push('<span style="color:var(--gold)">尚未捕获：'+esc(c.trig)+'，触发后真实指令（含人设/铁律）自动留存本机，即可据此修订</span>');
+    if(snap&&snap.preview) chips.push('<span style="color:#5fd4e8">👁 已预演（未发送·不计费）· '+_aiFmtTime(snap.at)+'，下方编辑器可查看按你当前存档组装的完整 system/user</span>');
+    else if(snap) chips.push('<span style="color:var(--cyber)">📝 已捕获'+(snap.notsent?'（停用·未发出）':'实发')+'指令 · '+_aiFmtTime(snap.at)+'，点「'+(ov2?'修订中·查看/改写':'修订提示词')+'」查看真实 system/user 与约束</span>');
+    else chips.push('<span style="color:var(--gold)">尚未捕获：'+esc(c.trig)+'，可点「👁 预览当前指令」立即按当前存档组装（无需触发/无需密钥），或触发后自动留存真实指令</span>');
     return '<div style="border:1.5px solid var(--border);border-radius:10px;padding:9px 11px;background:rgba(255,255,255,.03)">'
       +'<div class="cfgrow" style="justify-content:space-between;gap:8px">'
       +'<div style="font-size:13px;color:var(--neon);font-weight:700">'+esc(c.label)+'</div>'
@@ -8003,6 +8068,7 @@ function renderAiChannels(ov){
       +'<div class="note" style="margin:3px 0">位置：'+esc(c.where)+'<br>频次：'+esc(c.trig)+'<br>兜底：'+esc(c.fb)+'</div>'
       +'<div class="note" style="margin:2px 0 6px">'+chips.join("　")+'</div>'
       +'<div class="cfgrow" style="gap:6px;flex-wrap:wrap">'
+      +'<button class="btn sm cyber" type="button" data-aich-preview="'+c.id+'">👁 预览当前指令（不发送）</button>'
       +'<button class="btn sm '+(ov2?"gold":"")+'" type="button" data-aich-edit="'+c.id+'">'+(ov2?"✎ 修订中·查看/改写":"修订提示词")+'</button>'
       +(ov2?'<button class="btn sm ghost" type="button" data-aich-reset="'+c.id+'">恢复默认</button>':"")
       +'<button class="btn sm ghost" type="button" data-aich-off="'+c.id+'">'+(off?"重新启用":"停用此通路")+'</button>'
@@ -8010,6 +8076,16 @@ function renderAiChannels(ov){
   };
   list.innerHTML=AI_CHANNELS.map(card).join("");
   $("#aichRefresh",head).onpointerdown=()=>{ SFX.tap(); renderAiChannels(ov); };
+  list.querySelectorAll("[data-aich-preview]").forEach(b=>b.onpointerdown=async()=>{ SFX.tap();
+    const id=b.dataset.aichPreview;
+    toast("正在按当前存档/人设/铁律组装「"+(AI_CHANNEL_BY_ID[id]||{}).label+"」真实指令…");
+    try{
+      await aiPreviewChannel(id);
+      renderAiChannels(ov);
+      openAiPromptEditor(id);
+      toast("已按当前存档组装完成——未请求模型、不计费、无需密钥");
+    }catch(e){ console.error("[aiPreview]",e); toast("预演失败："+(e&&e.message||e)); }
+  });
   list.querySelectorAll("[data-aich-edit]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); openAiPromptEditor(b.dataset.aichEdit); });
   list.querySelectorAll("[data-aich-reset]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); clearAiPromptOv(b.dataset.aichReset); renderAiChannels(ov); toast("已恢复默认提示词"); });
   list.querySelectorAll("[data-aich-off]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
@@ -8031,21 +8107,24 @@ function openAiPromptEditor(id){
     snap.stream?'流式 ON':'非流式'
   ].map(t=>'<span class="btn sm ghost" style="pointer-events:none;margin:2px 4px 2px 0">'+t+'</span>').join(""):"";
   const snapBanner=snap
-    ?('<div class="note" style="margin:6px 0">'+(snap.notsent
+    ?('<div class="note" style="margin:6px 0">'+(snap.preview
+        ?'<span style="color:#5fd4e8">👁 本机预演（'+_aiFmtTime(snap.at)+'）：以下指令按你<b>当前存档</b>（人设/铁律/称呼/修订覆盖'+(snap.off?'，含已停用标注':'')+'）实时组装，<b>未请求模型、不计费、无需密钥</b>；与真正触发该功能时发出的指令同构（动态上下文以代表性样例填充）。</span>'
+        :(snap.notsent
         ?'<span style="color:var(--gold)">此通路已停用：以下为停用前最后一次<b>本来要发出</b>的指令（未真正请求模型）。</span>'
-        :('最近实发捕获：'+_aiFmtTime(snap.at)+(snap.ov?' · <span style="color:var(--gold)">当次已带你的修订</span>':' · 当次为默认提示词')))
-      +'<br>下方只读文本即该通路<b>真实发出</b>的完整指令（动态注入的人设、铁律均已包含），可据此改写。</div>'
-      +(paramChips?'<div style="margin:2px 0 4px"><div style="font-size:11px;color:var(--dim);margin-bottom:2px">该次调用的参数约束：</div>'+paramChips+'</div>':""))
-    :'<div class="note" style="margin:6px 0;color:var(--gold)">本机尚无捕获记录。触发方式：'+esc(c.trig)+'。触发后回到此页，即可看到完整的真实 system/user 与参数约束；捕获长期留存本机（不进云同步）。你也可以先直接写修订稿。</div>';
+        :('最近实发捕获：'+_aiFmtTime(snap.at)+(snap.ov?' · <span style="color:var(--gold)">当次已带你的修订</span>':' · 当次为默认提示词'))))
+      +(snap.preview?'<br>':'<br>')+'下方只读文本即该通路'+(snap.preview?'<b>预演组装</b>':'<b>真实发出</b>')+'的完整指令（动态注入的人设、铁律均已包含），可据此改写。</div>'
+      +(paramChips?'<div style="margin:2px 0 4px"><div style="font-size:11px;color:var(--dim);margin-bottom:2px">'+(snap.preview?'该通道的参数约束（按参数档实算）':'该次调用的参数约束')+'：</div>'+paramChips+'</div>':""))
+    :'<div class="note" style="margin:6px 0;color:var(--gold)">本机尚无捕获记录。点卡片上的「👁 预览当前指令」可立即按当前存档组装（不发送、不计费、无需密钥）；或按此方式真实触发：'+esc(c.trig)+'。捕获长期留存本机（不进云同步）。你也可以先直接写修订稿。</div>';
+  const refTag=snap&&snap.preview?'当前预演 · 只读，含人设/铁律注入':'最近实发 · 只读，含人设/铁律注入';
   const p=panel('<h2>修订提示词 · '+esc(c.label)+'</h2>'
     +'<div class="note" style="margin:4px 0 8px">'+esc(c.where)+'　频次：'+esc(c.trig)+'</div>'
     +snapBanner
-    +'<div style="font-size:12px;color:var(--cyber);margin:8px 0 3px">System 指令（最近实发 · 只读，含人设/铁律注入）</div>'
+    +'<div style="font-size:12px;color:var(--cyber);margin:8px 0 3px">System 指令（'+refTag+'）</div>'
     +'<textarea id="ovSysRef" rows="9" readonly style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--dim);border:1.5px solid var(--border);border-radius:8px;padding:7px">'+esc(snap?snap.sys:"（尚无捕获——按上方触发方式操作一次后自动留痕）")+'</textarea>'
     +'<div class="cfgrow" style="gap:6px;margin:4px 0 8px"><button class="btn sm ghost" type="button" id="ovLoadSys">载入到修订框</button></div>'
     +'<div style="font-size:12px;color:var(--gold);margin:6px 0 3px">System 修订稿（留空=不改；保存后整体替换默认 system，动态注入的人设/铁律不再叠加）</div>'
     +'<textarea id="ovSys" rows="9" style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--fg);border:1.5px solid var(--gold);border-radius:8px;padding:7px">'+esc(ov0.sys!=null?ov0.sys:"")+'</textarea>'
-    +'<div style="font-size:12px;color:var(--cyber);margin:10px 0 3px">User 内容（最近实发 · 只读，含动态变量与上下文）</div>'
+    +'<div style="font-size:12px;color:var(--cyber);margin:10px 0 3px">User 内容（'+(snap&&snap.preview?'当前预演':'最近实发')+' · 只读，含动态变量与上下文）</div>'
     +'<textarea id="ovUserRef" rows="6" readonly style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--dim);border:1.5px solid var(--border);border-radius:8px;padding:7px">'+esc(snap?snap.user:"（尚无捕获）")+'</textarea>'
     +'<div class="cfgrow" style="gap:6px;margin:4px 0 8px"><button class="btn sm ghost" type="button" id="ovLoadUser">载入到修订框</button></div>'
     +'<div style="font-size:12px;color:var(--gold);margin:6px 0 3px">User 修订稿（留空=不改；多数通路的动态上下文都在 user 里，改写后变量将被静态文本替代）</div>'
@@ -8108,7 +8187,7 @@ function renderCfg(){
   </div>
   <div class="cfgpane" data-pane="aich">
     <div id="aichHead"></div>
-    <div class="note" style="margin:6px 0 10px">每条通路标注了位置（函数@文件）、模型、触发频次与离线兜底。你在游戏里触发过一次该功能后，其<b>真实发出的完整 system/user（含动态注入的人设、铁律）与参数约束（温度/上限/JSON 模式等）即自动捕获并长期留存本机</b>（不进云同步），在「修订提示词」里可直接查看并据此改写；保存后下一次调用立即生效，恢复默认即还原。停用的通路也会记录"本来要发什么"。</div>
+    <div class="note" style="margin:6px 0 10px">每条通路标注了位置（函数@文件）、模型、触发频次与离线兜底。<b>不想触发功能、也没配密钥？直接点卡片上的「👁 预览当前指令（不发送）」</b>——按你当前存档（人设/称呼/铁律/修订）本地组装出该通道真实 system/user 与参数约束（温度/上限/JSON 模式等），<b>不请求模型、不计费</b>，在编辑器里直接查看/改写；真实触发后的实发捕获同样长期留存本机（不进云同步）。保存修订后下一次调用立即生效，恢复默认即还原；停用的通路也能预演"本来要发什么"。</div>
     <div id="aichList" style="display:flex;flex-direction:column;gap:8px"></div>
   </div>
   <div class="cfgpane on" data-pane="av">
@@ -9406,7 +9485,7 @@ function _aiSnapPut(ch,rec){
     sys:clip(rec.sys),user:clip(rec.user),
     temp:(rec.temp===undefined?prev.temp:rec.temp),maxTokens:rec.maxTokens||prev.maxTokens||0,
     json:!!rec.json,tools:!!rec.tools,stream:!!rec.stream,
-    ov:!!rec.ov,off:!!rec.off,notsent:!!rec.notsent};
+    ov:!!rec.ov,off:!!rec.off,notsent:!!rec.notsent,preview:!!rec.preview};
   try{
     let raw=JSON.stringify(_aiSnap);
     if(raw.length>AI_SNAP_TOTAL_CAP){ /* LRU：淘汰最旧通道，直到达标 */
@@ -9438,10 +9517,102 @@ function saveAiPromptOv(id,sys,user){
 function clearAiPromptOv(id){ if(st.aiPromptOv){ delete st.aiPromptOv[id]; save(); } }
 function aiChOff(id){ return !!(st&&st.aiChOff&&st.aiChOff[id]); }
 function toggleAiCh(id){ st.aiChOff=st.aiChOff||{}; st.aiChOff[id]=aiChOff(id)?0:1; if(!st.aiChOff[id]) delete st.aiChOff[id]; save(); }
-/* dsChat 入口统一应用：通路停用 → 抛错（各调用点 fail-open 落本地兜底）；提示词修订 → 按角色整体替换 */
-function aiApplyChannel(messages,opts){
+/* dsChat 入口统一应用：通路停用 → 抛错（各调用点 fail-open 落本地兜底）；提示词修订 → 按角色整体替换
+   v78：allowOff（仅 dryRun 预演）——停用通道也放行组装，让玩家看到"若启用会发什么"，不写 notsent 快照 */
+/* v78：AI 通路一键预演——不发送、不计费、无需密钥。
+   按当前真实存档（人设/铁律/修订覆盖/停用状态）本地组装该通道真实 messages，
+   经 dsChat(dryRun) 在 fetch 前中止并落 preview 快照；返回快照供编辑器展示。 */
+async function aiPreviewChannel(id){
+  const reg=AI_CHANNEL_BY_ID[id];
+  if(!reg) throw new Error("未知通路："+id);
+  /* 代表性真实对象：优先当前在途任务，其次任意排程任务/烘焙任务 */
+  let q0=(typeof firstActiveQuest==="function"&&firstActiveQuest());
+  if(!q0){ for(let day=1;day<=45;day++){ const dd=byDay[day]; if(dd&&dd.quests&&dd.quests.length){ q0=dd.quests[0]; break; } } }
+  if(!q0) q0=D.quests.find(x=>x.id==="D01M")||D.quests[0];
+  const q=Object.assign({},q0);
+  if(!q.tlabel) q.tlabel=((typeof Q_TYPE_LABEL!=="undefined"&&Q_TYPE_LABEL[q.type])||"理经");
+  if(q.xp==null) q.xp=10; if(q.coin==null) q.coin=5;
+  let nq=null;
+  for(let day=1;day<=45&&!nq;day++){ const dd=byDay[day]; if(dd&&dd.quests) nq=dd.quests.find(x=>x.id!==q.id)||null; }
+  const pt0=D.pointsLib[0]||{id:"",title:"考点",text:""};
+  let built=null;
+  switch(id){
+    /* ---- index.html 内联提示词通道 ---- */
+    case "questCue": built=buildQuestCueMsgs(q,byDay[q.day]); break;
+    case "gdCue": built=buildGdCueMsgs(st.day||1,0); break;
+    case "questLine": built=buildQuestLineMsgs(q,"pub"); break;
+    case "questBrief": built=buildQuestBriefMsgs(q); break;
+    case "refineAction": built=buildRefineActionMsgs(q,""); break;
+    case "questAck": built=buildQuestAckMsgs(q); break;
+    case "refineYunting": built=buildRefineYuntingMsgs(q,nq,false); break;
+    case "cutscene": built=buildCutsceneMsgs("arrive"); break;
+    case "guidance":{
+      const pair=(typeof pickGuidanceNpcs==="function")?pickGuidanceNpcs():{primary:"yunting",secondary:"tina"};
+      built=buildGuidanceMsgs(["g1","g2","g3","g4","g5","g6"],q,pair.primary,pair.secondary,null);
+      break;
+    }
+    case "bookExtra": built=buildBookExtraMsgs("preview",D.pointsLib.slice(0,3)); break;
+    case "bilingualQuiz":
+      built=buildBilingualQuizMsgs([{kind:"b",q:"Which gate is the main entrance of the Forbidden City?",a:"The Meridian Gate (Wumen).",opts:["Wumen","Shenwumen"]}]);
+      break;
+    case "enExplain":
+      built=buildEnExplainMsgs({q:"中文题面",a:"中文答案",_en:{q:"Why is Wumen important?",a:"It is the southern main gate."}});
+      break;
+    case "wrongReply":{
+      const pt1=D.pointsLib[1]||pt0;
+      const z={kind:"choice",pid:pt0.id,q:"下列关于故宫的说法，正确的是？",a:0,
+        opts:["故宫又称紫禁城，是明清两代皇宫。","故宫建于唐代。","故宫位于上海。","故宫现已全部毁坏。"],
+        ometa:[null,{t:"bad",from:"明代",to:"唐代"},{t:"other",pid:pt1.id},{t:"other",pid:pt1.id}],why:"样例解析：故宫始建于明永乐年间。"};
+      built=buildWrongReplyMsgs(z,"故宫建于唐代。","故宫又称紫禁城，是明清两代皇宫。",{id:(resolveNpc(q.npc)||{}).id||q.npc||"yunting"},q);
+      break;
+    }
+    case "oralReview":
+      built=buildOralReviewMsgs("Please briefly introduce the Forbidden City.","The Forbidden City is in Beijing and was the imperial palace.",cleanMd(pt0.text).slice(0,300));
+      break;
+    case "reciteReview":{
+      const o=(typeof rtOralOf==="function")?rtOralOf("ORB-GUG-0"):null;
+      built=buildReciteReviewMsgs("ORB-GUG-0",(o&&o.text)||cleanMd(pt0.text).slice(0,400));
+      break;
+    }
+    case "transReview":
+      built=buildTransReviewMsgs("故宫位于北京中心。","The Forbidden City locates in Beijing center.","The Forbidden City is located in the center of Beijing.","zh2en","");
+      break;
+    case "oralStory":{
+      const of0=D.oralFull[0]; const sec=(of0&&of0.sections&&of0.sections[0])||{h:"概览",text:cleanMd(pt0.text).slice(0,400)};
+      built=buildOralStoryMsgs({name:(of0&&of0.name)||"故宫",h:sec.h,text:sec.text});
+      break;
+    }
+    case "cardExpand":
+      built=buildCardExpandMsgs(cleanMd(pt0.text).slice(0,200),{cat:"pts",catLabel:"考点",id:pt0.id});
+      break;
+    case "persona": built=buildPersonaMsgs("yunting",""); break;
+    case "biasText":{
+      const stage=(typeof stageOfDay==="function")?stageOfDay(st.day||1):{name:"初程",days:[1,9],theme:""};
+      built=buildBiasStageMsgs(stage,stage,{});
+      break;
+    }
+    case "savePersona":
+      built=buildSavePersonaMsgs([{i:0,role:"player",npc:null,text:"今天的雾很薄，我们早点出发吧。"}]);
+      break;
+    case "keyPing": built=buildKeyPingMsgs(); break;
+    /* ---- wd-chat.js 七通道 ---- */
+    case "chat": case "chatTools": case "autoSummary": case "evolve":
+    case "directorPlan": case "directorFlow": case "directorAudit":
+      if(!window.WDChat||!WDChat.previewBuild) throw new Error("WDChat.previewBuild 不可用");
+      built=WDChat.previewBuild(id);
+      break;
+    default: throw new Error("未实现预演："+id);
+  }
+  if(!built||!built.messages||!built.messages.length) throw new Error("预演组装为空："+id);
+  try{
+    await dsChat(built.messages,Object.assign({ch:id,dryRun:true},built.opts));
+  }catch(e){ if(!e.aiDryRun) throw e; }
+  return aiSnapGet(id);
+}
+
+function aiApplyChannel(messages,opts,allowOff){
   const o=opts||{}; const id=o.ch||o.kind||"chat";
-  if(aiChOff(id)){
+  if(aiChOff(id)&&!allowOff){
     /* v76：停用也留痕——捕获"本来要发什么"，玩家在面板仍可查看/修订（notsent 标注未真正发出） */
     try{ _aiSnapPut(id,Object.assign({kind:o.kind||"",off:true,notsent:true,ov:false},_snapMsgs(messages))); }catch(e){}
     const e=new Error("AI_CH_OFF:"+id); e.aiChOff=true; throw e;
@@ -9474,10 +9645,23 @@ function _backoffMs(attempt){ return Math.min(8000,600*Math.pow(2,attempt))+Math
    - 流式：kind=chat/polish 且未传 tools 且提供 onDelta 回调时 stream:true（含 include_usage）
    返回：普通文本 / 流式完整文本；带 tools 时返回 {content,toolCalls} */
 async function dsChat(messages, opts, onDelta){
-  if(!dsReady()) throw new Error("未配置密钥");
   const o=(opts===true)?{kind:"evolve"}:((opts&&typeof opts==="object")?opts:{});
   const kind=o.kind||"chat";
   const ch=o.ch||kind;
+  /* v78：实弹预演（dryRun）——配置中心「👁 预览当前指令」专用：
+     · 无需密钥也可组装（离线玩家同样看得到规则）；
+     · 走完整 aiApplyChannel（修订覆盖照常生效；停用通道仅标注 off，不拦截）；
+     · 落 preview 快照后在 fetch 之前抛 aiDryRun，绝不发请求、不计费、不写 callLog。 */
+  if(o.dryRun){
+    const pmsgs=aiApplyChannel(messages,o,true);
+    const dprof=Object.assign({},DS_PROFILES[kind]||DS_PROFILES.chat);
+    _aiSnapPut(ch,Object.assign({model:o.model||dprof.model||DS_MODEL,kind,preview:true,
+      ov:!!aiPromptOv(ch),off:aiChOff(ch),
+      temp:dprof.temperature,maxTokens:o.max_tokens||dprof.max_tokens,
+      json:!!dprof.response_format,tools:!!o.tools,stream:false},_snapMsgs(pmsgs)));
+    const dre=new Error("AI_DRY_RUN"); dre.aiDryRun=true; throw dre;
+  }
+  if(!dsReady()) throw new Error("未配置密钥");
   messages=aiApplyChannel(messages,o);   /* v73：通路停用拦截 + 提示词修订覆盖 */
   const profile=Object.assign({},DS_PROFILES[kind]||DS_PROFILES.chat);
   const key=dsKeyGet().trim();
@@ -9583,7 +9767,8 @@ function personaTermOf(npcId){ return (window.WDTerms&&WDTerms.persona)?WDTerms.
    核心改进：从"全新生成"改为"基线优化+人物小传"模式。
    人设约束卡（真源=WDTerms）是硬基线，生成内容不得违背 soulField/voice/forbidden，
    只能在基线上丰富：补充人物小传、典型对白样本、场景反应模板。 */
-async function genPersona(npcId, feedback){
+/* v78：NPC 人设卡生成提示词组装（实发/预演共用，R1） */
+function buildPersonaMsgs(npcId, feedback){
   const npc=D.npcs.find(n=>n.id===npcId)||NPC[npcId];
   const persona=st.personas[npcId];
   const customPersona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
@@ -9628,7 +9813,11 @@ async function genPersona(npcId, feedback){
     +"\n  relations: [{name,rel}],"
     +"\n  goal: 个人目标30字内,"
     +"\n  arc: 角色弧线40字内(渐进不突兀)";
-  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {ch:"persona",kind:"persona_r1"});
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"persona_r1"}};
+}
+async function genPersona(npcId, feedback){
+  const built=buildPersonaMsgs(npcId,feedback);
+  const raw=await dsChat(built.messages,Object.assign({ch:"persona"},built.opts));
   let card;
   try{ card=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) card=JSON.parse(m[0]); else throw e; }
@@ -9646,8 +9835,8 @@ async function genPersona(npcId, feedback){
 }
 /* 生成任务说明：游戏隐喻叙事 + 背景故事 + 知识拓展（替代旧版独立任务描述模块） */
 function firstNpcLine(dlg){ const n=dlg.find(l=>l.s==="n"); return n?n.t:(dlg[0]?dlg[0].t:""); }
-async function genQuestBrief(q){
-  const npc=resolveNpc(q.npc);
+/* v78：任务剧情简介（四段）提示词组装（实发/预演共用，JSON） */
+function buildQuestBriefMsgs(q){
   const persona=st.personas[q.npc]&&st.personas[q.npc].card;
   const sys="你是日式轻小说RPG《问道之旅·四十五日》的叙事引擎，文风对标日式轻小说与GALGAME：克制、有光影与画面、有温度，句子长短错落，留白比说尽更高级。\n"
     +"故事背景（序章已向玩家讲过，scene里不必复述设定）：玩家是意外坠入「导游世界」的普通现代人——『域外之人』，已与圣女云汀绑定、与次元精灵缇娜结下灵魂契约。她只有走完四十五日、九段导游试炼，在金榜台完成神圣导游就职典礼，云汀才能恢复圣女之力、以圣器驱散遗忘之雾，界门才会重新为她打开。NPC是她的同行者，不是老师、不是客服。\n"
@@ -9671,10 +9860,7 @@ async function genQuestBrief(q){
     +"     - impact 雾散之后：此程完成后云汀圣女之力的复苏与驱雾救世的进展，≤70字\n"
     +"     - reward 此行所得：修行、灵铢与新的路——它们如何通向归乡、通向她返回原世界的那扇门，≤70字，不写数字\n"
     +"  ④ metaphor：一句有余韵的轻小说式旁注，概括此程在修行路上的意义，≤30字";
-  /* v53：不再向开场剧情注入考点原文——旧版 AI 拿到知识点后会把
-     "三中全会/经济总量世界第二"等原文编进开场对白（残页念名字套路）。
-     考点内容只在手记与试炼中由玩法呈现，开场只负责 cue 式任务发布。 */
-  // 关联英文导游词（v52 R6：起点故宫，顺序与 ORAL_ORDER 一致）
+  /* v53：不再向开场剧情注入考点原文——考点内容只在手记与试炼中由玩法呈现，开场只负责 cue 式任务发布。 */
   const oralMap={"GUG":"forbidden-city","TAM":"tiananmen-square","TAN":"temple-of-heaven","SUM":"summer-palace","WAL":"great-wall","TOM":"ming-tombs"};
   const oralInfo=(q.covers||[]).map(c=>{
     const key=c.split("-")[0];
@@ -9687,7 +9873,11 @@ async function genQuestBrief(q){
     +(oralInfo?("\n\n涉及英文导游词："+oralInfo):"")
     +"\n\n注意：「关卡定位」由隐喻引擎给出，只作氛围参考（战斗关才有雾怪层级；非战斗关如整备/夜巡/拓片不得写战斗）。围绕当前任务本身叙事，自然借用定位中的意象即可，不要复读定位文字。"
     +"\n\n请输出JSON：{scene:string(一页轻小说式的场景画面，≤80字),dialog:[{s:\"n\"或\"p\",t:string(台词)}](4～9条完整剧情互动，总字数250～400，NPC台词s为\"n\"、玩家台词s为\"p\"),necessity:string(此行为何:像同行者低声说的话,点出就职典礼只认她这个域外之人,≤70字),impact:string(雾散之后:云汀圣女之力复苏与驱雾救世的进展,≤70字),reward:string(此行所得:修行/灵铢/新的路如何通向归乡,≤70字,不写数字),metaphor:string(有余韵的轻小说式旁注,≤30字)}。";
-  const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}], {ch:"questBrief",kind:"questbrief"});
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"questbrief"}};
+}
+async function genQuestBrief(q){
+  const built=buildQuestBriefMsgs(q);
+  const raw=await dsChat(built.messages,Object.assign({ch:"questBrief"},built.opts));
   let o;
   try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
   catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else throw e; }
@@ -9854,47 +10044,63 @@ async function genQuizBank(q){
   return out2.map(sanitizeQuiz);
 }
 /* v55 批3-⑥：复述 AI 评分——可选按钮，结论三档，不说对错，提供讲解+其他表达参考 */
-async function aiReciteReview(key, text, container){
-  if(!container||!container.isConnected) return;
+/* v78：背诵评测提示词组装（实发/预演共用） */
+function buildReciteReviewMsgs(key,text){
   const o=rtOralOf(key);
   const sys="你是北京导游资格考试英文口试评分专家。针对考生对英文导游词的复述/背诵，给出简短评分与建议：\n"
     +"1. 结论只分三档：「大体无碍」（流利完整）、「断续可修」（基本意思对但有漏或磕绊）、「需加强」（漏点多或表达不准）。不说「错」不说「输」。\n"
     +"2. 列出 2-3 条具体改进建议（措辞/流畅度/语法），每条≤25字。\n"
     +"3. 提供 1-2 个「还可以这样说」的替代表达（不同句式或更地道的说法）。\n"
     +"只输出不超过 220 字的简洁文本，不要标题、不要编号、不要 markdown。";
-  const user="段落标题："+(o?o.name+" §"+(o.sec+1):key)+"\n原文：\n"+text.slice(0,800)+"\n请评讲。";
+  const user="段落标题："+(o?o.name+" §"+(o.sec+1):key)+"\n原文：\n"+String(text||"").slice(0,800)+"\n请评讲。";
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish"}};
+}
+async function aiReciteReview(key, text, container){
+  if(!container||!container.isConnected) return;
+  const built=buildReciteReviewMsgs(key,text);
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"reciteReview",kind:"polish"});
+    const raw=await dsChat(built.messages,Object.assign({ch:"reciteReview"},built.opts));
     const txt=(raw||"").trim().slice(0,260);
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon);font-size:13px">${esc(txt)}</div>`;
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉评讲暂不可用——离线模式下自评结果已入档，继续即可。</div>`; }
 }
 /* v55 批3-⑤：传译 AI 评分与纠错——可选按钮，结论三档，不说对错 */
-async function aiTransReview(src, mine, ref, dir, key, container){
-  if(!container||!container.isConnected) return;
+/* v78：传译评测提示词组装（实发/预演共用） */
+function buildTransReviewMsgs(src,mine,ref,dir){
   const sys="你是中英互译评分与纠错专家。对比参考译文与考生译文，给出简短评讲：\n"
     +"1. 结论只分三档：「大体无碍」（意思准确、表达自然）、「磕绊可修」（基本意思对但有语法或措辞问题）、「没写出来」（漏译/错译较多）。不说「错」不说「输」。\n"
     +"2. 列出 2-3 条具体可改进点（语法/用词/漏译），每条≤25字。\n"
     +"3. 提供 1 个更地道的替代表达。\n"
     +"只输出不超过 220 字的简洁文本，不要标题、不要编号、不要 markdown。";
-  const user="方向："+(dir==="zh2en"?"中译英":"英译中")+"\n原文：\n"+src.slice(0,400)+"\n参考译文：\n"+ref.slice(0,400)+"\n考生译文：\n"+mine.slice(0,400)+"\n请评讲。";
+  const user="方向："+(dir==="zh2en"?"中译英":"英译中")+"\n原文：\n"+String(src||"").slice(0,400)+"\n参考译文：\n"+String(ref||"").slice(0,400)+"\n考生译文：\n"+String(mine||"").slice(0,400)+"\n请评讲。";
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish"}};
+}
+async function aiTransReview(src, mine, ref, dir, key, container){
+  if(!container||!container.isConnected) return;
+  const built=buildTransReviewMsgs(src,mine,ref,dir);
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"transReview",kind:"polish"});
+    const raw=await dsChat(built.messages,Object.assign({ch:"transReview"},built.opts));
     const txt=(raw||"").trim().slice(0,260);
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon);font-size:13px">${esc(txt)}</div>`;
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉评讲暂不可用——离线模式下自评结果已入档，继续即可。</div>`; }
 }
 /* v55 批3-③：整景理解趣味扩写——精灵第一人称讲这段的"身体故事"，只助理解不考原文 */
-async function aiOralStory(oa, container){
-  if(!container||!container.isConnected) return;
+/* v78：整景趣味扩写提示词组装（实发/预演共用） */
+function buildOralStoryMsgs(oa){
+  oa=oa||{};
   const sys="你是被雾怪侵蚀的景点精灵（"+(oa.name||"景点")+"），正用第一人称向玩家讲述你身体某一部分的\"身体故事\"。\n"
     +"要求：\n1. 用你作为景点精灵的口吻，把这段景点介绍讲成你身体的故事（如：我的左肩是午门，右肩是……），让玩家记住结构和历史；\n"
     +"2. 语气带点俏皮和自嘲，像亲密朋友闲聊，不说教；\n"
     +"3. 只帮助理解记忆，不考原文，不逐字复述原文；\n"
     +"4. 不超过 300 字，不要标题、不要编号、不要 markdown。";
-  const user="景点："+oa.name+"\n段落："+oa.h+"\n原文：\n"+oa.text.slice(0,800)+"\n请讲这个故事。";
+  const user="景点："+oa.name+"\n段落："+oa.h+"\n原文：\n"+String(oa.text||"").slice(0,800)+"\n请讲这个故事。";
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"chat"}};
+}
+async function aiOralStory(oa, container){
+  if(!container||!container.isConnected) return;
+  const built=buildOralStoryMsgs(oa);
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"oralStory",kind:"chat"});
+    const raw=await dsChat(built.messages,Object.assign({ch:"oralStory"},built.opts));
     const txt=(raw||"").trim().slice(0,360);
     container.innerHTML=`<div class="note" style="border-left-color:var(--cyber);font-size:13px">
       <div style="font-size:12px;color:var(--dim);margin-bottom:4px">「${esc(oa.name||"景点")}」的身体故事</div>
@@ -9902,14 +10108,20 @@ async function aiOralStory(oa, container){
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉扩讲暂不可用——直接读原文即可，内容同样准确。</div>`; }
 }
 /* v55 批3-①：卡片 AI 扩容——扩写≤原内容 3 倍，支持玩家编辑校订+撤销/前进 */
-async function aiCardExpand(text, card, container, textarea, markDirty){
-  if(!container||!container.isConnected) return;
-  const maxOut=Math.min(3000, text.length*3);
+/* v78：卡片 AI 扩写提示词组装（实发/预演共用） */
+function buildCardExpandMsgs(text,card){
+  card=card||{};
   const sys="你是导游资格考试备考助手。根据给定的考点或导游词片段，补充相关的背景知识、记忆方法、关联考点或趣味故事，帮助考生理解和记忆。\n"
     +"要求：\n1. 扩写内容不得超过原文的 3 倍长度\n2. 保持导游考试知识准确性\n3. 语言通俗自然，像同伴分享知识\n4. 不输出 markdown，纯文本\n5. 只输出扩写后的完整内容（原文+补充），不解释、不编号、不总结。";
-  const user="类型："+(card.catLabel||card.cat||"考点")+"\n编号："+(card.id||"")+"\n原文：\n"+text.slice(0,1200)+"\n请扩写。";
+  const user="类型："+(card.catLabel||card.cat||"考点")+"\n编号："+(card.id||"")+"\n原文：\n"+String(text||"").slice(0,1200)+"\n请扩写。";
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"chat"}};
+}
+async function aiCardExpand(text, card, container, textarea, markDirty){
+  if(!container||!container.isConnected) return;
+  const maxOut=Math.min(3000, (text||"").length*3);
+  const built=buildCardExpandMsgs(text,card);
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"cardExpand",kind:"chat"});
+    const raw=await dsChat(built.messages,Object.assign({ch:"cardExpand"},built.opts));
     let txt=(raw||"").trim();
     if(txt.length>maxOut) txt=txt.slice(0,maxOut)+"…";
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon)">
@@ -9927,15 +10139,20 @@ async function aiCardExpand(text, card, container, textarea, markDirty){
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉扩写暂不可用——离线模式下可手动编辑补充。</div>`; }
 }
 /* v55 批3-④：问契 AI 协判——正误/语法/完整性三方面，结论三档，离线走人工自评 */
-async function aiOralReview(q, a, ref, container){
-  if(!container||!container.isConnected) return;
+/* v78：修诵复述评测提示词组装（实发/预演共用） */
+function buildOralReviewMsgs(q,a,ref){
   const sys="你是导游资格考试口试问答评分专家。针对考生的问契回答，从三方面给出简短协判：\n"
     +"1. 正误：核心要点是否答对；\n2. 语法：语句是否通顺自然；\n3. 完整性：是否遗漏关键信息。\n"
     +"结论只分三档：「大体无碍」「断续可修」「需加强」。不说「错」不说「输」。\n"
     +"只输出不超过 180 字的简洁文本，不要标题、不要编号、不要 markdown。";
-  const user="问题：\n"+q.slice(0,300)+"\n考生回答：\n"+a.slice(0,600)+"\n参考材料：\n"+(ref||"无").slice(0,300)+"\n请协判。";
+  const user="问题：\n"+String(q||"").slice(0,300)+"\n考生回答：\n"+String(a||"").slice(0,600)+"\n参考材料：\n"+String(ref||"无").slice(0,300)+"\n请协判。";
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish"}};
+}
+async function aiOralReview(q, a, ref, container){
+  if(!container||!container.isConnected) return;
+  const built=buildOralReviewMsgs(q,a,ref);
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"oralReview",kind:"polish"});
+    const raw=await dsChat(built.messages,Object.assign({ch:"oralReview"},built.opts));
     const txt=(raw||"").trim().slice(0,220);
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon);font-size:13px">${esc(txt)}</div>`;
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉协判暂不可用——请对照参考材料自行核对。</div>`; }
@@ -9964,15 +10181,33 @@ function biasText(bias){
     return n+": 实际"+b.act+"秒 / 预估"+b.est+"秒（偏差"+(b.delta>=0?"+":"")+b.delta+"分钟，"+b.n+"项）";
   }).join("\n")+"\n";
 }
-/* v65：云汀基于偏差数据生成阶段总结对白 */
-async function r1StageSummaryChat(newStage, oldStage, bias){
-  if(!dsReady()) return;
+/* v78：R1 阶段总结对白提示词组装（实发/预演共用，biasText 通道） */
+function buildBiasStageMsgs(newStage,oldStage,bias){
   const sys="你是日式RPG《问道之旅·四十五日》的云汀。玩家刚完成「"+oldStage.name+"」阶段。"
     +"请基于玩家在该阶段的实际耗时与预估偏差数据，用云汀的口吻（温柔、简短、不说教、自称「我」、不报数字不报百分比）"
     +"向玩家总结这一阶段的游戏情况，点出她擅长和吃力的任务类别，给出一条互动建议。只输出 1-3 句对白，不超过 100 字。";
   const user="偏差数据（正=比预估慢，负=比预估快）：\n"+biasText(bias);
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"persona_r1"}};
+}
+/* v78：R1 全员群聊引导提示词组装（实发/预演共用，biasText 通道） */
+function buildBiasGroupMsgs(stage,bias){
+  const sys="你是日式RPG《问道之旅·四十五日》的群聊导演。玩家刚进入「"+stage.name+"」阶段。\n"
+    +"请基于以下信息，生成一段全员群聊对话（3-5 条，每条 1-2 句），内容需涵盖：\n"
+    +"1) 角色对新阶段的反应（符合各自人设与语言指纹）；\n2) 剧情推进暗示（本阶段会发生什么）；\n"
+    +"3) 世界演化提示（雾的变化、景点的状态）；\n4) 对玩家的请求与激励（请求式口吻，不说教）。\n"
+    +"5) 若有耗时偏差数据，让对应职能角色提及玩家上阶段在某一类任务上的表现（快/慢），作为偏好与难易判断的评估依据。\n"
+    +"只输出 JSON：{\"lines\":[{\"npc\":\"npc_id\",\"text\":\"台词\"}]}，npc_id 限 yunting/tina/wantang/shenzhao/chengxiu。";
+  const user="当前阶段："+stage.name+"（第"+stage.days[0]+"-"+stage.days[1]+"周）\n主题："+stage.theme+"\n玩家进度：已完成 "+Object.keys(st.done||{}).length+" 项任务，修行 "+(st.xp||0)+"\n"
+    +biasText(bias)
+    +"\n请生成群聊指导。";
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"persona_r1"}};
+}
+/* v65：云汀基于偏差数据生成阶段总结对白 */
+async function r1StageSummaryChat(newStage, oldStage, bias){
+  if(!dsReady()) return;
+  const built=buildBiasStageMsgs(newStage,oldStage,bias);
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"biasText",kind:"persona_r1"});
+    const raw=await dsChat(built.messages,Object.assign({ch:"biasText"},built.opts));
     const text=String(raw||"").slice(0,200);
     if(text){ st.dialogue.push({role:"npc",npc:"yunting",text,at:new Date().toISOString(),day:st.day,kind:"sys"}); save(); toast("云汀对白已生成"); }
   }catch(e){}
@@ -9995,17 +10230,9 @@ function r1StageTrigger(oldDay, newDay){
 }
 /* ⑦ 全员群聊 R1：每大阶段 1 次，指导角色发展/剧情推进/世界演化/世界级事件/任务动态调整 */
 async function r1GroupChatGuide(stage, bias){
-  const sys="你是日式RPG《问道之旅·四十五日》的群聊导演。玩家刚进入「"+stage.name+"」阶段。\n"
-    +"请基于以下信息，生成一段全员群聊对话（3-5 条，每条 1-2 句），内容需涵盖：\n"
-    +"1) 角色对新阶段的反应（符合各自人设与语言指纹）；\n2) 剧情推进暗示（本阶段会发生什么）；\n"
-    +"3) 世界演化提示（雾的变化、景点的状态）；\n4) 对玩家的请求与激励（请求式口吻，不说教）。\n"
-    +"5) 若有耗时偏差数据，让对应职能角色提及玩家上阶段在某一类任务上的表现（快/慢），作为偏好与难易判断的评估依据。\n"
-    +"只输出 JSON：{\"lines\":[{\"npc\":\"npc_id\",\"text\":\"台词\"}]}，npc_id 限 yunting/tina/wantang/shenzhao/chengxiu。";
-  const user="当前阶段："+stage.name+"（第"+stage.days[0]+"-"+stage.days[1]+"周）\n主题："+stage.theme+"\n玩家进度：已完成 "+Object.keys(st.done||{}).length+" 项任务，修行 "+(st.xp||0)+"\n"
-    +biasText(bias)
-    +"\n请生成群聊指导。";
+  const built=buildBiasGroupMsgs(stage,bias);
   try{
-    const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"biasText",kind:"persona_r1"});
+    const raw=await dsChat(built.messages,Object.assign({ch:"biasText"},built.opts));
     let o;
     try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
     catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else return; }
@@ -10050,6 +10277,16 @@ async function r1TransQuizGen(stage){
     save();
     toast("「"+stage.name+"」阶段传译新题已生成（"+arr.length+" 道）");
   }catch(e){ /* 静默失败 */ }
+}
+/* v78：存档·生成人设（旧对话重写）提示词组装（实发/预演共用） */
+function buildSavePersonaMsgs(batch){
+  const sys="你是日式RPG《问道之旅·四十五日》的剧本导演。下面是一段玩家与NPC的对话记录，腔调与新版人设不符。请逐条重写为日漫/GAL/轻小说风格的中文对白。硬性要求：①保持每条消息的 role 与 npc 不变；②保留原意和关键信息；③禁止半文半白古风腔（约莫/几桩/未了/可好/快些/光景/桩要紧事/已了/尚余/待您出手等）；④禁止教师腔/客服腔/心理医生腔/AI腔；⑤符合角色专属约束与语言法铁律。只输出 JSON 数组，每个元素含 i（原索引）、text（重写后文本）。";
+  const user=JSON.stringify(batch);
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish"}};
+}
+/* v78：连接测试 ping 提示词组装（实发/预演共用，无 system） */
+function buildKeyPingMsgs(){
+  return {messages:[{role:"user",content:"只回复：ok"}],opts:{kind:"polish"}};
 }
 function renderSave(){
   const t=totals();
@@ -10103,9 +10340,8 @@ function renderSave(){
                 .filter(x=>x.text&&x.text.trim()&&!isPlaceholderMsg(st.dialogue[x.i])&&!st.dialogue[x.i].guidance);
               if(!toRewrite.length) return;
               const batch=toRewrite.slice(0,40);
-              const sys="你是日式RPG《问道之旅·四十五日》的剧本导演。下面是一段玩家与NPC的对话记录，腔调与新版人设不符。请逐条重写为日漫/GAL/轻小说风格的中文对白。硬性要求：①保持每条消息的 role 与 npc 不变；②保留原意和关键信息；③禁止半文半白古风腔（约莫/几桩/未了/可好/快些/光景/桩要紧事/已了/尚余/待您出手等）；④禁止教师腔/客服腔/心理医生腔/AI腔；⑤符合角色专属约束与语言法铁律。只输出 JSON 数组，每个元素含 i（原索引）、text（重写后文本）。";
-              const user=JSON.stringify(batch);
-              const raw=await dsChat([{role:"system",content:sys},{role:"user",content:user}],{ch:"savePersona",kind:"polish"});
+              const builtSP=buildSavePersonaMsgs(batch);
+              const raw=await dsChat(builtSP.messages,Object.assign({ch:"savePersona"},builtSP.opts));
               let arr=null;
               try{ arr=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }catch(e){}
               if(!Array.isArray(arr)) throw new Error("返回格式非数组");
@@ -10130,7 +10366,7 @@ function renderSave(){
     }
     const s=$("#dsStatus",ov);
     if(dsReady()){ s.className="estatus saved"; s.textContent="● 已保存 · 正在连通性测试…";
-      dsChat([{role:"user",content:"只回复：ok"}],{ch:"keyPing",kind:"polish"}).then(()=>{ s.textContent="● 已配置并连通 · AI 功能可用"; s.className="estatus saved"; toast("密钥有效"); })
+      dsChat(buildKeyPingMsgs().messages,Object.assign({ch:"keyPing"},buildKeyPingMsgs().opts)).then(()=>{ s.textContent="● 已配置并连通 · AI 功能可用"; s.className="estatus saved"; toast("密钥有效"); })
         .catch(e=>{ s.textContent="● 已保存，但调用失败："+e.message+"（仍可离线使用）"; s.className="estatus dirty"; toast("连通测试失败："+e.message); });
     } else { s.className="estatus dirty"; s.textContent="○ 未配置 · 使用内置内容"; toast("已清除密钥"); }
     $("#dsPersona",ov).disabled=!dsReady();
@@ -10625,7 +10861,7 @@ function dsKeyGate(after, opts){
     dsKeySet(v); SFX.tap();
     if(dsReady()){
       s.className="estatus saved"; s.textContent="● 已保存 · 灵脉连通测试中…";
-      dsChat([{role:"user",content:"只回复：ok"}],{ch:"keyPing",kind:"polish"}).then(()=>{
+      dsChat(buildKeyPingMsgs().messages,Object.assign({ch:"keyPing"},buildKeyPingMsgs().opts)).then(()=>{
         aiHealth="ok";
         s.className="estatus saved"; s.textContent="● 已连通 · 灵脉已通"; toast("密钥有效，灵脉已通");
         if(blocking) ov.remove();
@@ -10700,7 +10936,7 @@ async function reconnectAi(){
   aiHealth="down";
   toast("正在重连灵脉…");
   try{
-    await dsChat([{role:"user",content:"只回复：ok"}],{ch:"keyPing",kind:"polish"});
+    await dsChat(buildKeyPingMsgs().messages,Object.assign({ch:"keyPing"},buildKeyPingMsgs().opts));
     aiHealth="ok"; toast("灵脉已通");
   }catch(e){
     aiHealth="error"; toast("重连失败："+(e.message||e));

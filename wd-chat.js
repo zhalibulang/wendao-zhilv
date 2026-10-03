@@ -1271,6 +1271,162 @@ const WDChat={
     }catch(e){
       return {pass:true,issues:[],revised:text};
     }
+  },
+
+  /* ---------- v78：通路真实指令预演（不发送/不计费/无需密钥） ----------
+     按当前存档（人设/铁律/上下文）本地组装该通道真实 messages+opts，
+     交由 index.html 的 aiPreviewChannel → dsChat(dryRun) 落 preview 快照。
+     组装逻辑与实发路径共用 sysPrompt/buildContext/masterRule 等同一批 helper。 */
+  previewBuild(chId){
+    const {NPC}=CTX;
+    const npcName=(id)=>{const n=NPC[id];return n?((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(id,n.name):n.name):id;};
+    const sampleUser="今天的雾好像薄了些，你在忙什么？";
+    switch(chId){
+      case "chat":
+      case "chatTools":{
+        const npcId="yunting";
+        const npc=NPC[npcId]||NPC.yunting;
+        const sys=this.sysPrompt(npcId,null);
+        const hist=this.historyOf(npcId,8);
+        const turns=hist.map(m=>({role:m.role==="player"?"user":"assistant",content:m.text}));
+        const dispName=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(npcId,npc.name):npc.name;
+        if(chId==="chatTools"){
+          return {messages:[
+            {role:"system",content:sys},
+            ...turns,
+            {role:"user",content:this.buildContext(npcId,sampleUser,null,null)+"\n\n——"+dispName+"。只有确有必要核实时才调用工具；查完照常像人一样说话，不许写说明、不许罗列数据。"+this.postHistoryRules(npcId)}
+          ],opts:{kind:"chat",tools:this.toolDefs()}};
+        }
+        return {messages:[
+          {role:"system",content:sys},
+          ...turns,
+          {role:"user",content:this.buildContext(npcId,sampleUser,null,null)+"\n\n——"+dispName+"。"+this.postHistoryRules(npcId)}
+        ],opts:{kind:"chat"}};
+      }
+      case "autoSummary":{
+        const npcId="yunting";
+        const st=CTX.getSt();
+        const arr=(st.dialogue||[]).filter(m=>m&&(m.role==="npc"&&m.npc===npcId||m.role==="player"));
+        const tail=(arr.length?arr: [{role:"player",text:"今天先理这几张卡页。"},{role:"npc",npc:npcId,text:"好，我陪你。"}])
+          .slice(-10).map(m=>(m.role==="player"?"玩家：":"NPC：")+String(m.text||"").slice(0,100)).join("\n");
+        const sys="你是游戏对话摘要器。把旧摘要与新增对话合并压缩为 ≤300 字的角色互动记忆摘要：只保留确定发生的事实（玩家做了什么、答应了什么、聊过什么话题、情绪状态），不要推测，不要华丽辞藻。只输出摘要正文。";
+        const user="旧摘要："+(this.summaryOf(npcId)||"（无）")+"\n\n新增对话：\n"+tail+"\n\n请输出合并后的新摘要（≤300字）。";
+        return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"summary"}};
+      }
+      case "evolve":{
+        const npcId="yunting";
+        const npc=NPC[npcId];
+        const st=CTX.getSt();
+        const persona=st.personas[npcId]&&st.personas[npcId].card;
+        const g=this.growthOf(npcId);
+        let recent=this.historyOf(npcId,12);
+        if(!recent.length) recent=[{role:"player",text:"今天也一起把这一程走完吧。"},{role:"npc",text:"嗯，有你在，我心里踏实些。"}];
+        const sys="你是游戏『问道之旅·四十五日』的角色导演。基于NPC人设与其和玩家的最近互动，推演这个角色的自然成长：性格的细微变化、语言表达方式的演进、行为模式的适应性调整，并续写个人故事线。变化必须渐进自然不突兀，保留原人设基调，符合导游异次元世界观。严禁AI腔。"
+          +this.masterRule()
+          +"只输出JSON。";
+        const dN=npcName(npcId);
+        const dT=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(npcId,npc.title):(npc.title||"");
+        const user="游戏背景：\n"+JSON.stringify(this.worldBrief())
+          +"\n\n角色：\n"+JSON.stringify({id:npcId,姓名:dN,称号:dT,背景:npc.intro})
+          +(persona?("\n已确认人设："+JSON.stringify(persona)):"")
+          +"\n\n成长现状：累计对话"+(g.talks||0)+"次"
+          +(g.traits&&g.traits.length?("，性格特质："+g.traits.join("、")):"")
+          +(g.speech?("；语言演进："+g.speech):"")
+          +(g.shift?("；行为倾向："+g.shift):"")
+          +(g.story&&g.story.length?("\n既有故事线："+g.story.slice(-3).map(s=>s.ev).join(" → ")):"")
+          +"\n\n最近互动摘要：\n"+recent.map(m=>(m.role==="player"?"玩家：":"该NPC：")+m.text).join("\n")
+          +"\n\n请输出JSON：{traits:[性格特质数组，3-4个短语，每个≤12字，体现细微演进]、speech:string(语言表达方式的演进，≤40字)、shift:string(行为模式的适应性调整，≤40字)、story:string(个人故事线新篇章，≤80字，与最近互动内容相关，第一人称)}";
+        return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"evolve"}};
+      }
+      case "directorPlan":{
+        const targets=["yunting","tina"];
+        const cards=Object.keys(NPC).map(id=>{
+          const npc=NPC[id]; if(!npc) return null;
+          const name=npcName(id);
+          const v=(window.WDRegistry&&WDRegistry.voiceOf)?WDRegistry.voiceOf(id):null;
+          const arc=(window.WDRegistry&&WDRegistry.arcSeedOf)?WDRegistry.arcSeedOf(id):null;
+          return {id,name,role:npc.role||"",cadence:v?v.cadence:"",goal:arc?arc.goal:""};
+        }).filter(Boolean);
+        const scene=this.recentScene?this.recentScene(10):[];
+        const userDoc=(window.WDCfg&&WDCfg.directorDoc)?WDCfg.directorDoc():"";
+        let sys=userDoc&&userDoc.trim()
+          ?userDoc.trim()
+          :("你是日式RPG《问道之旅·四十五日》的群聊导演。看完下面的信息，决定接下来哪些NPC该开口、按什么顺序、用什么反应类型。\n"
+            +"【反应类型】respond(正常接话) / interject(插话，多为半句或语气词) / react(对他人的反应) / guide(把话题轻拽回正事，但不许生硬)。\n"
+            +"【活人感·铁律】"
+            +"1）NPC首先是有自己生活的居民，不是任务派发器或报告器——她们可以聊自己正在做的事、想起的事、对眼前场景的感想，不必每次都和任务相关；"
+            +"2）反应必须多样：有人接话、有人吐槽、有人只给一个语气词、有人冷淡、有人听错重点、有人接别人的话茬、有人突然想起别的事；"
+            +"3）禁止让NPC轮流报告进度、轮流说鼓励话、轮流报数值——七个人不能说七个意思相近的句子；"
+            +"4）hint是给NPC这一句的方向（≤20字），不是替她写台词，不要写「请说……」「你要表达……」这种指令；"
+            +"5）通常1-2人开口，极少超过3人。被@的人通常必回应；未被@的人只在她的性格确实会被勾起时插话。\n"
+            +"【任务完成场景特别注意】不要让NPC说「XX已交付」「任务完成」这种报告式台词——那是系统该干的事。NPC的第一反应应该像队友看到同伴刚干完活：也许随口夸一句、也许吐槽选这关太折腾、也许接别人的话茬、也许什么都不说只应一声、也许突然想起自己有别的事要忙。");
+        sys+="\n"+this.masterRule();
+        sys+="\n只输出JSON。";
+        let user="在场角色与各自说话方式：\n"+cards.map(c=>JSON.stringify(c)).join("\n")
+          +"\n\n近期群聊（供互文，不要重复其中说法）：\n"+(scene.map(s=>s.who+"："+s.text).join("\n")||"（无）")
+          +"\n\n玩家刚发："+sampleUser
+          +"\n\n输出JSON：{\"plan\":[{\"npc\":\"id\",\"type\":\"respond\",\"hint\":\"这一句的方向≤20字\"}]}";
+        user+="\n被@的角色："+targets.map(id=>npcName(id)).join("、")+"——这些人通常必回应。";
+        return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"directorplan"}};
+      }
+      case "directorFlow":{
+        const targetIds=["yunting","tina"];
+        const scene=this.recentScene(10);
+        const cards=targetIds.map(id=>{
+          const npc=NPC[id]; if(!npc) return null;
+          const name=npcName(id);
+          const v=(window.WDRegistry&&WDRegistry.voiceOf)?WDRegistry.voiceOf(id):null;
+          const persona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(id):"";
+          return {id,姓名:name,
+            说话方式:v?{节奏:v.cadence,手法:(v.moves||[]).slice(0,2),示例:(v.samples||[]).slice(0,2),禁忌:(v.avoid||[]).slice(0,2)}
+                       :(persona||npc.intro||"")};
+        }).filter(Boolean);
+        const sys="你是日式RPG《问道之旅·四十五日》的群聊导演。一群早就认识彼此的角色，在同一个群聊里看到玩家的同一条消息，各自留下反应。"
+          +"铁律："
+          +"1）每个人只说她这个人才会说的话——反应类型必须错开：有人接话、有人吐槽、有人只给一个语气词、有人冷淡、有人听错重点或答非所问、有人顺着别人的话补刀、有人把话题拽回正事；"
+          +"2）严禁七个人表达同一个意思（尤其禁止轮流鼓励/安慰/说'不要气馁'/'相信自己'），也严禁每个人都把话说完整；"
+          +"3）长度2～50字，越短越好，允许只有一两个字、半句、犹豫改口；玩家说的是现实见闻时，先当八卦接，不许翻译成剧情或任务；"
+          +"4）允许角色之间互相接茬、拆台、偷笑、无奈，体现她们彼此的关系；玩家是群里一员，不是宇宙中心；"
+          +"5）遵守各自语言人格卡的节奏与禁忌；禁老师腔/客服腔/心理医生腔/AI腔/命令句/表面卖萌口癖；不要为了显得有性格而集体表演性格，平淡应一声也允许；"
+          +"6）"+this.masterRule()
+          +"7）只输出JSON。";
+        const user="在场角色与各自说话方式：\n"+cards.map(c=>JSON.stringify(c)).join("\n")
+          +"\n\n近期群聊（供互文，不要重复其中说法）：\n"+(scene.map(s=>s.who+"："+s.text).join("\n")||"（无）")
+          +"\n\n玩家刚发："+sampleUser
+          +"\n\n输出JSON：{\"lines\":["+cards.map(c=>"{npc:\""+c.id+"\",text:\"她的反应，2～50字，允许极短或不完整\"}").join(",")+"]}。每人一条，像同一个真实群里前后脚冒出来的消息，而不是七份问卷答案。";
+        return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"director"}};
+      }
+      case "directorAudit":{
+        const st=CTX.getSt();
+        const worldBrief=this.worldBrief?this.worldBrief():"";
+        const sampleText="云汀：嗯，这一程我陪你走，别一个人逞强。";
+        const kind="directorRespond";
+        const sys="你是日式RPG《问道之旅·四十五日》的剧本导演。你要审核下面这段 AI 生成的文本，判断它是否合理。\n"
+          +"审核四维度：\n"
+          +"1. 世界观设定：术语/力量体系/人物关系/势力阵营是否正确、是否与世界观冲突；\n"
+          +"2. 事理逻辑：角色行为反应是否合理、因果是否通顺、有没有常识性违和；\n"
+          +"3. 当下情境：是否符合当前任务/场景/对话氛围、有没有答非所问或跑题；\n"
+          +"4. 人物弧光：说话方式/态度是否符合该角色的性格+当前故事进度（第"+(st.day||1)+"日·幕"+(Math.min(5,Math.floor(((st.day||1)-1)/9)+1))+"）下应有的态度变化。\n"
+          +"铁律：\n"
+          +"- 能 pass 就 pass，不要吹毛求疵；只改真正有问题的；\n"
+          +"- revised 字段直接给出修改后的完整文本（如果 pass=true，revised 与 input 相同）；\n"
+          +"- 禁止词/禁止角色（提灯/引魂灯/封妖塔等）属于硬禁，命中必 pass=false；\n"
+          +"- v52 风格黑名单（拽文/AI口癖/教师腔）同样属硬禁，命中必 pass=false 并在 revised 中替换："
+          +(window.STYLE_BLACKLIST?window.STYLE_BLACKLIST.map(p=>p[0]+"→"+p[1]).join("、"):"")
+          +"；\n"
+          +"- 轻小说风格要求不要改成说明书或 AI 腔；\n"
+          +"- "+this.masterRule()+"\n"
+          +"- 只输出 JSON。";
+        let user="当前进度：第"+(st.day||1)+"日 · 第"+(Math.min(5,Math.floor(((st.day||1)-1)/9)+1))+"幕 · 圣女恢复约 "+Math.min(100,Math.floor(((st.day||1)/45)*100)+5)+"%";
+        if(worldBrief) user+="\n世界观参考（供对照，不要复述）："+(typeof worldBrief==="string"?worldBrief.slice(0,400):JSON.stringify(worldBrief).slice(0,400));
+        user+="\n\n待审核文本（类型："+kind+"）：\n"+sampleText
+          +"\n\n审核标准：pass=true 或 false。若 false，issues 列出问题，revised 给出修正版。"
+          +"\n\n输出JSON：{\"pass\":true/false,\"issues\":[\"问题简述，≤30字\"],\"revised\":\"修正后的完整文本（pass=true 时与 input 相同）\"}。";
+        return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"directorplan"}};
+      }
+      default:
+        return null;
+    }
   }
 };
 
