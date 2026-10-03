@@ -8057,6 +8057,7 @@ function renderCfg(){
   </div>
   <div class="cfgpane on" data-pane="av">
     <div class="note">JPG / PNG，≤5MB，分辨率不低于 200×200；上传后居中方形裁剪并压缩为 240px 存于本机，离线可用。拍摄照片会抹除 EXIF 定位信息。</div>
+    <div id="avOrphans"></div>
     <div class="avgrid" id="avGrid"></div>
     <div id="avCrop" style="display:none;margin-top:10px">
       <h3 style="font-size:13.5px;color:var(--cyber);margin:0 0 6px">预览与裁剪</h3>
@@ -8253,6 +8254,58 @@ function renderCfg(){
     g.querySelectorAll("[data-ptclr]").forEach(b=>b.onpointerdown=()=>{
       WDCfg.clearPortrait(b.dataset.ptclr); SFX.tap(); ov.remove(); renderCfg();
     });
+    paintOrphans();
+  }
+  /* v75 历史图片认领台：id 换代落选图 / 云端历史扫回图，玩家手动归位，系统绝不自动丢弃 */
+  const OLD_NPC_NAME={qingxuan:"青玄先生",yunheng:"云蘅",tiemian:"铁面先生",liuruyan:"柳如烟",xuanji:"璇玑",smq:"司马青衫",moxiaogu:"墨小骨"};
+  function paintOrphans(){
+    const box=$("#avOrphans",ov); if(!box) return;
+    const orph=WDCfg.mediaOrphans?WDCfg.mediaOrphans():[];
+    if(!orph.length){ box.innerHTML=""; return; }
+    const reg=(window.WDRegistry&&WDRegistry.all())||{};
+    const npcs=Object.keys(reg).length?Object.values(reg).map(r=>({id:r.id,name:WDCfg.npcName(r.id,r.name)}))
+      :D.npcs.map(n=>({id:n.id,name:WDCfg.npcName(n.id,n.name)}));
+    const kindTxt={npcAvatar:"头像",npcPortrait:"立绘",userAvatar:"我的头像"};
+    box.innerHTML=`<div style="border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:12px;background:rgba(212,175,55,.06)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div style="font-size:13px;color:var(--gold);font-weight:600">图片认领台 · ${orph.length} 张历史图片待归位</div>
+        ${(window.WDSync&&WDSync.enabled())?`<button class="btn sm" type="button" id="orphScan">从云端历史版本找回更多</button>`:""}
+      </div>
+      <div class="note" style="margin:4px 0 8px">角色体系历次更新时，老版本上传的图片不会被删除，都保留在这里。认出哪张是你要用的，点对应角色即可归位；确定不要的再丢弃。</div>
+      <div id="avOrphProg" class="small" style="color:var(--cyber);margin-bottom:6px"></div>
+      <div style="display:flex;flex-direction:column;gap:8px">${orph.map(x=>{
+        const fromNm=x.fromId==="_player"?"我的头像":(OLD_NPC_NAME[x.fromId]||x.fromId||"未知角色");
+        const hintN=x.toId?((npcs.find(n=>n.id===x.toId)||{}).name||x.toId):"";
+        const hint=hintN?("建议归位："+hintN):"";
+        const actions=x.bucket==="userAvatar"
+          ?`<button type="button" data-claim="${x.i}" data-to="_player" class="btn sm primary">设为我的头像</button>`
+          :npcs.map(n=>`<button type="button" data-claim="${x.i}" data-to="${n.id}" class="btn sm">给${esc(n.name)}</button>`).join("");
+        return `<div style="display:flex;gap:10px;align-items:center;background:var(--paper2);border-radius:8px;padding:6px 8px">
+          <img src="${esc(x.url)}" alt="" style="width:52px;height:52px;object-fit:contain;border-radius:6px;background:var(--ink);flex:none" onerror="this.style.opacity=.2">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;color:var(--ink)">来自「${esc(fromNm)}」的${kindTxt[x.bucket]||"图片"} · ${x.kb}KB${x.src?' · <span style="color:var(--cyber)">'+esc(x.src)+"</span>":""}</div>
+            ${hint?`<div class="small" style="color:var(--dim)">${esc(hint)}</div>`:""}
+            <div class="cfgrow" style="margin-top:4px;gap:6px;flex-wrap:wrap">${actions}
+              <button type="button" data-drop="${x.i}" class="btn sm ghost">丢弃</button></div>
+          </div></div>`;
+      }).join("")}</div></div>`;
+    box.querySelectorAll("[data-claim]").forEach(b=>b.onpointerdown=()=>{
+      WDCfg.claimOrphan(+b.dataset.claim,b.dataset.to); SFX.tap();
+      toast("已归位"); ov.remove(); renderCfg();
+    });
+    box.querySelectorAll("[data-drop]").forEach(b=>b.onpointerdown=()=>{
+      WDCfg.dropOrphan(+b.dataset.drop); SFX.tap(); paintOrphans(); paintGrid();
+    });
+    const scan=$("#orphScan",box);
+    if(scan) scan.onpointerdown=()=>{
+      scan.disabled=true; const prog=$("#avOrphProg",box);
+      prog.textContent="正在连接云端…";
+      WDSync.scanHistoryMedia((d,t)=>{ prog.textContent="扫描云端历史版本 "+d+"/"+t+" …"; })
+        .then(found=>{ const n=WDCfg.adoptOrphans(found);
+          prog.textContent=n?("已找回 "+n+" 张新图片，请在下方认领。"):"云端最近 30 个历史版本里没有更多图片了。";
+          scan.disabled=false; paintOrphans(); })
+        .catch(e=>{ prog.textContent="扫描失败："+esc(e.message||e); scan.disabled=false; });
+    };
   }
   let cropFile=null,cropURL="",cropInp=null;
   function startCrop(id){

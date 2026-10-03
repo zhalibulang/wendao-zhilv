@@ -225,7 +225,7 @@ const driver=`
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(!htmlSrc.includes('.dlg.gal{overflow-y:auto;-webkit-overflow-scrolling:touch}')) throw new Error('≤899px 缺 .dlg.gal 滚动修复');
     const sw=fs.readFileSync(require('path').join(__dirname,'sw.js'),'utf8');
-    if(!/wdzx-v(69|70|71|72|73)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
+    if(!/wdzx-v(69|70|71|72|73|74)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
   });
   run('v72 修诵卷底稿校订：结构审计',()=>{
     const wcOf=t=>String(t||'').trim().split(/\\s+/).filter(w=>/[A-Za-z0-9]/.test(w)).length;
@@ -348,37 +348,59 @@ const driver=`
     if(htmlFs.includes('又是谁、在哪、身上带着什么故事')) throw new Error('英文锚点词拟人化模板未清除');
     if(!htmlFs.includes('是地名、寒暄称谓还是普通词')) throw new Error('缺英文锚点词新引导语');
   });
-  run('v74 头像/立绘旧 NPC id 迁移与网格同源',()=>{
-    /* 1. cfg 旧 id 桶迁移：新键优先、多对一、幂等 */
+  run('v74/v75 头像迁移：代际定正位、落选图进认领池、网格同源',()=>{
+    /* 1. 多代际旧 id：云蘅 yunheng(gen2) 新于青玄 qingxuan(gen1)，正位必须取较新者，老图不删进认领池 */
     localStorage.removeItem('wdzx.cfg.v1');
     localStorage.setItem('wdzx.cfg.v1',JSON.stringify({ver:1,
-      npcAvatar:{qingxuan:'A',yunheng:'B',smq:'C',tiemian:'T',shenzhao:'NEW',xuanji:'X'},
+      npcAvatar:{qingxuan:'A',yunheng:'B',smq:'C',moxiaogu:'D',tiemian:'T',shenzhao:'NEW',xuanji:'X'},
       npcPortrait:{tiemian:'P',liuruyan:'L'},
       userAvatar:'ME'}));
     WDCfg.init();
     const c1=WDCfg.all();
-    if(c1.npcAvatar.yunting!=='A') throw new Error('qingxuan 头像应迁入 yunting，实得 '+c1.npcAvatar.yunting);
-    if('yunheng' in c1.npcAvatar||'qingxuan' in c1.npcAvatar||'smq' in c1.npcAvatar||'tiemian' in c1.npcAvatar||'xuanji' in c1.npcAvatar)
+    if(c1.npcAvatar.yunting!=='B') throw new Error('云蘅(代际2)应占云汀正位，实得 '+c1.npcAvatar.yunting);
+    if(c1.npcAvatar.wantang!=='D') throw new Error('墨小骨(代际2)应占晚棠正位，实得 '+c1.npcAvatar.wantang);
+    if(c1.npcAvatar.shenzhao!=='NEW') throw new Error('新体系重传图(shenzhao)必须保留，实得 '+c1.npcAvatar.shenzhao);
+    if(c1.npcAvatar.tina!=='X') throw new Error('xuanji 单候选应占 tina');
+    if('yunheng' in c1.npcAvatar||'qingxuan' in c1.npcAvatar||'smq' in c1.npcAvatar||'moxiaogu' in c1.npcAvatar||'tiemian' in c1.npcAvatar||'xuanji' in c1.npcAvatar)
       throw new Error('旧 id 头像键残留');
-    if(c1.npcAvatar.shenzhao!=='NEW') throw new Error('新键已有值时应优先保留（tiemian 不得覆盖）');
-    if(c1.npcAvatar.wantang!=='C'||c1.npcAvatar.tina!=='X') throw new Error('smq/xuanji 未迁入');
-    if(c1.npcPortrait.shenzhao!=='P'||c1.npcPortrait.chengxiu!=='L') throw new Error('立绘桶未迁移');
+    if(c1.npcPortrait.shenzhao!=='P'||c1.npcPortrait.chengxiu!=='L') throw new Error('立绘桶迁移异常（桶间独立：portrait 无 shenzhao 新键，tiemian 应占位）');
     if(c1.userAvatar!=='ME') throw new Error('玩家自己头像不得受影响');
+    /* 2. 落选图全部进认领池（绝不丢图） */
+    const hasOrp=(from,url,to)=>c1.mediaOrphans.some(x=>x.fromId===from&&x.url===url&&x.toId===to&&x.bucket==='npcAvatar');
+    if(!hasOrp('qingxuan','A','yunting')) throw new Error('青玄老图 A 应在认领池');
+    if(!hasOrp('smq','C','wantang')) throw new Error('司马青衫图 C 应在认领池');
+    if(!hasOrp('tiemian','T','shenzhao')) throw new Error('tiemian 图 T（被新键压过）应在认领池');
     /* 落盘持久化 */
     const disk=JSON.parse(localStorage.getItem('wdzx.cfg.v1'));
-    if(disk.npcAvatar.yunting!=='A'||'qingxuan' in disk.npcAvatar) throw new Error('迁移未持久化到 localStorage');
-    /* 幂等：二次 init 不变化不报错 */
+    if(disk.npcAvatar.yunting!=='B'||!Array.isArray(disk.mediaOrphans)||disk.mediaOrphans.length!==3)
+      throw new Error('迁移/认领池未持久化');
+    /* 3. 幂等 */
     WDCfg.init();
     const c2=WDCfg.all();
-    if(c2.npcAvatar.yunting!=='A'||c2.npcPortrait.shenzhao!=='P') throw new Error('二次 init 迁移结果漂移');
+    if(c2.npcAvatar.yunting!=='B'||c2.mediaOrphans.length!==3) throw new Error('二次 init 结果漂移');
+    /* 4. 认领/丢弃/批量收养 API */
+    const idxA=c2.mediaOrphans.findIndex(x=>x.url==='A');
+    if(!WDCfg.claimOrphan(idxA,'yunting')) throw new Error('claimOrphan 失败');
+    if(WDCfg.all().npcAvatar.yunting!=='A') throw new Error('认领后正位应为 A');
+    if(WDCfg.all().mediaOrphans.some(x=>x.url==='A')) throw new Error('认领后应移出认领池');
+    const nAdopt=WDCfg.adoptOrphans([{bucket:'npcAvatar',fromId:'xuanji',url:'X2'},{bucket:'npcAvatar',fromId:'qingxuan',url:'A'},{url:'C'}]);
+    if(nAdopt!==1) throw new Error('adoptOrphans 应收 1 张（X2），重复 A/C 拒收，实得 '+nAdopt);
+    if(!WDCfg.dropOrphan(WDCfg.mediaOrphans().findIndex(x=>x.url==='X2'))) throw new Error('dropOrphan 失败');
+    /* 5. sanitize 清洗认领池坏条目（上限 100） */
+    localStorage.setItem('wdzx.cfg.v1',JSON.stringify({ver:1,mediaOrphans:[null,{url:'Z'},'bad',1,{}]}));
+    WDCfg.init();
+    if(WDCfg.all().mediaOrphans.length!==1||WDCfg.all().mediaOrphans[0].url!=='Z') throw new Error('认领池脏数据未清洗');
     localStorage.removeItem('wdzx.cfg.v1');
-    /* 2. 配置中心头像网格数据源 = WDRegistry（新体系），不再用已淘汰的 D.npcs */
+    /* 6. 配置中心头像网格数据源 = WDRegistry（新体系），不再用已淘汰的 D.npcs */
     const htmlFs=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(!/function paintGrid[\\s\\S]{0,400}?WDRegistry\.all\(\)/.test(htmlFs)) throw new Error('paintGrid 未改用 WDRegistry');
-    /* 3. WDAvatar 旧 id 别名：旧 id 解析到新内置像素像，不再塌成默认 yunting 误植 */
+    if(!/id="avOrphans"/.test(htmlFs)||!/function paintOrphans/.test(htmlFs)) throw new Error('缺图片认领台 UI');
+    if(!/scanHistoryMedia/.test(fs.readFileSync(require('path').join(__dirname,'wd-sync.js'),'utf8'))) throw new Error('WDSync 缺云端历史扫描');
+    if(typeof WDSync.scanHistoryMedia!=='function') throw new Error('WDSync.scanHistoryMedia 不可调用');
+    /* 7. WDAvatar 旧 id 别名：旧 id 解析到新内置像素像，不再塌成默认 yunting 误植 */
     if(typeof WDAvatar.ALIAS!=='object'||WDAvatar.ALIAS.qingxuan!=='yunting') throw new Error('WDAvatar.ALIAS 缺失');
     if(WDAvatar.avatarURL('tiemian')!==WDAvatar.avatarURL('shenzhao')) throw new Error('旧 id tiemian 应解析到 shenzhao 内置像');
-    /* 4. 注册表六角色均可取到头像/立绘桶位（不抛错） */
+    /* 8. 注册表六角色均可取到头像/立绘桶位（不抛错） */
     Object.keys(WDRegistry.all()).forEach(id=>{
       if(typeof WDAvatar.avatarURL(id)!=='string'||!WDAvatar.avatarURL(id)) throw new Error('注册角色 '+id+' 无内置头像');
     });

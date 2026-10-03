@@ -22,7 +22,7 @@ function defaults(){
   return {ver:VER, npcAvatar:{}, userAvatar:null, npcPortrait:{}, cgImages:{}, itemIcons:{},
     address:"", addressHist:[], selfName:"", bio:"",
     style:{tone:"",humor:"",depth:""},
-    attr:{str:2,agi:2,int:2}, hist:[], rejected:0,
+    attr:{str:2,agi:2,int:2}, hist:[], rejected:0, mediaOrphans:[],
     npcNames:{}, npcTitles:{}, npcPersonas:{}, customWorldBrief:"",
     aiDocument:"", directorDoc:""};
 }
@@ -36,6 +36,9 @@ function sanitize(recount){
   if(!cfg.attr||typeof cfg.attr!=="object"){ if(recount&&cfg.attr!==undefined)cfg.rejected++; cfg.attr={str:2,agi:2,int:2}; }
   ["str","agi","int"].forEach(k=>{ if(typeof cfg.attr[k]!=="number"||!(cfg.attr[k]>=0)){ if(recount)cfg.rejected++; cfg.attr[k]=2; } });
   if(!Array.isArray(cfg.hist)){ if(recount)cfg.rejected++; cfg.hist=[]; }
+  if(!Array.isArray(cfg.mediaOrphans)){ cfg.mediaOrphans=[]; }
+  cfg.mediaOrphans=cfg.mediaOrphans.filter(x=>x&&typeof x==="object"&&typeof x.url==="string"&&x.url);
+  if(cfg.mediaOrphans.length>100)cfg.mediaOrphans.length=100;
   if(typeof cfg.address!=="string")cfg.address="";
   if(typeof cfg.selfName!=="string")cfg.selfName="";
   if(typeof cfg.bio!=="string")cfg.bio="";
@@ -141,20 +144,41 @@ function processPortraitFile(file,opt){
   });
 }
 /* v62 NPC id 重映射（与 index.html NPC_REMAP 同源；本表改动时两处同步）。
-   头像/立绘按 NPC id 存桶，id 体系换新后旧桶若不迁移，玩家已上传的图会"丢失"。
-   多对一（qingxuan/yunheng→yunting、smq/moxiaogu→wantang）：目标键已有值则新值优先，旧值丢弃。 */
-const NPC_ID_REMAP={qingxuan:"yunting",yunheng:"yunting",tiemian:"shenzhao",
-  liuruyan:"chengxiu",xuanji:"tina",smq:"wantang",moxiaogu:"wantang"};
+   值=[新id, 代际]：代际越大 = 该图所属角色版本越新。
+   多对一收敛时（青玄/云蘅→云汀、司马青衫/墨小骨→晚棠）绝不能丢图：
+   代际最新者占正位，其余全部进 mediaOrphans 认领池，由玩家手动归位。 */
+const NPC_ID_REMAP={
+  qingxuan:["yunting",1], yunheng:["yunting",2],
+  tiemian:["shenzhao",1],
+  liuruyan:["chengxiu",1],
+  xuanji:["tina",1],
+  smq:["wantang",1], moxiaogu:["wantang",2]
+};
 function migrateNpcMedia(o){
   if(!o||typeof o!=="object") return false;
+  if(!Array.isArray(o.mediaOrphans)) o.mediaOrphans=[];
   let touched=false;
+  const now=new Date().toISOString();
+  const pushOrphan=(bucket,fromId,toId,url)=>{
+    if(o.mediaOrphans.some(x=>x.url===url&&x.bucket===bucket)) return; /* url+桶去重 */
+    o.mediaOrphans.unshift({bucket,fromId,toId,url,at:now});
+  };
   ["npcAvatar","npcPortrait"].forEach(bucket=>{
     const b=o[bucket]; if(!b||typeof b!=="object") return;
+    /* 收集映射到每个新 id 的候选（保序读旧键，按代际排序） */
+    const groups={};
     Object.keys(NPC_ID_REMAP).forEach(oldId=>{
       if(!(oldId in b)) return;
-      const newId=NPC_ID_REMAP[oldId], old=b[oldId];
+      const toId=NPC_ID_REMAP[oldId][0], gen=NPC_ID_REMAP[oldId][1], url=b[oldId];
       delete b[oldId]; touched=true;
-      if(old&&!b[newId]) b[newId]=old;   /* 新键已有值=新体系下重传，优先保留新值 */
+      if(url) (groups[toId]=groups[toId]||[]).push({oldId,url,gen});
+    });
+    Object.keys(groups).forEach(toId=>{
+      const cands=groups[toId].sort((a,c)=>c.gen-a.gen); /* 代际新者在前 */
+      if(!b[toId]) b[toId]=cands[0].url;                /* 新体系下未重传 → 最新代际占正位 */
+      const placed=(b[toId]===cands[0].url)?0:(b[toId]?-1:0);
+      /* placed=-1：正位是新体系重传图，全部候选落池；0：cands[0] 占正位，其余落池 */
+      cands.slice(placed<0?0:1).forEach(c=>pushOrphan(bucket,c.oldId,toId,c.url));
     });
   });
   return touched;
@@ -221,6 +245,39 @@ const WDCfg={
     return processPortraitFile(file,{onStage:onStage}).then(r=>{ self.set("npcPortrait."+id,r.url,"NPC立绘"); return r; });
   },
   clearPortrait(id){ this.set("npcPortrait."+id,null,"移除NPC立绘"); },
+  /* v75 历史图片认领池：id 换代中落选的旧角色图、从云端历史版本扫回的图片——一律不删，玩家手动归位 */
+  mediaOrphans(){
+    return (cfg.mediaOrphans||[]).map((x,i)=>({i,bucket:x.bucket,fromId:x.fromId||"",toId:x.toId||"",
+      url:x.url,kb:Math.round(String(x.url).length/1024),at:x.at||"",src:x.src||""}));
+  },
+  claimOrphan(i,toId){
+    const arr=cfg.mediaOrphans||[]; const x=arr[i]; if(!x||!x.url) return false;
+    if(x.bucket==="userAvatar"||toId==="_player") this.set("userAvatar",x.url,"认领历史头像");
+    else this.set((x.bucket==="npcPortrait"?"npcPortrait":"npcAvatar")+"."+toId,x.url,"认领历史图片");
+    arr.splice(i,1); save(); emit(["mediaOrphans"]); return true;
+  },
+  dropOrphan(i){ const arr=cfg.mediaOrphans||[]; if(!arr[i]) return false; arr.splice(i,1); save(); emit(["mediaOrphans"]); return true; },
+  /* 批量导入扫描到的候选（自动剔除与当前正位/池中重复者），返回新收数量。
+     云端候选可能很大：逐条落盘，配额耗尽即停（已收条目保留）。 */
+  adoptOrphans(items){
+    if(!Array.isArray(cfg.mediaOrphans))cfg.mediaOrphans=[];
+    let n=0;
+    for(const it of (items||[])){
+      if(!it||typeof it.url!=="string"||!it.url) continue;
+      if(cfg.mediaOrphans.some(x=>x.url===it.url)) continue;
+      const have=Object.values(cfg.npcAvatar||{}).concat(Object.values(cfg.npcPortrait||{}));
+      if(cfg.userAvatar) have.push(cfg.userAvatar);
+      if(have.indexOf(it.url)>=0) continue;
+      const rec={bucket:it.bucket==="npcPortrait"?"npcPortrait":(it.bucket==="userAvatar"?"userAvatar":"npcAvatar"),
+        fromId:String(it.fromId||it.id||""),toId:String(it.toId||""),url:it.url,
+        at:it.at||new Date().toISOString(),src:it.src||"云端历史"};
+      cfg.mediaOrphans.unshift(rec);
+      try{ save(); n++; }
+      catch(e){ cfg.mediaOrphans.shift(); break; }
+    }
+    if(n) emit(["mediaOrphans"]);
+    return n;
+  },
   /* v59：剧情 CG 图（等比缩放，宽≤1280）——忆境/过场展示用，id=cg 键 */
   cgImageURL(id){ return cfg.cgImages[id]||null; },
   setCGImage(id,file,onStage){

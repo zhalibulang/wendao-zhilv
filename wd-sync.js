@@ -360,6 +360,44 @@ const WDSync={
     this._markMemory(merged.save&&merged.save._syncAt||new Date().toISOString());
     return {ok:true,merged};
   },
+  /* v75 抢救通道：扫描 Gist 历史版本（每次同步留痕），把历代 cfg 里的
+     头像/立绘/玩家头像捞回来供认领台归位。用于 id 换代误删、误覆盖后的找回。
+     onProg(done,total) 回报进度；返回新增候选列表（已按 url 与本地去重）。 */
+  async scanHistoryMedia(onProg){
+    const c=syncCfg(); if(!c.token||!c.gid) throw new Error("未开通同步");
+    const commits=await gistFetch("/gists/"+c.gid+"/commits?per_page=30",{timeout:30000});
+    if(!Array.isArray(commits)||!commits.length) return [];
+    const localCfg=(bundleFromLS().cfg)||{};
+    const have=new Set();
+    ["npcAvatar","npcPortrait"].forEach(bk=>{ const b=localCfg[bk]||{};
+      Object.keys(b).forEach(k=>{ if(b[k]) have.add(b[k]); }); });
+    (localCfg.mediaOrphans||[]).forEach(x=>{ if(x&&x.url) have.add(x.url); });
+    if(localCfg.userAvatar) have.add(localCfg.userAvatar);
+    const found=[];
+    for(let i=0;i<commits.length;i++){
+      if(onProg){ try{ onProg(i,commits.length); }catch(e){} }
+      const sha=commits[i].version; if(!sha) continue;
+      let g;
+      try{ g=await gistFetch("/gists/"+c.gid+"/commits/"+sha,{timeout:30000}); }
+      catch(e){ continue; } /* 单个版本失败不阻断整体扫描 */
+      const content=g&&g.files&&g.files[GIST_FILE]&&g.files[GIST_FILE].content;
+      if(!content) continue;
+      let b;
+      try{ b=await decryptStr(content,c.gid,c.pw||""); }catch(e){ continue; }
+      const rc=b&&b.cfg; if(!rc) continue;
+      const at=commits[i].committed_at||"";
+      ["npcAvatar","npcPortrait"].forEach(bk=>{ const bb=rc[bk]||{};
+        Object.keys(bb).forEach(id=>{ const url=bb[id];
+          if(typeof url==="string"&&url&&!have.has(url)){ have.add(url);
+            found.push({bucket:bk,fromId:id,toId:"",url,kb:Math.round(url.length/1024),at,src:"云端历史 "+(at?at.slice(0,10):"")}); } }); });
+      if(typeof rc.userAvatar==="string"&&rc.userAvatar&&!have.has(rc.userAvatar)){
+        have.add(rc.userAvatar);
+        found.push({bucket:"userAvatar",fromId:"_player",toId:"",url:rc.userAvatar,kb:Math.round(rc.userAvatar.length/1024),at,src:"云端历史 "+(at?at.slice(0,10):"")});
+      }
+    }
+    if(onProg){ try{ onProg(commits.length,commits.length); }catch(e){} }
+    return found;
+  },
   /* ---------- 自动同步（防抖+最小间隔+离线/页面隐藏保活） ---------- */
   schedulePush(){
     const c=syncCfg();
