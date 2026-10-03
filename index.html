@@ -959,16 +959,9 @@ const WD_NEW_ROLES = {
     if(!all[r.id]) all[r.id] = r;
   });
 })();
-/* 旧版 id → 新版职能映射（不动 game-data.js 的 quest.npc 字段） */
-const NPC_REMAP = {
-  qingxuan:"yunting",  // 主引导导游 → 圣女主引导（act1+act5）
-  tiemian:"shenzhao",  // 藏经阁守护 → 藏经阁阁主（act2）
-  liuruyan:"chengxiu",// 旅行社老板 → 旅行社老板（act3）
-  xuanji:"tina",       // 次元精灵 → 次元精灵（act4）
-  smq:"wantang",       // 英语导游（未分配）→ 英语导游补充
-  moxiaogu:"wantang",  // 英语导游（未分配）→ 英语导游补充
-  yunheng:"yunting",   // 旧版额外引导者合并入新版 yunting
-};
+/* 旧版 id → 新版职能映射（v76：事实源 npc-registry.js LEGACY_NPCS，不再手抄；不动 game-data.js 的 quest.npc 字段）
+   注意必须走 window.WDRegistry——本文件后文有 let WDRegistry 词法绑定，裸引用会 TDZ */
+const NPC_REMAP = window.WDRegistry.legacyMap();
 /* 把新角色注入 NPC 字典（不覆盖旧的，quest.modal 解析时 resolveNpc 会重定向） */
 Object.values(WD_NEW_ROLES).forEach(r=>{ if(!NPC[r.id]) NPC[r.id]=r; });
 /* 统一 NPC 解析入口：任何地方取 NPC，都走这里 */
@@ -989,7 +982,7 @@ function resolveNpc(qnpc){
    旧 id 键（hearts 等）合并迁移；并把 D.npcs 整体替换为新5角色。
    ============================================================ */
 (function v47RemapGameData(){
-  const OLD2NEW={qingxuan:"yunting",yunheng:"yunting",tiemian:"shenzhao",liuruyan:"chengxiu",xuanji:"tina",smq:"wantang",moxiaogu:"wantang"};
+  const OLD2NEW=NPC_REMAP;
   const TEXT=[
     /* 整句精改（放最前，优先命中） */
     ["晨雾未散，「问道卷」已亮起微光。今日的秘境，自这一页开启。","晨雾未散，「问道卷」已亮起微光。今日的结界，自这一页苏醒。"],
@@ -7955,6 +7948,8 @@ function renderAiChannels(ov){
     if(ov2&&(ov2.sys!=null||ov2.user!=null)) chips.push('<span style="color:var(--gold)">修订生效中'+(snap&&snap.ov?"":"（下次调用生效）")+'</span>');
     if(stt) chips.push('<span style="color:var(--dim)">调用 '+stt.n+' 次 · 最近 '+_aiFmtTime(stt.lastAt)+' · '+(stt.err?("失败 "+stt.err):("ok "+stt.ms+"ms"))+'</span>');
     else chips.push('<span style="color:var(--dim)">本会话/本机暂无调用记录</span>');
+    if(snap) chips.push('<span style="color:var(--cyber)">📝 已捕获'+(snap.notsent?'（停用·未发出）':'实发')+'指令 · '+_aiFmtTime(snap.at)+'，点「'+(ov2?'修订中·查看/改写':'修订提示词')+'」查看真实 system/user 与约束</span>');
+    else chips.push('<span style="color:var(--gold)">尚未捕获：'+esc(c.trig)+'，触发后真实指令（含人设/铁律）自动留存本机，即可据此修订</span>');
     return '<div style="border:1.5px solid var(--border);border-radius:10px;padding:9px 11px;background:rgba(255,255,255,.03)">'
       +'<div class="cfgrow" style="justify-content:space-between;gap:8px">'
       +'<div style="font-size:13px;color:var(--neon);font-weight:700">'+esc(c.label)+'</div>'
@@ -7980,20 +7975,35 @@ function renderAiChannels(ov){
 function openAiPromptEditor(id){
   const c=AI_CHANNEL_BY_ID[id]; if(!c) return;
   const ov0=aiPromptOv(id)||{}, snap=aiSnapGet(id);
+  /* v76：实发参数约束可见（温度/上限/JSON 模式/工具/流式） */
+  const paramChips=snap?[
+    '模型 '+esc(snap.model||c.model),
+    (snap.temp===undefined||snap.temp===null)?'温度 默认':('温度 '+snap.temp),
+    'max_tokens '+(snap.maxTokens||'默认'),
+    snap.json?'JSON 模式':'自由文本',
+    snap.tools?'函数工具 ON':'无工具',
+    snap.stream?'流式 ON':'非流式'
+  ].map(t=>'<span class="btn sm ghost" style="pointer-events:none;margin:2px 4px 2px 0">'+t+'</span>').join(""):"";
+  const snapBanner=snap
+    ?('<div class="note" style="margin:6px 0">'+(snap.notsent
+        ?'<span style="color:var(--gold)">此通路已停用：以下为停用前最后一次<b>本来要发出</b>的指令（未真正请求模型）。</span>'
+        :('最近实发捕获：'+_aiFmtTime(snap.at)+(snap.ov?' · <span style="color:var(--gold)">当次已带你的修订</span>':' · 当次为默认提示词')))
+      +'<br>下方只读文本即该通路<b>真实发出</b>的完整指令（动态注入的人设、铁律均已包含），可据此改写。</div>'
+      +(paramChips?'<div style="margin:2px 0 4px"><div style="font-size:11px;color:var(--dim);margin-bottom:2px">该次调用的参数约束：</div>'+paramChips+'</div>':""))
+    :'<div class="note" style="margin:6px 0;color:var(--gold)">本机尚无捕获记录。触发方式：'+esc(c.trig)+'。触发后回到此页，即可看到完整的真实 system/user 与参数约束；捕获长期留存本机（不进云同步）。你也可以先直接写修订稿。</div>';
   const p=panel('<h2>修订提示词 · '+esc(c.label)+'</h2>'
     +'<div class="note" style="margin:4px 0 8px">'+esc(c.where)+'　频次：'+esc(c.trig)+'</div>'
-    +(snap?('<div class="note" style="margin:6px 0">最近实发捕获：'+_aiFmtTime(snap.at)+' · '+esc(snap.model)+(snap.ov?' · <span style="color:var(--gold)">当次已带修订</span>':' · 当次为默认提示词')+'。下方只读文本即该通路<b>真实发出</b>的完整指令，可据此改写。</div>')
-     :'<div class="note" style="margin:6px 0;color:var(--dim)">本会话尚无实发记录（触发一次对应功能后即在此捕获真实提示词）；你也可以直接在下方写修订稿。</div>')
-    +'<div style="font-size:12px;color:var(--cyber);margin:8px 0 3px">System 指令（默认 · 只读）</div>'
-    +'<textarea id="ovSysRef" rows="7" readonly style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--dim);border:1.5px solid var(--border);border-radius:8px;padding:7px">'+esc(snap?snap.sys:"（尚无实发记录）")+'</textarea>'
+    +snapBanner
+    +'<div style="font-size:12px;color:var(--cyber);margin:8px 0 3px">System 指令（最近实发 · 只读，含人设/铁律注入）</div>'
+    +'<textarea id="ovSysRef" rows="9" readonly style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--dim);border:1.5px solid var(--border);border-radius:8px;padding:7px">'+esc(snap?snap.sys:"（尚无捕获——按上方触发方式操作一次后自动留痕）")+'</textarea>'
     +'<div class="cfgrow" style="gap:6px;margin:4px 0 8px"><button class="btn sm ghost" type="button" id="ovLoadSys">载入到修订框</button></div>'
     +'<div style="font-size:12px;color:var(--gold);margin:6px 0 3px">System 修订稿（留空=不改；保存后整体替换默认 system，动态注入的人设/铁律不再叠加）</div>'
-    +'<textarea id="ovSys" rows="7" style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--fg);border:1.5px solid var(--gold);border-radius:8px;padding:7px">'+esc(ov0.sys!=null?ov0.sys:"")+'</textarea>'
-    +'<div style="font-size:12px;color:var(--cyber);margin:10px 0 3px">User 内容（默认 · 只读，含动态变量）</div>'
-    +'<textarea id="ovUserRef" rows="5" readonly style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--dim);border:1.5px solid var(--border);border-radius:8px;padding:7px">'+esc(snap?snap.user:"（尚无实发记录）")+'</textarea>'
+    +'<textarea id="ovSys" rows="9" style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--fg);border:1.5px solid var(--gold);border-radius:8px;padding:7px">'+esc(ov0.sys!=null?ov0.sys:"")+'</textarea>'
+    +'<div style="font-size:12px;color:var(--cyber);margin:10px 0 3px">User 内容（最近实发 · 只读，含动态变量与上下文）</div>'
+    +'<textarea id="ovUserRef" rows="6" readonly style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--dim);border:1.5px solid var(--border);border-radius:8px;padding:7px">'+esc(snap?snap.user:"（尚无捕获）")+'</textarea>'
     +'<div class="cfgrow" style="gap:6px;margin:4px 0 8px"><button class="btn sm ghost" type="button" id="ovLoadUser">载入到修订框</button></div>'
     +'<div style="font-size:12px;color:var(--gold);margin:6px 0 3px">User 修订稿（留空=不改；多数通路的动态上下文都在 user 里，改写后变量将被静态文本替代）</div>'
-    +'<textarea id="ovUser" rows="5" style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--fg);border:1.5px solid var(--gold);border-radius:8px;padding:7px">'+esc(ov0.user!=null?ov0.user:"")+'</textarea>'
+    +'<textarea id="ovUser" rows="6" style="width:100%;box-sizing:border-box;font:11px/1.55 ui-monospace,monospace;background:rgba(0,0,0,.25);color:var(--fg);border:1.5px solid var(--gold);border-radius:8px;padding:7px">'+esc(ov0.user!=null?ov0.user:"")+'</textarea>'
     +'<div class="savegrid" style="margin-top:12px"><button class="btn sm primary" type="button" id="ovSave">保存并立即生效</button>'
     +'<button class="btn sm ghost" type="button" id="ovReset">恢复默认</button>'
     +'<button class="btn sm ghost" type="button" id="ovClose">关闭</button></div>');
@@ -8052,7 +8062,7 @@ function renderCfg(){
   </div>
   <div class="cfgpane" data-pane="aich">
     <div id="aichHead"></div>
-    <div class="note" style="margin:6px 0 10px">每条通路标注了位置（函数@文件）、模型、触发频次、提示词（实发捕获）与离线兜底。点「修订提示词」可直接改写该通路的 system/user 指令，保存后<b>下一次调用立即生效</b>；修订是整体替换，动态注入的人设/铁律将不再叠加，恢复默认即还原。</div>
+    <div class="note" style="margin:6px 0 10px">每条通路标注了位置（函数@文件）、模型、触发频次与离线兜底。你在游戏里触发过一次该功能后，其<b>真实发出的完整 system/user（含动态注入的人设、铁律）与参数约束（温度/上限/JSON 模式等）即自动捕获并长期留存本机</b>（不进云同步），在「修订提示词」里可直接查看并据此改写；保存后下一次调用立即生效，恢复默认即还原。停用的通路也会记录"本来要发什么"。</div>
     <div id="aichList" style="display:flex;flex-direction:column;gap:8px"></div>
   </div>
   <div class="cfgpane on" data-pane="av">
@@ -8257,7 +8267,7 @@ function renderCfg(){
     paintOrphans();
   }
   /* v75 历史图片认领台：id 换代落选图 / 云端历史扫回图，玩家手动归位，系统绝不自动丢弃 */
-  const OLD_NPC_NAME={qingxuan:"青玄先生",yunheng:"云蘅",tiemian:"铁面先生",liuruyan:"柳如烟",xuanji:"璇玑",smq:"司马青衫",moxiaogu:"墨小骨"};
+  const OLD_NPC_NAME=WDRegistry.legacyNames();
   function paintOrphans(){
     const box=$("#avOrphans",ov); if(!box) return;
     const orph=WDCfg.mediaOrphans?WDCfg.mediaOrphans():[];
@@ -9325,8 +9335,41 @@ const AI_CHANNELS=[
   {id:"keyPing",     label:"连接测试 ping",        model:"deepseek-chat",      prof:"polish",       where:"dsKeyGate / reconnectAi / 存档测试 @index.html", trig:"仅手动点测试/重连时",              fb:"不涉及"}
 ];
 const AI_CHANNEL_BY_ID=Object.fromEntries(AI_CHANNELS.map(c=>[c.id,c]));
-/* 运行时实发捕获（仅内存；面板据此展示"真发了什么"，避免静态抄录 30 套提示词失真） */
-const _aiSnap={};
+/* 运行时实发捕获（v76：落本机 localStorage，跨会话可查；独立键不进 Gist 云同步，避免撑大同步包）。
+   面板据此展示"真发了什么"，避免静态抄录 30 套提示词失真；玩家触发过一次对应功能，
+   该通路完整 system/user（含动态注入的人设/铁律）与参数约束即长期留痕，随时可据此修订。 */
+const AI_SNAP_KEY="wdzx.aisnap.v1";
+const AI_SNAP_FIELD_CAP=20000;   /* 单字段存档上限（超出截断并标注，防止上下文巨量灌入） */
+const AI_SNAP_TOTAL_CAP=262144;  /* 整盘 256KB，超出按最旧 at 淘汰 */
+function _aiSnapDiskLoad(){
+  try{ const o=JSON.parse(localStorage.getItem(AI_SNAP_KEY)||"{}"); return (o&&typeof o==="object")?o:{}; }
+  catch(e){ return {}; }
+}
+const _aiSnap=_aiSnapDiskLoad();
+function _snapMsgs(messages){
+  const arr=Array.isArray(messages)?messages:[];
+  return {sys:(arr.find(m=>m&&m.role==="system")||{}).content||"",
+          user:([...arr].reverse().find(m=>m&&m.role==="user")||{}).content||""};
+}
+function _aiSnapPut(ch,rec){
+  if(!ch) return;
+  const clip=v=>{ v=String(v==null?"":v);
+    return v.length>AI_SNAP_FIELD_CAP?v.slice(0,AI_SNAP_FIELD_CAP)+"\n…【超长内容仅留存前 "+AI_SNAP_FIELD_CAP+" 字】":v; };
+  const prev=_aiSnap[ch]||{};
+  _aiSnap[ch]={at:new Date().toISOString(),model:rec.model||prev.model||"",kind:rec.kind||prev.kind||"",
+    sys:clip(rec.sys),user:clip(rec.user),
+    temp:(rec.temp===undefined?prev.temp:rec.temp),maxTokens:rec.maxTokens||prev.maxTokens||0,
+    json:!!rec.json,tools:!!rec.tools,stream:!!rec.stream,
+    ov:!!rec.ov,off:!!rec.off,notsent:!!rec.notsent};
+  try{
+    let raw=JSON.stringify(_aiSnap);
+    if(raw.length>AI_SNAP_TOTAL_CAP){ /* LRU：淘汰最旧通道，直到达标 */
+      const ids=Object.keys(_aiSnap).sort((a,b)=>((_aiSnap[a].at||"")<(_aiSnap[b].at||"")?-1:1));
+      while(raw.length>AI_SNAP_TOTAL_CAP&&ids.length){ delete _aiSnap[ids.shift()]; raw=JSON.stringify(_aiSnap); }
+    }
+    localStorage.setItem(AI_SNAP_KEY,raw);
+  }catch(e){}
+}
 function aiSnapGet(id){ return _aiSnap[id]||null; }
 function aiChStats(id){
   const all=(_callLog||[]).concat(safeCallLogDisk());
@@ -9352,7 +9395,11 @@ function toggleAiCh(id){ st.aiChOff=st.aiChOff||{}; st.aiChOff[id]=aiChOff(id)?0
 /* dsChat 入口统一应用：通路停用 → 抛错（各调用点 fail-open 落本地兜底）；提示词修订 → 按角色整体替换 */
 function aiApplyChannel(messages,opts){
   const o=opts||{}; const id=o.ch||o.kind||"chat";
-  if(aiChOff(id)){ const e=new Error("AI_CH_OFF:"+id); e.aiChOff=true; throw e; }
+  if(aiChOff(id)){
+    /* v76：停用也留痕——捕获"本来要发什么"，玩家在面板仍可查看/修订（notsent 标注未真正发出） */
+    try{ _aiSnapPut(id,Object.assign({kind:o.kind||"",off:true,notsent:true,ov:false},_snapMsgs(messages))); }catch(e){}
+    const e=new Error("AI_CH_OFF:"+id); e.aiChOff=true; throw e;
+  }
   const ov=aiPromptOv(id);
   if(!ov) return messages;
   return messages.map(m=>{
@@ -9397,11 +9444,10 @@ async function dsChat(messages, opts, onDelta){
     const t0=Date.now();
     try{
       const model=o.model||profile.model||DS_MODEL;
-      /* v73：实发提示词快照（面板审计真源——看到的就是实际发出去的） */
-      _aiSnap[ch]={at:new Date().toISOString(),model,kind,
-        sys:(messages.find(m=>m.role==="system")||{}).content||"",
-        user:([...messages].reverse().find(m=>m.role==="user")||{}).content||"",
-        ov:!!aiPromptOv(ch)};
+      /* v73 实发快照；v76 起持久化本机并记录参数约束（温度/上限/JSON/工具/流式），面板审计真源 */
+      _aiSnapPut(ch,Object.assign({model,kind,ov:!!aiPromptOv(ch),
+        temp:profile.temperature,maxTokens:o.max_tokens||profile.max_tokens,
+        json:!!profile.response_format,tools:wantTools,stream:wantStream},_snapMsgs(messages)));
       const body={model,messages,
         ...(profile.temperature!=null?{temperature:profile.temperature}:{}),
         max_tokens:o.max_tokens||profile.max_tokens,
@@ -10333,7 +10379,7 @@ function openMention(inp,token){
       position:"absolute",zIndex:"9999",maxHeight:"42vh",overflowY:"auto",
       background:"var(--bg)",border:"1px solid var(--border-lit)",
       borderRadius:"6px",boxShadow:"0 2px 12px rgba(0,0,0,.35)",
-      fontSize:"13px",fontFamily:"zpix,monospace",minWidth:"160px",
+      fontSize:"13px",fontFamily:"monospace",minWidth:"160px",
       padding:"4px"
     });
     document.body.appendChild(_mentionPop);

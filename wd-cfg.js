@@ -143,17 +143,11 @@ function processPortraitFile(file,opt){
     return {url:url2, w:w0, h:h0, kb:Math.round(url2.length/1024)};
   });
 }
-/* v62 NPC id 重映射（与 index.html NPC_REMAP 同源；本表改动时两处同步）。
+/* v62 NPC id 重映射：v76 起事实源统一为 npc-registry.js LEGACY_NPCS（经 WDRegistry.legacyRemap 派生）。
    值=[新id, 代际]：代际越大 = 该图所属角色版本越新。
    多对一收敛时（青玄/云蘅→云汀、司马青衫/墨小骨→晚棠）绝不能丢图：
    代际最新者占正位，其余全部进 mediaOrphans 认领池，由玩家手动归位。 */
-const NPC_ID_REMAP={
-  qingxuan:["yunting",1], yunheng:["yunting",2],
-  tiemian:["shenzhao",1],
-  liuruyan:["chengxiu",1],
-  xuanji:["tina",1],
-  smq:["wantang",1], moxiaogu:["wantang",2]
-};
+const NPC_ID_REMAP=(window.WDRegistry&&window.WDRegistry.legacyRemap)?window.WDRegistry.legacyRemap():{};
 function migrateNpcMedia(o){
   if(!o||typeof o!=="object") return false;
   if(!Array.isArray(o.mediaOrphans)) o.mediaOrphans=[];

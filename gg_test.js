@@ -225,7 +225,7 @@ const driver=`
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(!htmlSrc.includes('.dlg.gal{overflow-y:auto;-webkit-overflow-scrolling:touch}')) throw new Error('≤899px 缺 .dlg.gal 滚动修复');
     const sw=fs.readFileSync(require('path').join(__dirname,'sw.js'),'utf8');
-    if(!/wdzx-v(69|70|71|72|73|74)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
+    if(!/wdzx-v(69|70|71|72|73|74|75)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
   });
   run('v72 修诵卷底稿校订：结构审计',()=>{
     const wcOf=t=>String(t||'').trim().split(/\\s+/).filter(w=>/[A-Za-z0-9]/.test(w)).length;
@@ -404,6 +404,54 @@ const driver=`
     Object.keys(WDRegistry.all()).forEach(id=>{
       if(typeof WDAvatar.avatarURL(id)!=='string'||!WDAvatar.avatarURL(id)) throw new Error('注册角色 '+id+' 无内置头像');
     });
+  });
+  run('v76 残留清理：死文件/单一事实源/AI实发捕获持久化',()=>{
+    const path=require('path'), root=__dirname;
+    const gone=['default.profraw','zpix.ttf','zpix.woff2','reorder-225.cjs','build-review-file.py','verify-render.js',
+      'GLOBAL-DESIGN-REPORT.md','ROLE-DESIGN-HANDOFF.md','改动台账.md','回滚与修复诊断报告.html',
+      '藏经阁全库语义完整性审计报告.html','验证记录.md','授权规则说明.md','条目总清单.md',
+      '修订对照台账-batch2.md','语义完整性修订对照表.md','验证记录-点击启程后主界面.png'];
+    gone.forEach(f=>{ if(fs.existsSync(path.join(root,f))) throw new Error('应删未删：'+f); });
+    ['README.md','考点复习大全-2026.md','考点数据库-2026-修正版.json','iPad安装二维码.png','manifest.json','qrcode.js'].forEach(f=>{
+      if(!fs.existsSync(path.join(root,f))) throw new Error('误删保留文件：'+f);
+    });
+    const htmlFs=fs.readFileSync(path.join(root,'index.html'),'utf8');
+    if(/zpix/.test(htmlFs)) throw new Error('index.html 仍有 zpix 死引用');
+    /* 旧 id 映射单一事实源：npc-registry LEGACY_NPCS，各处只准派生不准手抄 */
+    const lm=WDRegistry.legacyMap(), lr=WDRegistry.legacyRemap(), ln=WDRegistry.legacyNames();
+    if(lm.qingxuan!=='yunting'||lm.yunheng!=='yunting'||lm.moxiaogu!=='wantang'||Object.keys(lm).length!==7) throw new Error('legacyMap 派生异常');
+    if(lr.yunheng[0]!=='yunting'||lr.yunheng[1]!==2||lr.smq[1]!==1) throw new Error('legacyRemap 代际异常');
+    if(ln.qingxuan!=='青玄先生'||ln.yunheng!=='云蘅') throw new Error('legacyNames 异常');
+    if(JSON.stringify(NPC_REMAP)!==JSON.stringify(lm)) throw new Error('index NPC_REMAP 未从注册表派生');
+    if(!/const OLD2NEW=NPC_REMAP;/.test(htmlFs)) throw new Error('OLD2NEW 未复用 NPC_REMAP');
+    if(!/const OLD_NPC_NAME=WDRegistry\\.legacyNames\\(\\);/.test(htmlFs)) throw new Error('OLD_NPC_NAME 未从注册表派生');
+    if(/qingxuan:"yunting"/.test(htmlFs)) throw new Error('index.html 仍有手抄旧 id 字面量');
+    if(/qingxuan:\\["yunting"/.test(fs.readFileSync(path.join(root,'wd-cfg.js'),'utf8'))) throw new Error('wd-cfg 仍有手抄映射');
+    if(JSON.stringify(WDAvatar.ALIAS)!==JSON.stringify(lm)) throw new Error('WDAvatar.ALIAS 未从注册表派生');
+    /* AI 实发捕获：持久化本机、跨会话可读、截断与 LRU 预算、停用通路也捕获 */
+    localStorage.removeItem(AI_SNAP_KEY);
+    _aiSnapPut('chat',{sys:'SYS内容',user:'USR内容',model:'deepseek-chat',kind:'chat',temp:0.7,maxTokens:800,json:true});
+    if(aiSnapGet('chat').sys!=='SYS内容') throw new Error('内存快照异常');
+    const disk0=JSON.parse(localStorage.getItem(AI_SNAP_KEY));
+    if(!disk0.chat||disk0.chat.user!=='USR内容'||disk0.chat.temp!==0.7||disk0.chat.json!==true) throw new Error('快照未按字段持久化');
+    if(_aiSnapDiskLoad().chat.model!=='deepseek-chat') throw new Error('模拟重载后快照丢失');
+    _aiSnapPut('huge',{sys:'x'.repeat(25000),user:'u'});
+    if(aiSnapGet('huge').sys.length>20100||!/超长内容/.test(aiSnapGet('huge').sys)) throw new Error('单字段截断失效');
+    for(let i=0;i<30;i++) _aiSnapPut('lz'+i,{sys:'y'.repeat(12000),user:''});
+    const rawLen=localStorage.getItem(AI_SNAP_KEY).length;
+    if(rawLen>262144) throw new Error('LRU 总预算失效：'+rawLen);
+    if(aiSnapGet('lz29').sys.length<12000) throw new Error('最新通道快照被误淘汰');
+    st.aiChOff={ztchan:1};
+    let offThrew=false;
+    try{ aiApplyChannel([{role:'system',content:'停用前S'},{role:'user',content:'停用前U'}],{ch:'ztchan',kind:'polish'}); }
+    catch(e){ offThrew=!!(e&&e.aiChOff); }
+    if(!offThrew) throw new Error('停用通路未抛 aiChOff');
+    const zs=aiSnapGet('ztchan');
+    if(!zs||zs.sys!=='停用前S'||zs.notsent!==true||zs.off!==true) throw new Error('停用通路未捕获"将发指令"');
+    st.aiChOff={};
+    localStorage.removeItem(AI_SNAP_KEY);
+    const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
+    if(!/wdzx-v75/.test(sw)) throw new Error('sw.js 未升至 v75');
   });
   run('v71 选择题AI逐项解析 + 手机端任务页滚动根治',()=>{
     reset();

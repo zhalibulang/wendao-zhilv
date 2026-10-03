@@ -112,9 +112,8 @@ const SPR={
 
 const _cache={};
 
-/* v74：旧 NPC id → 新 id（遗留存档/消息仍可能带旧 id；与 wd-cfg.js NPC_ID_REMAP 同源） */
-const AV_ALIAS={qingxuan:"yunting",yunheng:"yunting",tiemian:"shenzhao",
-  liuruyan:"chengxiu",xuanji:"tina",smq:"wantang",moxiaogu:"wantang"};
+/* v74：旧 NPC id → 新 id（遗留存档/消息仍可能带旧 id）；v76 起事实源统一为 npc-registry.js LEGACY_NPCS */
+const AV_ALIAS=(window.WDRegistry&&window.WDRegistry.legacyMap)?window.WDRegistry.legacyMap():{};
 
 const WDAvatar={
   SPR,

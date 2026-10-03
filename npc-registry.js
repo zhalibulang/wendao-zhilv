@@ -5,6 +5,21 @@
         activityPool 全部从本注册表派生；新增或改名 NPC 只需在此加一个对象。
    低耦合：纯数据 + 派生函数，不引用页面全局；加载即自校验（缺失字段 console.warn）。
    ========================================================================== */
+
+/* v76：旧版 NPC id → 新体系映射（全仓唯一事实源；index.html NPC_REMAP/OLD2NEW/
+   认领台旧名表、wd-cfg 媒体迁移、wd-avatar 内置像别名一律从这里派生，禁止再手抄）。
+   gen=代际：多对一收敛时数值大者为最新角色版本（迁移据其决定正位归属）；
+   name=旧版显示名（图片认领台标注来源用）。
+   注意：本表是旧存档/烘焙任务数据的运行时兼容层，game-data.js 的旧 id 不动。 */
+const LEGACY_NPCS={
+  qingxuan:{to:"yunting",gen:1,name:"青玄先生"},
+  yunheng: {to:"yunting",gen:2,name:"云蘅"},
+  tiemian: {to:"shenzhao",gen:1,name:"铁面先生"},
+  liuruyan:{to:"chengxiu",gen:1,name:"柳如烟"},
+  xuanji:  {to:"tina",gen:1,name:"璇玑"},
+  smq:     {to:"wantang",gen:1,name:"司马青衫"},
+  moxiaogu:{to:"wantang",gen:2,name:"墨小骨"}
+};
 (function(){
 "use strict";
 
@@ -197,6 +212,11 @@ const WDRegistry={
   voiceOf(id){ const r=WD_NPC_REGISTRY[id]; return r&&r.voice?r.voice:null; },
   /* 派生：arcSeed 角色目标与弧线（goal/arc；供 systemPrefix 与导演系统引用） */
   arcSeedOf(id){ const r=WD_NPC_REGISTRY[id]; return r&&r.arcSeed?r.arcSeed:null; },
+  /* v76 旧 id 兼容派生（事实源 LEGACY_NPCS；迁移/别名/认领台共用，禁止各处手抄） */
+  legacyRaw(){ return LEGACY_NPCS; },
+  legacyMap(){ const m={}; Object.keys(LEGACY_NPCS).forEach(k=>{ m[k]=LEGACY_NPCS[k].to; }); return m; },
+  legacyRemap(){ const m={}; Object.keys(LEGACY_NPCS).forEach(k=>{ m[k]=[LEGACY_NPCS[k].to,LEGACY_NPCS[k].gen]; }); return m; },
+  legacyNames(){ const m={}; Object.keys(LEGACY_NPCS).forEach(k=>{ m[k]=LEGACY_NPCS[k].name; }); return m; },
   /* 完整性校验（R2.1c）：缺字段 console.warn，返回问题清单 */
   validate(){
     const issues=[];
