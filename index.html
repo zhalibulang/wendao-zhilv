@@ -4021,6 +4021,7 @@ function openQuest(qid){
   const RT_FLOWS={a:["dialog","brief","book","quiz"],b:["dialog","brief","book","quiz"],rev:["dialog","brief","quiz"],c:["dialog","brief","book","recite"],d:["dialog","brief","book","trans"],exam:["dialog","brief","battle"]};
   let stageIdx=0, aiBriefData=null, aiBriefReady=false, dialogDone=false, bookPageIdx=0, bookDone=false;
   let recT0=0; /* v54：复述/传译计时起点——回看全文再回来不重置，记录真实耗时 */
+  let innerBack=null; /* v77：终阶段（修诵/传译）自管的"上一步"钩子，goStage 切阶段时清空 */
   const stageHost=$("#stageHost",ov);
   const npcName=dName(npc.id), npcTitle=dTitle(npc.id);
   const questMetaphorTxt=questMetaphor(q);
@@ -4697,10 +4698,12 @@ function openQuest(qid){
     const est=rtSpkMin(cur.split(/\s+/).length);
     const o=rtOralOf(key);
     if(!recT0) recT0=Date.now();
-    /* v64 p5：状态机 句读→句复述→整段复述；暂离存档续关 */
+    /* v64 p5：状态机 句读→句复述→整段复述；暂离存档续关
+       v77：续关恢复句序，但一律先落在「精读原句」——必须先看到原句、再手动遮文复述，
+       绝不允许重进任务时直接弹复述输入（"先显原句、再要求复述"的铁序）。 */
     const stt={i:0,phase:"read",scores:[],full:false,fullScore:null};
     if(!readonly){ const rp=(curProg()||{}).recite;
-      if(rp){ try{ stt.i=Math.min(+rp.i||0,sentences.length-1); stt.phase=rp.phase==="recite"?"recite":"read";
+      if(rp){ try{ stt.i=Math.min(+rp.i||0,sentences.length-1); stt.phase="read";
         stt.scores=Array.isArray(rp.scores)?rp.scores:[]; stt.full=!!rp.full; stt.fullScore=(rp.fullScore==null?null:+rp.fullScore); }catch(e){} }
     }
     function persist(){ if(readonly)return; saveProg({recite:{i:stt.i,phase:stt.phase,scores:stt.scores,full:stt.full,fullScore:stt.fullScore}}); }
@@ -4807,6 +4810,14 @@ function openQuest(qid){
         };
       };
     }
+    /* v77：返回键=严格的上一步（不跳书页、不回首页）：
+       整段复述→末句原句；遮文复述→重读本句原句；第 N 句原句→上一句原句；第 1 句原句→交回 backOne 回书页 */
+    innerBack=()=>{
+      if(stt.full){ stt.full=false; persist(); draw(); return true; }
+      if(stt.phase==="recite"){ stt.phase="read"; persist(); draw(); return true; }
+      if(stt.i>0){ stt.i--; stt.phase="read"; persist(); draw(); return true; }
+      return false;
+    };
     draw();
   }
   /* ============ v54 批 1：d 类传译·传译页 ============
@@ -4870,6 +4881,8 @@ function openQuest(qid){
         };
       };
     }
+    /* v77：传译返回键=上一张卡（第 1 张交回 backOne 回书页），不跳阶段 */
+    innerBack=()=>{ if(ti>0){ ti--; draw(); return true; } return false; };
     draw();
   }
   /* —— 点击推进（v44）：整页点击流转阶段 —— */
@@ -4890,6 +4903,7 @@ function openQuest(qid){
     stageIdx=Math.max(0,Math.min(STAGES.length-1,idx));
     stopTypewriter();
     if(dialogTimer){ clearTimeout(dialogTimer); dialogTimer=null; }
+    innerBack=null;   /* v77：旧阶段的内层返回钩子随阶段切换失效，新阶段 render 时自行挂载 */
     SFX.tap();
     STAGES[stageIdx].render(opts||{});
     saveProg({stage:STAGES[stageIdx].id, book:(STAGES[stageIdx].id==="book"?bookPageIdx:0), qi:(STAGES[stageIdx].id==="quiz"?qi:0)});
@@ -5502,6 +5516,11 @@ function openQuest(qid){
   /* v62：严格单层返回——试炼=上一题、书页=上一页、其他=上一阶段、开篇=关闭 */
   function backOne(){
     const sid=(STAGES[stageIdx]||{}).id;
+    /* v77：修诵（句读↔遮文复述↔整段）/传译（逐卡）阶段内先做"严格上一步"；
+       走完阶段内第 1 步（钩子返回 false）才回上一阶段——杜绝一按返回就跳书页/回首页 */
+    if((sid==="recite"||sid==="trans")&&typeof innerBack==="function"){
+      if(innerBack()){ SFX.tap(); return; }
+    }
     if(sid==="quiz"){
       if(qi>0){ SFX.tap(); qi--; answered=false; drawQuiz(); saveProg({stage:"quiz",qi}); return; }
       goStage(stageIdx-1,{back:true}); return;   /* 第 1 题：回书页并保留书页位置 */
@@ -7182,6 +7201,29 @@ function factDiffHtml(fact,from){
   if(!from||i<0) return esc(s);
   return esc(s.slice(0,i))+'<b style="color:var(--gold)">'+esc(from)+'</b>'+esc(s.slice(i+from.length));
 }
+/* v77：流程排序类选择题（选项与正解都是"环节A→环节B→…"整链）——逐项指出错在哪一步、谁和谁颠倒，
+   不再用"与正解所述事实不符"这种没有信息量的空话。非排序文本返回""，走原有兜底。 */
+function quizOrderSteps(s){
+  return String(s==null?"":s).split(/→|➜|->/).map(x=>x.replace(/…|\.\.\./g,"").trim()).filter(Boolean);
+}
+function quizOrderWhy(c,w){
+  try{
+    const C=quizOrderSteps(c), W=quizOrderSteps(w);
+    if(C.length<2) return "";
+    for(let i=0;i<Math.min(C.length,W.length);i++){
+      if(C[i]===W[i]) continue;
+      const k=C.indexOf(W[i]);      /* 错放的环节在正解里的位次 */
+      const j=W.indexOf(C[i]);      /* 应放的环节在错链里的位次 */
+      if(k>=0&&j>=0) return `第 ${i+1} 位应是「${C[i]}」，这里却是「${W[i]}」——「${C[i]}」与「${W[i]}」次序颠倒：流程上先${C[i]}，之后才${W[i]}（正解分居第 ${i+1}、${k+1} 位）。`;
+      if(k>=0) return `第 ${i+1} 位应是「${C[i]}」，「${W[i]}」被提前了——它在正解中到第 ${k+1} 位才出现。`;
+      if(j>=0) return `第 ${i+1} 位应是「${C[i]}」；此选项把它放到了第 ${j+1} 位。`;
+      return `第 ${i+1} 位应是「${C[i]}」，此选项此处为「${W[i]}」。`;
+    }
+    if(W.length<C.length) return `流程不完整，还缺少环节「${C.slice(W.length).join("、")}」。`;
+    if(W.length>C.length) return `环节多于正解——正解共 ${C.length} 步，此选项多出 ${W.length-C.length} 步。`;
+  }catch(e){}
+  return "";
+}
 /* 选项归属考点名（ometa pid → 展示名） */
 function quizOptPname(pid){
   const pt=D.pointsLib.find(p=>p.id===pid);
@@ -7199,7 +7241,11 @@ function quizOptWhyHtml(z){
       if(m&&m.t==="bad") lines.push(`「${short}」本身表述有误——选项中「<s style="color:var(--danger)">${esc(m.to)}</s>」应为「<b style="color:var(--gold)">${esc(m.from)}</b>」。`);
       else if(m&&m.t==="other") lines.push(`「${short}」这句话本身没错，但它属于<b style="color:var(--cyber)">${esc(quizOptPname(m.pid))}</b>的内容——答非本题所问。`);
       else if(m&&m.t==="fill") lines.push(`「${short}」与本题考点无关，属凑数项。`);
-      else lines.push(`「${short}」与正解「${esc(clipClause(String(z.a),34))}」所述事实不符。`);
+      else {
+        /* v77：排序整链类选项——逐项说明错在哪一位、哪两个环节颠倒（无 ometa 的老题同样生效） */
+        const ow0=quizOrderWhy(z.a,o);
+        lines.push(ow0?`「${short}」错在次序：${ow0}`:`「${short}」与正解「${esc(clipClause(String(z.a),34))}」所述事实不符。`);
+      }
     } else if(z.kind==="wrongone"){
       if(o===z.a){
         if(m&&m.t==="bad") lines.push(`要找的错误项：「${short}」——其中「<s style="color:var(--danger)">${esc(m.to)}</s>」应为「<b style="color:var(--gold)">${esc(m.from)}</b>」。`);

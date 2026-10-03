@@ -225,7 +225,7 @@ const driver=`
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(!htmlSrc.includes('.dlg.gal{overflow-y:auto;-webkit-overflow-scrolling:touch}')) throw new Error('≤899px 缺 .dlg.gal 滚动修复');
     const sw=fs.readFileSync(require('path').join(__dirname,'sw.js'),'utf8');
-    if(!/wdzx-v(69|70|71|72|73|74|75)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
+    if(!/wdzx-v(69|70|71|72|73|74|75|76)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
   });
   run('v72 修诵卷底稿校订：结构审计',()=>{
     const wcOf=t=>String(t||'').trim().split(/\\s+/).filter(w=>/[A-Za-z0-9]/.test(w)).length;
@@ -451,7 +451,34 @@ const driver=`
     st.aiChOff={};
     localStorage.removeItem(AI_SNAP_KEY);
     const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
-    if(!/wdzx-v75/.test(sw)) throw new Error('sw.js 未升至 v75');
+    if(!/wdzx-v76/.test(sw)) throw new Error('sw.js 未升至 v76');
+  });
+  run('v77 返回键严格上一步/修诵先显原句/排序题逐项归因',()=>{
+    const oqSrc=openQuest.toString();
+    /* 1. 修诵续关铁序：恢复句序但强制 phase=read——先看到原句，才能手动进遮文复述 */
+    if(/rp\\.phase==="recite"\\?"recite":"read"/.test(oqSrc)) throw new Error('续关仍可能跳过原句直接要求复述');
+    if(!/stt\\.i=Math\\.min[\\s\\S]{0,120}?stt\\.phase="read";/.test(oqSrc)) throw new Error('续关未强制落在精读原句');
+    /* 2. 任务页返回键=严格上一步：修诵(整段→遮文→本句原句→上句)、传译(逐卡)内层先行，第1步才回书页 */
+    if(!/let innerBack=null;/.test(oqSrc)) throw new Error('缺 innerBack 钩子声明');
+    if(!/function goStage[\\s\\S]{0,260}?innerBack=null;/.test(oqSrc)) throw new Error('goStage 切阶段未清空 innerBack');
+    if(!/sid==="recite"\\|\\|sid==="trans"/.test(oqSrc)) throw new Error('backOne 未接入 recite/trans 内层返回');
+    if(!/innerBack=\\(\\)=>\\{[\\s\\S]{0,300}?stt\\.phase==="recite"[\\s\\S]{0,200}?stt\\.i>0/.test(oqSrc)) throw new Error('修诵内层返回步序缺失');
+    if(!/innerBack=\\(\\)=>\\{ if\\(ti>0\\)\\{ ti--; draw\\(\\)/.test(oqSrc)) throw new Error('传译内层返回缺失');
+    /* 3. 排序整链类错项：逐项指出错在哪一位、哪两个环节颠倒，禁用"与事实不符"空话 */
+    const C='服务准备→迎接服务→入店服务→核对商定日程→参观游览服务→其他服务';
+    const w1='服务准备→入店服务→迎接服务→核对商定日程→参观游览服务→其他服务';
+    const w2='迎接服务→服务准备→入店服务→核对商定日程→参观游览服务→其他服务';
+    const w3='服务准备→迎接服务→核对商定日程→入店服务→参观游览服务→其他服务';
+    const r1=quizOrderWhy(C,w1);
+    if(!/第 2 位/.test(r1)||!/迎接服务/.test(r1)||!/入店服务/.test(r1)||!/颠倒/.test(r1)) throw new Error('邻位颠倒归因失败：'+r1);
+    if(!/第 1 位/.test(quizOrderWhy(C,w2))) throw new Error('首位颠倒归因失败');
+    if(!/第 3 位/.test(quizOrderWhy(C,w3))) throw new Error('后续位次颠倒归因失败');
+    if(quizOrderWhy('普通陈述句选项','另一个普通陈述')!=='') throw new Error('非排序文本误判为排序');
+    const z={kind:'choice',a:C,opts:[w1,w2,w3,C]};
+    const html=quizOptWhyHtml(z);
+    if((html.match(/错在次序/g)||[]).length!==3) throw new Error('三个错项未全部逐项归因');
+    if(/所述事实不符/.test(html)) throw new Error('排序题解析仍出现无信息量空话');
+    /* 4. SW 随本批 +1（v76 断言在 v76 块内） */
   });
   run('v71 选择题AI逐项解析 + 手机端任务页滚动根治',()=>{
     reset();
