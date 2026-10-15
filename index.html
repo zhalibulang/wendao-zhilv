@@ -4852,7 +4852,7 @@ function openQuest(qid){
         var vh=document.createElement("div");
         vh.setAttribute("data-voicehint","1");
         vh.style.cssText="font-size:11px;color:var(--dim);margin-top:5px;line-height:1.6";
-        vh.textContent="提示：点「🗣️ 边说边转写」直接说英文；或用输入框右下角 🎙️ 听写；也可以按 Mac 系统听写快捷键（默认连按两下 Fn）在框内听写。";
+        vh.textContent="提示：点「🗣️ 边说边转写」直接说英文（会一直听，停了自动续上）；或用输入框右下角 🎙️ 听写——旁边的 EN/中 徽标可切换识别语言，说英语出中文时点它切到 EN。";
         typeZoneEl.appendChild(vh);
       }
       /* 切到打字模式时收掉录音，避免麦克风一直挂着 */
@@ -8518,10 +8518,30 @@ function asrOnce(lang,onText,onErr){
   let rec;
   try{ rec=new SR(); }catch(e){ if(onErr) onErr("语音识别初始化失败，请直接打字"); return null; }
   rec.lang=lang||"zh-CN"; rec.interimResults=true; rec.continuous=true; rec.maxAlternatives=1;
+  let restartTimer=null;
   rec.onresult=e=>{ let fin="",inter="";
     for(let k=e.resultIndex;k<e.results.length;k++){ const r=e.results[k]; if(r.isFinal) fin+=r[0].transcript; else inter+=r[0].transcript; }
     if(onText) onText(fin,inter); };
-  rec.onerror=e=>{ if(onErr) onErr(e&&e.error==="not-allowed"?"麦克风权限被拒——请允许麦克风后重试":"语音识别暂不可用（"+((e&&e.error)||"未知")+"）——请直接打字"); };
+  rec.onerror=e=>{
+    const er=e&&e.error;
+    /* no-speech=静音超时、aborted=主动停止——都不算故障：前者交给 onend 自动重启，后者直接静默 */
+    if(er==="no-speech"||er==="aborted") return;
+    if(er==="not-allowed"||er==="service-not-allowed"||er==="audio-capture"||er==="network"){
+      rec._stopped=true; if(restartTimer){ clearTimeout(restartTimer); restartTimer=null; }
+      if(onErr) onErr(er==="not-allowed"?"麦克风权限被拒——请允许麦克风后重试":er==="network"?"识别服务网络异常——稍后再试":"麦克风/识别服务不可用（"+er+"）——请直接打字");
+      return;
+    }
+    if(onErr) onErr("语音识别暂不可用（"+(er||"未知")+"）——请直接打字");
+  };
+  rec.onend=()=>{
+    if(rec._stopped) return;
+    /* Safari 的识别器说完一段就自动结束（one-shot）——v86：自动重启实现持续监听（GPT/Gemini 式体验） */
+    if(restartTimer) clearTimeout(restartTimer);
+    restartTimer=setTimeout(()=>{ if(rec._stopped) return; try{ rec.start(); }catch(_){ /* start 竞态由下一轮 onend 兜底 */ } },300);
+  };
+  /* 包装 stop：消费方调 stop() 即真正结束（设标志），不会被 onend 自动重启救活 */
+  const _nativeStop=rec.stop.bind(rec);
+  rec.stop=function(){ rec._stopped=true; if(restartTimer){ clearTimeout(restartTimer); restartTimer=null; } try{ _nativeStop(); }catch(_){} };
   return rec;
 }
 /* —— 演界试炼（全真演练，可随时反复）：四版块 S1-S4 各五题；
@@ -12924,13 +12944,28 @@ boot();
     btn.textContent="🎙️";
     btn.onmouseenter=function(){ btn.style.opacity="1"; };
     btn.onmouseleave=function(){ if(!recognition||!_live) btn.style.opacity=".85"; };
-    /* 根据 placeholder 自动选听写语言——复述/背诵/英文作答走 en-US，中文场景走 zh-CN */
+    /* 根据 placeholder 自动选听写语言——复述/背诵/英文作答走 en-US，中文场景走 zh-CN；
+       v86：按钮旁加 EN/中 徽标，识别错语言时一键切换 */
     var lang=/英文|导游|guide|oral|背诵|复述|英文/.test((ta.placeholder||""))?"en-US":"zh-CN";
-    var recognition=null, finalText="", _live=false, _interimText="";
+    var recognition=null, finalText="", _live=false, _interimText="", _restartT=null;
+    var langBtn=document.createElement("button");
+    langBtn.type="button"; langBtn.tabIndex=-1;
+    langBtn.style.cssText="position:absolute;right:52px;bottom:6px;height:40px;padding:0 10px;border-radius:20px;border:1px solid var(--neon, #c96f7f);background:rgba(201,111,127,0.18);color:var(--neon, #c96f7f);font-size:12px;font-weight:600;cursor:pointer;z-index:5;opacity:.85";
+    function _langLabel(){
+      langBtn.textContent=(lang==="en-US")?"EN":"中";
+      langBtn.title="听写语言："+(lang==="en-US"?"英语 · 点此切换为中文":"中文 · 点此切换为英语");
+    }
+    _langLabel();
+    langBtn.onpointerdown=function(ev){
+      ev&&ev.stopPropagation();
+      lang=(lang==="en-US")?"zh-CN":"en-US"; _langLabel();
+      if(recognition&&_live){ try{ recognition.stop(); }catch(_){} } /* stop 触发 onend 自动重启，新语言生效 */
+    };
+    wrap.appendChild(langBtn);
     function _start(){
       try{
         recognition=new SR();
-        recognition.lang=lang; recognition.interimResults=true; recognition.continuous=false;
+        recognition.lang=lang; recognition.interimResults=true; recognition.continuous=true;
         finalText=""; _interimText="";
         recognition.onstart=function(){
           _live=true; btn.textContent="⏺"; btn.style.opacity="1"; btn.style.background="rgba(184,92,92,0.25)";
@@ -12944,12 +12979,25 @@ boot();
           if(fin){ finalText+=fin; _insertAtCursor(ta, finalText); finalText=""; }
           _interimText=interim;
         };
-        recognition.onerror=function(err){ toast("听写出错："+(err.error||err.message||"未知")+"（权限/联网/浏览器兼容）","danger"); _stop(true); };
-        recognition.onend=function(){ if(_live) _stop(false); };
+        recognition.onerror=function(err){
+          var er=err&&err.error;
+          if(er==="no-speech"||er==="aborted") return; /* 静音超时/主动停止——不算故障，静音交给 onend 自动重启 */
+          if(er==="not-allowed"||er==="service-not-allowed"||er==="audio-capture"||er==="network"){
+            toast(er==="not-allowed"?"麦克风权限被拒——Safari 设置→网站→本站→麦克风→允许":er==="network"?"识别服务网络异常——稍后再试":"麦克风不可用（"+er+"）","danger");
+            _stop(true); return;
+          }
+          toast("听写出错："+(er||"未知")+"（权限/联网/浏览器兼容）","danger"); _stop(true);
+        };
+        /* v86：Safari 识别器说完一段就自动结束——onend 自动重启实现持续监听（GPT/Gemini 式） */
+        recognition.onend=function(){
+          if(!_live) return;
+          if(_restartT) clearTimeout(_restartT);
+          _restartT=setTimeout(function(){ if(!_live||!recognition) return; try{ recognition.start(); }catch(_){} },300);
+        };
         recognition.start();
       }catch(e){ toast("语音输入不可用——本浏览器不支持 Web Speech API","danger"); }
     }
-    function _stop(silent){ _live=false; btn.textContent="🎙️"; btn.style.background="rgba(201,111,127,0.22)"; if(recognition){ try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _insertAtCursor(ta, finalText); } }
+    function _stop(silent){ _live=false; if(_restartT){ clearTimeout(_restartT); _restartT=null; } btn.textContent="🎙️"; btn.style.background="rgba(201,111,127,0.22)"; if(recognition){ try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _insertAtCursor(ta, finalText); } }
     function _insertAtCursor(ta, txt){
       var v=ta.value||""; var s=ta.selectionStart??v.length, e=ta.selectionEnd??v.length;
       ta.value=v.slice(0,s)+txt+v.slice(e);
