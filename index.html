@@ -12708,12 +12708,15 @@ function renderCal(){
   });
 }
 boot();
-/* v82：iOS/macOS 可编辑元素补丁——确保系统语音输入的麦克风按钮能触发 */
-(function _iosSpeechInputPatch(){
+/* v83：语音输入双通路——iPad 靠软键盘麦克风（v82），macOS Safari 没有软键盘，靠 Web Speech API 自建「🎙️」按钮 */
+(function _speechInputPatch(){
   if(typeof document==="undefined"||typeof window==="undefined") return;
   var HT=window.HTMLTextAreaElement, HI=window.HTMLInputElement;
   if(!HT&&!HI) return;
-  /* 1. 补齐属性：inputmode/enterkeyhint/拼写检查，软键盘会显示麦克风按钮 */
+  /* Web Speech API 检测——Safari 暴露 webkitSpeechRecognition，Chrome 暴露 SpeechRecognition */
+  var SR=(window.SpeechRecognition||window.webkitSpeechRecognition);
+  var HAS_SR=!!SR;
+  /* 1. 补齐属性 + iOS PWA focus 时机（v82 原样保留） */
   function _patch(el){
     if(!el||el.dataset.spPatch) return;
     var tag=el.tagName;
@@ -12726,7 +12729,67 @@ boot();
       el.setAttribute("autocomplete","off");
       el.setAttribute("autocapitalize","off");
       el.dataset.spPatch="1";
+      if(tag==="TEXTAREA") _attachMicBtn(el);
     }
+  }
+  /* 2. 给 textarea 挂「🎙️ 语音输入」按钮——Web Speech API 录音，识别完填到光标处
+     macOS Safari / iPad Safari / Chrome 通用；没 Web Speech API 的浏览器静默跳过 */
+  function _attachMicBtn(ta){
+    if(!ta||ta.dataset.micBtn) return;
+    if(!HAS_SR) return;
+    /* textarea 必须有非静态定位容器才能让绝对定位按钮贴角落——给它加一层 wrapper */
+    var wrap=ta.parentNode;
+    if(!wrap||getComputedStyle(wrap).position==="static"){
+      wrap=document.createElement("div");
+      wrap.style.position="relative";
+      wrap.style.display="block";
+      ta.parentNode.insertBefore(wrap,ta); wrap.appendChild(ta);
+    }
+    var btn=document.createElement("button");
+    btn.type="button";
+    btn.tabIndex=-1; /* 不参与 Tab 键序 */
+    btn.dataset.micBtn="1";
+    btn.title="语音输入 · 听写填入此处";
+    btn.style.cssText="position:absolute;right:6px;bottom:6px;width:34px;height:34px;border-radius:50%;border:1px solid var(--neon, #c96f7f);background:rgba(201,111,127,0.15);color:var(--neon, #c96f7f);font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:5;opacity:.6;transition:opacity .15s";
+    btn.textContent="🎙️";
+    btn.onmouseenter=function(){ btn.style.opacity="1"; };
+    btn.onmouseleave=function(){ if(!recognition||!_live) btn.style.opacity=".6"; };
+    /* 根据 placeholder 自动选听写语言——复述/背诵/英文作答走 en-US，中文场景走 zh-CN */
+    var lang=/英文|导游|guide|oral|背诵|复述|英文/.test((ta.placeholder||""))?"en-US":"zh-CN";
+    var recognition=null, finalText="", _live=false, _interimText="";
+    function _start(){
+      try{
+        recognition=new SR();
+        recognition.lang=lang; recognition.interimResults=true; recognition.continuous=false;
+        finalText=""; _interimText="";
+        recognition.onstart=function(){
+          _live=true; btn.textContent="⏺"; btn.style.opacity="1"; btn.style.background="rgba(184,92,92,0.25)";
+        };
+        recognition.onresult=function(e){
+          var fin="", interim="";
+          for(var i=0;i<e.results.length;i++){
+            var t=e.results[i][0].transcript||"";
+            if(e.results[i].isFinal) fin+=t; else interim+=t;
+          }
+          if(fin){ finalText+=fin; _insertAtCursor(ta, finalText); finalText=""; }
+          _interimText=interim;
+        };
+        recognition.onerror=function(err){ toast("听写出错："+(err.error||err.message||"未知")+"（权限/联网/浏览器兼容）","danger"); _stop(true); };
+        recognition.onend=function(){ if(_live) _stop(false); };
+        recognition.start();
+      }catch(e){ toast("语音输入不可用——本浏览器不支持 Web Speech API","danger"); }
+    }
+    function _stop(silent){ _live=false; btn.textContent="🎙️"; btn.style.background="rgba(201,111,127,0.15)"; if(recognition){ try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _insertAtCursor(ta, finalText); } }
+    function _insertAtCursor(ta, txt){
+      var v=ta.value||""; var s=ta.selectionStart??v.length, e=ta.selectionEnd??v.length;
+      ta.value=v.slice(0,s)+txt+v.slice(e);
+      try{ ta.setSelectionRange(s+txt.length,s+txt.length); }catch(_){}
+      try{ ta.dispatchEvent(new Event("input",{bubbles:true})); }catch(_){}
+      ta.focus();
+    }
+    btn.onpointerdown=function(ev){ ev&&ev.stopPropagation(); if(_live) _stop(false); else _start(); };
+    wrap.appendChild(btn);
+    ta.dataset.micBtn="1";
   }
   try{
     (document.querySelectorAll("textarea,input[type=text],input:not([type])")).forEach(_patch);
@@ -12740,7 +12803,7 @@ boot();
       }).observe(document.body,{childList:true,subtree:true});
     }
   }catch(_){}
-  /* 2. focus 时机：iOS PWA 上同步 focus 常因 layout 未完成被吞——延后一帧让软键盘可靠弹出 */
+  /* 3. focus 时机：iOS PWA 上同步 focus 常因 layout 未完成被吞——延后一帧让软键盘可靠弹出 */
   try{
     var _inRaf=false;
     if(HT&&HT.prototype&&typeof HT.prototype.focus==="function"){
