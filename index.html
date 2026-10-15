@@ -4822,6 +4822,39 @@ function openQuest(qid){
             scoreBox.innerHTML=n>=4?'<span style="color:var(--ok)">✓ 自评 '+n+'/5 过关——可切打字模式点「对照评分」看逐词细节</span>':'<span style="color:var(--dim)">自评 '+n+'/5 · 勾满 4 个算过关</span>'; }
         }; });
       }
+      /* v85：边说边转写——Mac 内置麦克风直接说英文，识别文字实时进打字框（不用打字也能完成复述） */
+      var recAsr=row.querySelector("#recAsr"), recAsrSt=row.querySelector("#recAsrSt");
+      if(recAsr) recAsr.onpointerdown=function(){
+        SFX&&SFX.tap&&SFX.tap();
+        var self=this;
+        if(self._rec){ try{ self._rec.stop(); }catch(e){} self._rec=null; self.textContent="🗣️ 边说边转写（Mac 麦克风直接说，不用打字）"; if(recAsrSt) recAsrSt.textContent="转写结束——点「对照评分」看逐词结果"; return; }
+        if(!asrSupport()){ if(recAsrSt) recAsrSt.textContent="此浏览器不支持语音识别——请打字或录音"; return; }
+        if(recOn) _stopRec(); /* 录音中先收麦，避免抢占麦克风 */
+        var ta2=typeInput;
+        if(!ta2){ if(recAsrSt) recAsrSt.textContent="未找到打字框"; return; }
+        var rec=asrOnce("en-US",function(fin,inter){
+          var piece=(fin||"").trim();
+          if(!piece){ if(inter&&recAsrSt) recAsrSt.textContent="听到："+inter; return; }
+          ta2.value=(ta2.value&&!/\s$/.test(ta2.value)?ta2.value+" ":"")+piece;
+          try{ ta2.dispatchEvent(new Event("input",{bubbles:true})); }catch(_){ }
+          if(recAsrSt) recAsrSt.textContent="已转写……继续说，说完再点一次结束";
+        },function(msg){ if(recAsrSt) recAsrSt.textContent=msg; });
+        if(!rec) return;
+        self._rec=rec; self.textContent="■ 结束转写";
+        if(recAsrSt) recAsrSt.textContent="转写中……直接说英文即可";
+        setMode("type"); /* 自动切到打字模式，让用户看到文字实时进框 */
+        setTimeout(function(){ try{ ta2.focus(); }catch(_){ } },150);
+        try{ rec.start(); }catch(e){ if(recAsrSt) recAsrSt.textContent="启动失败——请直接打字"; self._rec=null; self.textContent="🗣️ 边说边转写（Mac 麦克风直接说，不用打字）"; }
+      };
+      /* v85：打字区提示行——把语音输入入口明示出来 */
+      var typeZoneEl=row.querySelector("#typeZone");
+      if(typeZoneEl&&typeInput&&!typeZoneEl.querySelector("[data-voicehint]")){
+        var vh=document.createElement("div");
+        vh.setAttribute("data-voicehint","1");
+        vh.style.cssText="font-size:11px;color:var(--dim);margin-top:5px;line-height:1.6";
+        vh.textContent="提示：点「🗣️ 边说边转写」直接说英文；或用输入框右下角 🎙️ 听写；也可以按 Mac 系统听写快捷键（默认连按两下 Fn）在框内听写。";
+        typeZoneEl.appendChild(vh);
+      }
       /* 切到打字模式时收掉录音，避免麦克风一直挂着 */
       var _setModeBase=setMode;
       setMode=function(mode){ _setModeBase(mode); if(mode!=="rec"&&recOn) _stopRec(); };
@@ -4859,6 +4892,7 @@ function openQuest(qid){
       <div id="recZone"><button class="btn primary recbig" id="recBtnBig" type="button">🎙️ 按住此处开始录音复述</button>
         <div class="kitbar"><button class="btn sm primary" id="recBtn" type="button">● 开始录音</button><button class="btn sm ghost" id="pauseBtn" type="button" disabled>暂停</button><button class="btn sm ghost" id="redoBtn" type="button" disabled>重录</button><span class="rectimer" id="recTimer">00:00</span></div>
         <div class="kitbar speedbtns" id="playBar" style="display:none"><span style="font-size:12px;color:var(--dim)">回放：</span><button class="btn sm ghost" data-rate="0.75" type="button">0.75x</button><button class="btn sm ghost cur" data-rate="1" type="button">1.0x</button><button class="btn sm ghost" data-rate="1.25" type="button">1.25x</button><button class="btn sm" id="playBtn" type="button">▶ 播放</button></div>
+        <div class="kitbar"><button class="btn sm" id="recAsr" type="button" ${asrSupport()?"":"hidden"}>🗣️ 边说边转写（Mac 麦克风直接说，不用打字）</button><span id="recAsrSt" style="font-size:11.5px;color:var(--dim)"></span></div>
       </div>
       <div class="typezone" id="typeZone" style="display:none"><textarea id="typeInput" placeholder="遮文后，凭记忆在此默打英文导游词……打完点「对照评分」"></textarea>
         <div class="kitbar"><button class="btn sm primary" id="typeCmp" type="button">对照评分</button><button class="btn sm ghost" id="typeClear" type="button">清空重打</button></div>
@@ -6980,10 +7014,13 @@ function openOralInput(editId){
     const stEl=$("#oiMicSt",ov);
     if(this._rec){ try{this._rec.stop();}catch(e){} this._rec=null; this.textContent="🎙️ 口述"; if(stEl) stEl.textContent=""; return; }
     const rec=asrOnce("zh-CN",(fin,inter)=>{
-      if(!fin&&!inter) return;
+      /* v85：只在最终结果追加——临时结果反复触发会重复堆积；临时内容仅作状态提示 */
+      const piece=(fin||"").trim();
+      if(!piece){ if(inter&&stEl) stEl.textContent="听到："+inter; return; }
       const cur=aEl.value;
-      aEl.value=(cur&&!/\s$/.test(cur)?cur+" ":"")+((fin||inter)+"").trim();
+      aEl.value=(cur&&!/\s$/.test(cur)?cur+" ":"")+piece;
       aEl.dispatchEvent(new Event("input"));
+      if(stEl) stEl.textContent="口述中……说完再点一次结束";
     },(msg)=>{ if(stEl) stEl.textContent=msg; });
     if(!rec) return;
     this._rec=rec; this.textContent="■ 结束口述"; if(stEl) stEl.textContent="口述中……说完再点一次结束";
@@ -12664,8 +12701,11 @@ function openOralStudy(aid){
         const stEl=box.querySelector("#ftRecSt"), ta=box.querySelector("#ftInp");
         if(this._rec){ try{this._rec.stop();}catch(e){} this._rec=null; this.textContent="🗣️ 语音转写"; return; }
         const rec=asrOnce("en-US",(fin,inter)=>{
-          const piece=(fin||inter||"").trim(); if(!piece) return;
+          /* v85：只用最终结果追加，防临时结果反复触发导致文字重复；临时内容进状态栏 */
+          const piece=(fin||"").trim();
+          if(!piece){ if(inter&&stEl) stEl.textContent="听到："+inter; return; }
           ta.value=(ta.value&&!/\s$/.test(ta.value)?ta.value+" ":"")+piece;
+          if(stEl) stEl.textContent="已转写……继续说，说完再点一次结束";
         },(msg)=>{ stEl.textContent=msg; });
         if(!rec) return;
         this._rec=rec; this.textContent="■ 结束转写"; stEl.textContent="转写中……诵读即可，说完再点一次结束";
@@ -12880,10 +12920,10 @@ boot();
     btn.tabIndex=-1; /* 不参与 Tab 键序 */
     btn.dataset.micBtn="1";
     btn.title="语音输入 · 听写填入此处";
-    btn.style.cssText="position:absolute;right:6px;bottom:6px;width:34px;height:34px;border-radius:50%;border:1px solid var(--neon, #c96f7f);background:rgba(201,111,127,0.15);color:var(--neon, #c96f7f);font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:5;opacity:.6;transition:opacity .15s";
+    btn.style.cssText="position:absolute;right:6px;bottom:6px;width:40px;height:40px;border-radius:50%;border:1px solid var(--neon, #c96f7f);background:rgba(201,111,127,0.22);color:var(--neon, #c96f7f);font-size:19px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:5;opacity:.85;transition:opacity .15s;box-shadow:0 0 6px rgba(201,111,127,0.35)";
     btn.textContent="🎙️";
     btn.onmouseenter=function(){ btn.style.opacity="1"; };
-    btn.onmouseleave=function(){ if(!recognition||!_live) btn.style.opacity=".6"; };
+    btn.onmouseleave=function(){ if(!recognition||!_live) btn.style.opacity=".85"; };
     /* 根据 placeholder 自动选听写语言——复述/背诵/英文作答走 en-US，中文场景走 zh-CN */
     var lang=/英文|导游|guide|oral|背诵|复述|英文/.test((ta.placeholder||""))?"en-US":"zh-CN";
     var recognition=null, finalText="", _live=false, _interimText="";
@@ -12909,7 +12949,7 @@ boot();
         recognition.start();
       }catch(e){ toast("语音输入不可用——本浏览器不支持 Web Speech API","danger"); }
     }
-    function _stop(silent){ _live=false; btn.textContent="🎙️"; btn.style.background="rgba(201,111,127,0.15)"; if(recognition){ try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _insertAtCursor(ta, finalText); } }
+    function _stop(silent){ _live=false; btn.textContent="🎙️"; btn.style.background="rgba(201,111,127,0.22)"; if(recognition){ try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _insertAtCursor(ta, finalText); } }
     function _insertAtCursor(ta, txt){
       var v=ta.value||""; var s=ta.selectionStart??v.length, e=ta.selectionEnd??v.length;
       ta.value=v.slice(0,s)+txt+v.slice(e);
