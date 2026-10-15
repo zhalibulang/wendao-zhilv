@@ -4838,7 +4838,7 @@ function openQuest(qid){
           var shown=(fin||inter||"").trim();
           if(!shown) return;
           if(recAsrSt) recAsrSt.textContent=fin?"已转写……继续说，说完再点一次结束":"听到："+shown.slice(-40);
-        },function(msg){ if(recAsrSt) recAsrSt.textContent=msg; dft.reset(); });
+        },function(msg){ if(recAsrSt) recAsrSt.textContent=msg; dft.reset(); },function(){ return ta2.isConnected; });
         if(!rec) return;
         self._rec=rec; self.textContent="■ 结束转写";
         if(recAsrSt) recAsrSt.textContent="转写中……直接说英文即可";
@@ -7019,7 +7019,7 @@ function openOralInput(editId){
       const shown=(fin||inter||"").trim();
       if(!shown) return;
       if(stEl) stEl.textContent=fin?"口述中……说完再点一次结束":"听到："+shown.slice(-40);
-    },(msg)=>{ if(stEl) stEl.textContent=msg; dft.reset(); });
+    },(msg)=>{ if(stEl) stEl.textContent=msg; dft.reset(); },()=>aEl.isConnected);
     if(!rec) return;
     this._rec=rec; this.textContent="■ 结束口述"; if(stEl) stEl.textContent="口述中……说完再点一次结束";
     try{ rec.start(); }catch(e){ if(stEl) stEl.textContent="启动失败，请直接打字"; this._rec=null; this.textContent="🎙️ 口述"; }
@@ -8529,7 +8529,15 @@ function asrDraftBinder(ta){
     reset(){ d0=-1; }
   };
 }
-function asrOnce(lang,onText,onErr){
+/* v90: 全局语音互斥——Safari 同一时刻只允许一个识别器拿音频，旧识别器不释放会"抢走"新页面的麦克风。
+   约定：window.__wdAsrCur 指向当前活跃识别器；新识别器 start 前踢掉旧的。 */
+function asrKickAndRegister(rec){
+  try{
+    if(window.__wdAsrCur&&window.__wdAsrCur!==rec){ try{ window.__wdAsrCur.stop(); }catch(_){ } }
+    window.__wdAsrCur=rec;
+  }catch(_){ }
+}
+function asrOnce(lang,onText,onErr,isAlive){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ if(onErr) onErr("此环境不支持语音识别，请直接打字"); return null; }
   let rec;
@@ -8547,6 +8555,7 @@ function asrOnce(lang,onText,onErr){
     if(er==="no-speech"||er==="aborted") return;
     if(er==="not-allowed"||er==="service-not-allowed"||er==="audio-capture"||er==="network"){
       rec._stopped=true; if(restartTimer){ clearTimeout(restartTimer); restartTimer=null; }
+      if(window.__wdAsrCur===rec) window.__wdAsrCur=null;
       if(onErr) onErr(er==="not-allowed"?"麦克风权限被拒——请允许麦克风后重试":er==="network"?"识别服务网络异常——稍后再试":"麦克风/识别服务不可用（"+er+"）——请直接打字");
       return;
     }
@@ -8557,13 +8566,18 @@ function asrOnce(lang,onText,onErr){
     /* Safari 的识别器说完一段就自动结束（one-shot）——v86：自动重启实现持续监听（GPT/Gemini 式体验）
        v87：Safari 常只给临时草稿不给终稿——重启前把草稿当终稿交给消费方落地，一句话都不丢 */
     if(lastInter){ const p=lastInter; lastInter=""; if(onText) onText(p,""); }
+    /* v90：离场看门狗——绑定的输入框已离开页面（切页/弹层关闭）就不再重启，释放麦克风 */
+    if(typeof isAlive==="function"&&!isAlive()){ rec._stopped=true; if(window.__wdAsrCur===rec) window.__wdAsrCur=null; return; }
     if(restartTimer) clearTimeout(restartTimer);
     /* v89：重启间隔 300→150ms，压缩句间盲区，快说少丢词 */
     restartTimer=setTimeout(()=>{ if(rec._stopped) return; try{ rec.start(); }catch(_){ /* start 竞态由下一轮 onend 兜底 */ } },150);
   };
+  /* 包装 start：启动前踢掉全局注册的旧识别器（v90 互斥） */
+  const _nativeStart=rec.start.bind(rec);
+  rec.start=function(){ asrKickAndRegister(rec); return _nativeStart(); };
   /* 包装 stop：消费方调 stop() 即真正结束（设标志），停止前把草稿也落地；不会被 onend 自动重启救活 */
   const _nativeStop=rec.stop.bind(rec);
-  rec.stop=function(){ rec._stopped=true; if(restartTimer){ clearTimeout(restartTimer); restartTimer=null; } if(lastInter){ const p=lastInter; lastInter=""; if(onText) onText(p,""); } try{ _nativeStop(); }catch(_){} };
+  rec.stop=function(){ rec._stopped=true; if(restartTimer){ clearTimeout(restartTimer); restartTimer=null; } if(window.__wdAsrCur===rec) window.__wdAsrCur=null; if(lastInter){ const p=lastInter; lastInter=""; if(onText) onText(p,""); } try{ _nativeStop(); }catch(_){} };
   return rec;
 }
 /* —— 演界试炼（全真演练，可随时反复）：四版块 S1-S4 各五题；
@@ -12748,7 +12762,7 @@ function openOralStudy(aid){
           const shown=(fin||inter||"").trim();
           if(!shown) return;
           if(stEl) stEl.textContent=fin?"已转写……继续说，说完再点一次结束":"听到："+shown.slice(-40);
-        },(msg)=>{ stEl.textContent=msg; dft.reset(); });
+        },(msg)=>{ stEl.textContent=msg; dft.reset(); },()=>ta.isConnected);
         if(!rec) return;
         this._rec=rec; this.textContent="■ 结束转写"; stEl.textContent="转写中……诵读即可，说完再点一次结束";
         try{ rec.start(); }catch(e){ stEl.textContent="启动失败，请直接打字"; this._rec=null; this.textContent="🗣️ 语音转写"; }
@@ -13002,14 +13016,18 @@ boot();
           if(!_live) return;
           if(finalText){ _commit(finalText); finalText=""; }
           if(_interimText){ _commit(_interimText); _interimText=""; btn.title="语音输入 · 听写填入此处"; }
+          /* v90：离场看门狗——textarea 已离开页面就停，释放麦克风 */
+          if(!ta.isConnected){ _stop(true); return; }
           if(_restartT) clearTimeout(_restartT);
           /* v89：重启间隔 300→150ms，压缩句间盲区 */
           _restartT=setTimeout(function(){ if(!_live||!recognition) return; try{ recognition.start(); }catch(_){} },150);
         };
+        /* v90：启动前踢掉全局注册的旧识别器（跨页抢占问题） */
+        asrKickAndRegister(recognition);
         recognition.start();
       }catch(e){ toast("语音输入不可用——本浏览器不支持 Web Speech API","danger"); }
     }
-    function _stop(silent){ _live=false; if(_restartT){ clearTimeout(_restartT); _restartT=null; } btn.textContent="🎙️"; btn.title="语音输入 · 听写填入此处"; btn.style.background="rgba(201,111,127,0.22)"; if(recognition){ try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _commit(finalText); finalText=""; } if(!silent&&_interimText){ _commit(_interimText); _interimText=""; } _draftStart=-1; }
+    function _stop(silent){ _live=false; if(_restartT){ clearTimeout(_restartT); _restartT=null; } btn.textContent="🎙️"; btn.title="语音输入 · 听写填入此处"; btn.style.background="rgba(201,111,127,0.22)"; if(recognition){ if(window.__wdAsrCur===recognition) window.__wdAsrCur=null; try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _commit(finalText); finalText=""; } if(!silent&&_interimText){ _commit(_interimText); _interimText=""; } _draftStart=-1; }
     /* v89：草稿区写入——草稿只占文本末尾一块区域，反复覆盖；定稿后释放草稿区 */
     var _draftStart=-1;
     function _applyText(txt){
