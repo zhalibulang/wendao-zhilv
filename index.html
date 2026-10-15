@@ -8518,9 +8518,11 @@ function asrOnce(lang,onText,onErr){
   let rec;
   try{ rec=new SR(); }catch(e){ if(onErr) onErr("语音识别初始化失败，请直接打字"); return null; }
   rec.lang=lang||"zh-CN"; rec.interimResults=true; rec.continuous=true; rec.maxAlternatives=1;
-  let restartTimer=null;
+  let restartTimer=null, lastInter="";
   rec.onresult=e=>{ let fin="",inter="";
     for(let k=e.resultIndex;k<e.results.length;k++){ const r=e.results[k]; if(r.isFinal) fin+=r[0].transcript; else inter+=r[0].transcript; }
+    if(inter) lastInter=inter;
+    if(fin) lastInter=""; /* 终稿已到，同句草稿作废，防止重复 */
     if(onText) onText(fin,inter); };
   rec.onerror=e=>{
     const er=e&&e.error;
@@ -8535,13 +8537,15 @@ function asrOnce(lang,onText,onErr){
   };
   rec.onend=()=>{
     if(rec._stopped) return;
-    /* Safari 的识别器说完一段就自动结束（one-shot）——v86：自动重启实现持续监听（GPT/Gemini 式体验） */
+    /* Safari 的识别器说完一段就自动结束（one-shot）——v86：自动重启实现持续监听（GPT/Gemini 式体验）
+       v87：Safari 常只给临时草稿不给终稿——重启前把草稿当终稿交给消费方落地，一句话都不丢 */
+    if(lastInter){ const p=lastInter; lastInter=""; if(onText) onText(p,""); }
     if(restartTimer) clearTimeout(restartTimer);
     restartTimer=setTimeout(()=>{ if(rec._stopped) return; try{ rec.start(); }catch(_){ /* start 竞态由下一轮 onend 兜底 */ } },300);
   };
-  /* 包装 stop：消费方调 stop() 即真正结束（设标志），不会被 onend 自动重启救活 */
+  /* 包装 stop：消费方调 stop() 即真正结束（设标志），停止前把草稿也落地；不会被 onend 自动重启救活 */
   const _nativeStop=rec.stop.bind(rec);
-  rec.stop=function(){ rec._stopped=true; if(restartTimer){ clearTimeout(restartTimer); restartTimer=null; } try{ _nativeStop(); }catch(_){} };
+  rec.stop=function(){ rec._stopped=true; if(restartTimer){ clearTimeout(restartTimer); restartTimer=null; } if(lastInter){ const p=lastInter; lastInter=""; if(onText) onText(p,""); } try{ _nativeStop(); }catch(_){} };
   return rec;
 }
 /* —— 演界试炼（全真演练，可随时反复）：四版块 S1-S4 各五题；
@@ -12971,13 +12975,13 @@ boot();
           _live=true; btn.textContent="⏺"; btn.style.opacity="1"; btn.style.background="rgba(184,92,92,0.25)";
         };
         recognition.onresult=function(e){
-          var fin="", interim="";
-          for(var i=0;i<e.results.length;i++){
+          /* v87：从 resultIndex 增量处理——持续监听模式下 results 累积历史，全量遍历会重复插入 */
+          for(var i=e.resultIndex||0;i<e.results.length;i++){
             var t=e.results[i][0].transcript||"";
-            if(e.results[i].isFinal) fin+=t; else interim+=t;
+            if(e.results[i].isFinal) finalText+=t; else _interimText+=t;
           }
-          if(fin){ finalText+=fin; _insertAtCursor(ta, finalText); finalText=""; }
-          _interimText=interim;
+          if(finalText){ _insertAtCursor(ta, finalText); finalText=""; _interimText=""; }
+          if(_interimText) btn.title="识别中："+_interimText.slice(-40);
         };
         recognition.onerror=function(err){
           var er=err&&err.error;
@@ -12988,16 +12992,19 @@ boot();
           }
           toast("听写出错："+(er||"未知")+"（权限/联网/浏览器兼容）","danger"); _stop(true);
         };
-        /* v86：Safari 识别器说完一段就自动结束——onend 自动重启实现持续监听（GPT/Gemini 式） */
+        /* v86：Safari 识别器说完一段就自动结束——onend 自动重启实现持续监听（GPT/Gemini 式）
+           v87：Safari 常只给临时草稿不给最终结果——重启前把草稿也落地，一句话都不丢 */
         recognition.onend=function(){
           if(!_live) return;
+          if(finalText){ _insertAtCursor(ta, finalText); finalText=""; }
+          if(_interimText){ _insertAtCursor(ta, _interimText); _interimText=""; btn.title="语音输入 · 听写填入此处"; }
           if(_restartT) clearTimeout(_restartT);
           _restartT=setTimeout(function(){ if(!_live||!recognition) return; try{ recognition.start(); }catch(_){} },300);
         };
         recognition.start();
       }catch(e){ toast("语音输入不可用——本浏览器不支持 Web Speech API","danger"); }
     }
-    function _stop(silent){ _live=false; if(_restartT){ clearTimeout(_restartT); _restartT=null; } btn.textContent="🎙️"; btn.style.background="rgba(201,111,127,0.22)"; if(recognition){ try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _insertAtCursor(ta, finalText); } }
+    function _stop(silent){ _live=false; if(_restartT){ clearTimeout(_restartT); _restartT=null; } btn.textContent="🎙️"; btn.title="语音输入 · 听写填入此处"; btn.style.background="rgba(201,111,127,0.22)"; if(recognition){ try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _insertAtCursor(ta, finalText); finalText=""; } if(!silent&&_interimText){ _insertAtCursor(ta, _interimText); _interimText=""; } }
     function _insertAtCursor(ta, txt){
       var v=ta.value||""; var s=ta.selectionStart??v.length, e=ta.selectionEnd??v.length;
       ta.value=v.slice(0,s)+txt+v.slice(e);
