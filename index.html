@@ -4852,7 +4852,7 @@ function openQuest(qid){
         var vh=document.createElement("div");
         vh.setAttribute("data-voicehint","1");
         vh.style.cssText="font-size:11px;color:var(--dim);margin-top:5px;line-height:1.6";
-        vh.textContent="提示：点「🗣️ 边说边转写」直接说英文（会一直听，停了自动续上）；或用输入框右下角 🎙️ 听写——旁边的 EN/中 徽标可切换识别语言，说英语出中文时点它切到 EN。";
+        vh.textContent="提示：点「🗣️ 边说边转写」直接说英文（会一直听，停了自动续上）；或用输入框右下角 🎙️ 听写——默认按英语识别，专为英文复述设计。";
         typeZoneEl.appendChild(vh);
       }
       /* 切到打字模式时收掉录音，避免麦克风一直挂着 */
@@ -12948,24 +12948,10 @@ boot();
     btn.textContent="🎙️";
     btn.onmouseenter=function(){ btn.style.opacity="1"; };
     btn.onmouseleave=function(){ if(!recognition||!_live) btn.style.opacity=".85"; };
-    /* 根据 placeholder 自动选听写语言——复述/背诵/英文作答走 en-US，中文场景走 zh-CN；
-       v86：按钮旁加 EN/中 徽标，识别错语言时一键切换 */
-    var lang=/英文|导游|guide|oral|背诵|复述|英文/.test((ta.placeholder||""))?"en-US":"zh-CN";
+    /* v88：本系统听写场景基本全是英文导游词——默认一律 en-US；中文口述场景走独立的 oiMic（zh-CN）。
+       按用户要求移除中英切换徽标。 */
+    var lang="en-US";
     var recognition=null, finalText="", _live=false, _interimText="", _restartT=null;
-    var langBtn=document.createElement("button");
-    langBtn.type="button"; langBtn.tabIndex=-1;
-    langBtn.style.cssText="position:absolute;right:52px;bottom:6px;height:40px;padding:0 10px;border-radius:20px;border:1px solid var(--neon, #c96f7f);background:rgba(201,111,127,0.18);color:var(--neon, #c96f7f);font-size:12px;font-weight:600;cursor:pointer;z-index:5;opacity:.85";
-    function _langLabel(){
-      langBtn.textContent=(lang==="en-US")?"EN":"中";
-      langBtn.title="听写语言："+(lang==="en-US"?"英语 · 点此切换为中文":"中文 · 点此切换为英语");
-    }
-    _langLabel();
-    langBtn.onpointerdown=function(ev){
-      ev&&ev.stopPropagation();
-      lang=(lang==="en-US")?"zh-CN":"en-US"; _langLabel();
-      if(recognition&&_live){ try{ recognition.stop(); }catch(_){} } /* stop 触发 onend 自动重启，新语言生效 */
-    };
-    wrap.appendChild(langBtn);
     function _start(){
       try{
         recognition=new SR();
