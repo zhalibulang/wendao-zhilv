@@ -122,10 +122,15 @@ const driver=`
       if(!quiz.length) continue;
       if(/(BOSS|验界|守关)/.test(q.id+(q.name||""))) continue;
       if(q.flow&&q.flow[q.flow.length-1]==="battle") continue;
-      const pids=quizBankPids(q), expect=quizTargetN(pids.length);
+      const cards=((st.rtPlan&&st.rtPlan[q.id]&&st.rtPlan[q.id].cards)||q.cards||[]);
+      const pids=quizBankPids(q);
+      /* v80：b 问契任务一问一题（题数=卡片数）；a/rev 笔试仍按 2.2a */
+      const expect=q.rtCat==="b"?cards.length:quizTargetN(pids.length);
       if(quiz.length!==expect) throw new Error(q.id+' b='+quiz.length+' expect='+expect);
       const pidSet=new Set(quiz.map(z=>z.pid).filter(Boolean));
-      if(pids.some(p=>!pidSet.has(p))) throw new Error(q.id+' 条目未全覆盖');
+      if(q.rtCat==="b"){
+        cards.forEach(c=>{ if(!pidSet.has(c)) throw new Error(q.id+' 问契卡未全覆盖 '+c); });
+      } else if(pids.some(p=>!pidSet.has(p))) throw new Error(q.id+' 条目未全覆盖');
       const qs=quiz.map(z=>z.kind+":"+z.q);
       if(new Set(qs).size!==qs.length) throw new Error(q.id+' 题面重复');
       /* fallbackQuiz 离线路径同样满足三件套 */
@@ -134,7 +139,8 @@ const driver=`
       const fbQs=fb.map(z=>z.kind+":"+z.q);
       if(new Set(fbQs).size!==fbQs.length) throw new Error(q.id+' fallback 题面重复');
       const fbPidSet=new Set(fb.map(z=>z.pid).filter(Boolean));
-      if(pids.some(p=>!fbPidSet.has(p))) throw new Error(q.id+' fallback 未全覆盖');
+      if(q.rtCat==="b"){ cards.forEach(c=>{ if(!fbPidSet.has(c)) throw new Error(q.id+' fallback 问契卡缺 '+c); }); }
+      else if(pids.some(p=>!fbPidSet.has(p))) throw new Error(q.id+' fallback 未全覆盖');
       n++;
       if(n>=40) break;
     }
@@ -156,14 +162,15 @@ const driver=`
     if(!oqSrc.includes('max_tokens:isOptKind?700:500')) throw new Error('aiWrongReply max_tokens 未提升到 500（选项题 700）');
     if(oqSrc.includes('slice(0,120)')) throw new Error('120 字硬截断未移除');
     if(!oqSrc.includes('quizMdLite')) throw new Error('AI 返回未走受控 markdown 渲染');
-    /* system 五题型结构要求齐全（v69：讲解必须落到具体词句，禁真/伪标签式与 emoji） */
-    ['引用题面中被改错的原词','错误项一个都不许跳过','指出真正错误项错在哪个词','分「漏选」与「错选」','逐空讲解','严禁输出任何 emoji'].forEach(k=>{
+    /* v80：逐项讲解全部交 AI——system 必须讲清每个错误选项「本身是什么」，wrongone 禁歧义指代 */
+    ['引用题面中被改错的原词','错误项一个都不许跳过','唯一与考点原文不符的是','分「漏选」与「错选」','逐空讲解','严禁输出任何 emoji','调用你的常识'].forEach(k=>{
       if(!oqSrc.includes(k)) throw new Error('aiWrongReply 缺题型要求：'+k);
     });
-    /* 本地兜底五题型要素（v69 文案） */
-    ['不成立哦。正确概念是','错点就在','站不住','答非本题所问','要找的错误项','漏了','多挑了','空缺应填'].forEach(k=>{
+    /* v80：本地不再硬凑逐项归因，只保留正解/错点/所选项一句；逐项讲解交 AI */
+    ['不成立哦。正确概念是','错点就在','答非本题所问','四个选项里与原文不符的是','漏了','多挑了','空缺应填'].forEach(k=>{
       if(!oqSrc.includes(k)) throw new Error('wrongLocalReply 缺要素：'+k);
     });
+    if(oqSrc.includes('与正解「')&&oqSrc.includes('所述事实不符')) throw new Error('本地反馈残留「与正解所述事实不符」空话' );
     /* quizMdLite 白名单：<b> 放行、其余标签转义、换行转换、不平衡补齐 */
     const m1=quizMdLite('你好\\n<b>关键</b>');
     if(!m1.includes('你好<br>')||!m1.includes('<b style="color:var(--gold)">关键</b>')) throw new Error('quizMdLite 基本转换异常：'+m1);
@@ -203,14 +210,18 @@ const driver=`
     if(!fb.length) throw new Error('fallbackQuiz 空池');
     const allK=fb.map(quizNormKey);
     if(new Set(allK).size!==allK.length) throw new Error('fallbackQuiz 同轮题面重复');
-    /* 6. quizExplainHtml：judge 错点划线+正确处标金；choice 逐项归因 */
+    /* 6. quizExplainHtml：judge 错点划线+正确处标金；v80 choice 本地不再逐项硬归因（逐项交 AI） */
     const jz=sanitizeQuiz({kind:'judge',q:'故宫于1421年迁都（判断正误）',a:false,fact:'故宫于1420年建成',mod:{from:'1420年',to:'1421年'},pid:pt0.id});
     const jh=quizExplainHtml(jz,'伪','伪');
     if(!jh.includes('<s style="color:var(--danger)">1421年</s>')||!jh.includes('<b style="color:var(--gold)">1420年</b>')) throw new Error('judge 解析未划错点/未标正确处');
     const cz={kind:'choice',q:'关于「测试」以下说法正确的是？',opts:['正确说法甲','正确说法乙','错误说法丙','此项为无关叙述'],ometa:[null,{t:'other',pid:pt0.id},{t:'bad',from:'正确写法',to:'错误写法'},{t:'fill'}],a:'正确说法甲',pid:pt0.id};
     const ch=quizExplainHtml(cz,'正确说法甲','错误说法丙');
-    if(!ch.includes('其他选项逐项说明')||!ch.includes('应为')||!ch.includes('答非本题所问')) throw new Error('choice 解析缺逐项归因');
-    if(ch.includes('正确说法：<span style="color:var(--fg)">正确说法甲</span>')) throw new Error('choice 解析仍含与正确答案重复的“正确说法”行');
+    if(ch.includes('其他选项逐项说明')||ch.includes('所述事实不符')) throw new Error('choice 本地反馈不应再硬凑逐项归因');
+    if(!ch.includes('正确答案：<b')||!ch.includes('你选的')) throw new Error('choice 解析缺正解与所选项反馈');
+    /* v80：逐项讲解只在 AI prompt 里（含"它本身是什么"常识归因要求） */
+    const wm=buildWrongReplyMsgs(cz,'错误说法丙','正确说法甲',{id:'shenzhao'},{id:'X',name:'测',tlabel:'理经',day:1,dur:12,goal:'x',cards:[]});
+    if(!wm.messages[0].content.includes('它本身是什么')) throw new Error('AI 逐项讲解 prompt 缺常识归因');
+    if(!wm.messages.some(m=>m.content.includes('全部选项清单'))) throw new Error('AI 逐项讲解缺选项清单注入');
     /* 7. quizMdLite emoji 剥离 */
     if(/[\u{1F300}-\u{1FAFF}]/u.test(quizMdLite('好的👻同学'))) throw new Error('quizMdLite 未剥离 emoji');
     /* 8. blank 换词换位：同考点连出两道填空不得同词同面 */
@@ -225,7 +236,7 @@ const driver=`
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(!htmlSrc.includes('.dlg.gal{overflow-y:auto;-webkit-overflow-scrolling:touch}')) throw new Error('≤899px 缺 .dlg.gal 滚动修复');
     const sw=fs.readFileSync(require('path').join(__dirname,'sw.js'),'utf8');
-    if(!/wdzx-v(69|70|71|72|73|74|75|76|77)/.test(sw)) throw new Error('sw.js 缓存版本未升级');
+    if(!/wdzx-v(69|7[0-9]|8[0-9]|9[0-9])/.test(sw)) throw new Error('sw.js 缓存版本未升级');
   });
   run('v72 修诵卷底稿校订：结构审计',()=>{
     const wcOf=t=>String(t||'').trim().split(/\\s+/).filter(w=>/[A-Za-z0-9]/.test(w)).length;
@@ -342,11 +353,30 @@ const driver=`
     if(typeof renderAiChannels!=='function'||typeof openAiPromptEditor!=='function') throw new Error('面板函数缺失');
     if(typeof aiChStats!=='function'||typeof aiSnapGet!=='function') throw new Error('统计/快照函数缺失');
   });
-  run('v73 英文整景预告模板不再把锚点词拟人化',()=>{
+  run('v81 英文整景理解：本地功能画像概括即时上屏、AI 真概括替换；问题直问年份事实不嵌英文',()=>{
     reset(); reconcile();
     const htmlFs=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(htmlFs.includes('又是谁、在哪、身上带着什么故事')) throw new Error('英文锚点词拟人化模板未清除');
-    if(!htmlFs.includes('是地名、寒暄称谓还是普通词')) throw new Error('缺英文锚点词新引导语');
+    if(htmlFs.includes('是地名、寒暄称谓还是普通词')) throw new Error('v70 已移除把 Good/Welcome 当专名的机械设问');
+    if(htmlFs.includes('它在全篇里负责')) throw new Error('v81 已移除旧版机械梗概台词（lineGist）');
+    if(!htmlFs.includes('function localOralBrief')||!htmlFs.includes('aiOralBriefUpgrade')) throw new Error('缺 v81 本地概括/AI 升级通路');
+    if(!htmlFs.includes('整段通读 · 合卷前最后一眼')) throw new Error('缺整段复述前的整段通读环节');
+    /* 运行时：修诵整景页挂 oralBriefData——中文概括、无英文残句、史段只就真年份设问 */
+    const quests=buildRuntimePlan(7);
+    const qc=quests.find(q=>q.rtCat==='c');
+    if(!qc) throw new Error('第7日无修诵任务');
+    rtInjectContent(qc,'c');
+    const bp=(D.lectures[qc.id]||[]).find(p=>p.oralBriefData);
+    if(!bp) throw new Error('整景页缺 oralBriefData');
+    const d=bp.oralBriefData, b=d.local;
+    if(!d.fullText||!d.sig||!b.summary||!b.questions.length) throw new Error('整景概括数据块结构不完整');
+    if(/[A-Za-z]{4,}/.test(b.summary)) throw new Error('本地概括残留英文：'+b.summary);
+    if(/是年份.*还是|还是.*高度/.test(b.questions.join(''))) throw new Error('仍在问"是年份还是高度"类元问题');
+    /* 史段：654 这类数量词不得被当成年份提问 */
+    const oo=rtOralOf(qc.cards[0]);
+    const sd=rtOralPages(oo)[0].oralBriefData;
+    if(/history/i.test(sd.h)&&/\b654\b/.test(sd.fullText)&&/654 年/.test(sd.local.questions.join('')))
+      throw new Error('非年份数字被误当成年份追问');
   });
   run('v74/v75 头像迁移：代际定正位、落选图进认领池、网格同源',()=>{
     /* 1. 多代际旧 id：云蘅 yunheng(gen2) 新于青玄 qingxuan(gen1)，正位必须取较新者，老图不删进认领池 */
@@ -451,7 +481,9 @@ const driver=`
     st.aiChOff={};
     localStorage.removeItem(AI_SNAP_KEY);
     const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
-    if(!/wdzx-v77/.test(sw)) throw new Error('sw.js 未升至 v77');
+    if(!/wdzx-v81/.test(sw)) throw new Error('sw.js 未升至 v81');
+    if(!fs.readFileSync(path.join(__dirname,'index.html'),'utf8').includes('BUILD_VERSION="v81"'))
+      throw new Error('页脚构建版本标记缺失或与 sw.js 版本不同步');
   });
   run('v77 返回键严格上一步/修诵先显原句/排序题逐项归因',()=>{
     const oqSrc=openQuest.toString();
@@ -463,7 +495,9 @@ const driver=`
     if(!/function goStage[\\s\\S]{0,260}?innerBack=null;/.test(oqSrc)) throw new Error('goStage 切阶段未清空 innerBack');
     if(!/sid==="recite"\\|\\|sid==="trans"/.test(oqSrc)) throw new Error('backOne 未接入 recite/trans 内层返回');
     if(!/innerBack=\\(\\)=>\\{[\\s\\S]{0,300}?stt\\.phase==="recite"[\\s\\S]{0,200}?stt\\.i>0/.test(oqSrc)) throw new Error('修诵内层返回步序缺失');
-    if(!/innerBack=\\(\\)=>\\{ if\\(ti>0\\)\\{ ti--; draw\\(\\)/.test(oqSrc)) throw new Error('传译内层返回缺失');
+    /* v80：传译内层=练习回重读、重读回上一句练习；第 1 句重读才回书页（两组步序字符串为传译状态机独有） */
+    if(!oqSrc.includes('stt.phase==="practice"){ stt.phase="reread"')) throw new Error('传译练习→重读返回缺失');
+    if(!oqSrc.includes('stt.i--; stt.phase="practice"')) throw new Error('传译重读→上句练习返回缺失');
     /* 3. 排序整链类错项：逐项指出错在哪一位、哪两个环节颠倒，禁用"与事实不符"空话 */
     const C='服务准备→迎接服务→入店服务→核对商定日程→参观游览服务→其他服务';
     const w1='服务准备→入店服务→迎接服务→核对商定日程→参观游览服务→其他服务';
@@ -511,7 +545,7 @@ const driver=`
     if(!wr.includes('逐项讲评全部选项')) throw new Error('wrongReply builder 缺选择题逐项讲评规则');
     /* 5. 实发路径确实复用 builder（不是另抄一份） */
     if(!genQuestCue.toString().includes('buildQuestCueMsgs')) throw new Error('genQuestCue 未复用 builder');
-    if(!/function aiWrongReply[\\s\\S]{0,300}buildWrongReplyMsgs/.test(htmlFs)) throw new Error('aiWrongReply 未复用 builder');
+    if(!htmlFs.slice(htmlFs.indexOf('function aiWrongReply'),htmlFs.indexOf('function aiWrongReply')+2000).includes('buildWrongReplyMsgs')) throw new Error('aiWrongReply 未复用 builder');
     /* 6. preview 快照字段持久化 */
     localStorage.removeItem(AI_SNAP_KEY);
     _aiSnapPut('pvch',{preview:true,sys:'PSYS',user:'PUSER',model:'deepseek-chat',kind:'polish',off:true,ov:false});
@@ -520,7 +554,9 @@ const driver=`
     localStorage.removeItem(AI_SNAP_KEY);
     /* 7. SW 升 v77 */
     const sw=fs.readFileSync(path.join(__dirname,'sw.js'),'utf8');
-    if(!/wdzx-v77/.test(sw)) throw new Error('sw.js 未升至 v77');
+    if(!/wdzx-v81/.test(sw)) throw new Error('sw.js 未升至 v81');
+    if(!fs.readFileSync(path.join(__dirname,'index.html'),'utf8').includes('BUILD_VERSION="v81"'))
+      throw new Error('页脚构建版本标记缺失或与 sw.js 版本不同步');
   });
   run('v71 选择题AI逐项解析 + 手机端任务页滚动根治',()=>{
     reset();
@@ -528,8 +564,8 @@ const driver=`
     /* 1. AI 讲解：全部选项清单始终随 user 消息传给模型（不再仅依赖 ometa） */
     if(!oqSrc.includes('全部选项清单（逐项讲评，错误项一个都不许漏）')) throw new Error('aiWrongReply 缺全部选项清单注入');
     if(!oqSrc.includes('无预设归因')) throw new Error('缺无归因选项的推断指令');
-    /* 2. 选项类题型字数上限放宽 + token 提升 */
-    if(!oqSrc.includes('160～340')) throw new Error('选项题字数上限未放宽至 160～340');
+    /* 2. v80 选项类题型逐项交 AI（讲常识归属），字数放宽到 200～420 + token 提升 */
+    if(!oqSrc.includes('200～420')) throw new Error('选项题字数上限未放宽至 200～420');
     /* 3. 手机端滚动根治：gal-right 不得带内联 overflow:hidden/max-height（v69 媒体查询此前被内联样式压制） */
     const htmlSrc=fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8');
     if(/class="gal-right"\\s+style="[^"]*overflow\\s*:\\s*hidden/.test(htmlSrc)) throw new Error('gal-right 仍带内联 overflow:hidden');
@@ -2527,7 +2563,7 @@ const driver=`
       const __ofetch=global.fetch;
       global.fetch=(...a)=>{ fetchCalls++; return Promise.reject(new Error('测试环境禁止联网')); };
       const ids=AI_CHANNELS.map(c=>c.id);
-      if(ids.length!==29) throw new Error('通路表应为 29 条，实为 '+ids.length);
+      if(ids.length!==31) throw new Error('通路表应为 31 条，实为 '+ids.length);
       for(const id of ids){
         const snap=await aiPreviewChannel(id);
         if(!snap||snap.preview!==true) throw new Error(id+' 未落 preview 快照');

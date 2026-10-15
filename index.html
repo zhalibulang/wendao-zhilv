@@ -247,15 +247,19 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .illu-hp-label{font-size:10px;color:var(--gold);letter-spacing:.12em;margin-bottom:2px;text-align:right}
 .illu-hp-bar{height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
 .illu-hp-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--cyber),var(--neon));transition:width .4s ease}
-.illu-fog-area{position:absolute;inset:0 0 140px 0;pointer-events:none;overflow:hidden}
-.illu-fog{position:absolute;bottom:0;transform:translateY(40px);opacity:0;transition:transform .6s cubic-bezier(.2,.8,.2,1),opacity .4s}
-.illu-fog.show{transform:translateY(0);opacity:1}
-.illu-fog.defeat{transform:translateY(-80px);opacity:0;transition:transform .5s ease,opacity .4s}
-.illu-fog.defeat.crit{transform:translateY(-120px) scale(1.4);filter:hue-rotate(40deg);opacity:0}
+/* v80：雾怪收进右侧窄轨——不再压在题干/反馈正文上；答错后残留缩为小灰影 */
+.illu-fog-area{position:absolute;top:34px;bottom:52px;right:1px;width:26px;pointer-events:none;overflow:hidden;z-index:3}
+.illu-fog{position:absolute;left:0;top:0;transform:translateX(20px) scale(.8);opacity:0;transition:transform .6s cubic-bezier(.2,.8,.2,1),opacity .4s}
+.illu-fog.show{transform:translateX(0) scale(.8);opacity:1}
+.illu-fog.defeat{transform:translateY(-30px) scale(.5);opacity:0;transition:transform .5s ease,opacity .4s}
+.illu-fog.defeat.crit{transform:translateY(-46px) scale(1);filter:hue-rotate(40deg);opacity:0}
 .illu-fog.fail{animation:illuShake .5s ease}
-@keyframes illuShake{10%,90%{transform:translateX(-4px)} 20%,80%{transform:translateX(4px)} 30%,50%,70%{transform:translateX(-3px)} 40%,60%{transform:translateX(3px)}}
-.illu-fog-ball{font-size:28px;filter:drop-shadow(0 0 8px rgba(180,80,220,.6))}
-.illu-fog-idx{font-size:9px;color:var(--dim);text-align:center;margin-top:2px;letter-spacing:.08em}
+.illu-fog.done{transform:scale(.46);opacity:.22;filter:grayscale(.6)}
+@keyframes illuShake{10%,90%{transform:translateX(-3px) scale(.8)} 20%,80%{transform:translateX(3px) scale(.8)} 30%,50%,70%{transform:translateX(-2px) scale(.8)} 40%,60%{transform:translateX(2px) scale(.8)}}
+.illu-fog-ball{font-size:20px;line-height:1;filter:drop-shadow(0 0 6px rgba(180,80,220,.6))}
+.illu-fog.done .illu-fog-ball{font-size:18px}
+.illu-fog-idx{font-size:8px;color:var(--dim);text-align:center;margin-top:1px;letter-spacing:.04em}
+.dlg.gal.illusion #stageHost{padding-right:30px}
 .illu-combo{position:absolute;bottom:10px;right:16px;font-size:11px;color:var(--gold);letter-spacing:.1em;z-index:5}
 .illu-combo.crit{font-size:14px;color:var(--neon);text-shadow:0 0 8px var(--neon);animation:illuCritPulse .8s ease}
 @keyframes illuCritPulse{0%{transform:scale(1.4)} 100%{transform:scale(1)}}
@@ -987,7 +991,7 @@ function resolveNpc(qnpc){
     /* 整句精改（放最前，优先命中） */
     ["晨雾未散，「问道卷」已亮起微光。今日的秘境，自这一页开启。","晨雾未散，「问道卷」已亮起微光。今日的结界，自这一页苏醒。"],
     /* 旧人名 → 新人名（长词在前；裸短词只保留必要的） */
-    ["青玄先生","云汀"],["青玄","云汀"],["云蘅","云汀"],
+    ["云华真人","云汀"],["青玄先生","云汀"],["青玄","云汀"],["云蘅","云汀"],
     ["玄机夫人","缇娜"],["璇玑","缇娜"],
     ["铁面先生","沈昭"],["铁面","沈昭"],["柳首座","程绣"],["柳如烟","程绣"],
     ["墨小骨","晚棠"],["司马青衫","晚棠"],
@@ -1102,6 +1106,8 @@ Object.assign(D.acts,{
 /* v52 R5：配置版本与一致性登记。所有跨模块改动登记于此，
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
+/* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
+const BUILD_VERSION="v81";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -2258,6 +2264,10 @@ function defState(){
     plotLines:[],
     /* v54 批 1：SRS 记忆档案 / 排程快照 / 复述用时档案 */
     srs:{}, rtPlan:{}, recTimes:{}, myOral:[],
+    /* v80：传译误译档案 / AI 讲评持久化（按题面签名） / 中英问契 AI 稿缓存 */
+    transWrongs:{}, aiExplain:{}, aiWenqiQ:{},
+    /* v81：书页预告/卷尾总结 AI 稿缓存 bookBrief（brief:<qid>:preview/summary，独立于剧情简报 aiBrief）/ 整景理解 AI 稿 oralBrief */
+    bookBrief:{}, oralBrief:{},
     /* 批5：演界试炼（全真演练）——clears=通关次数，day=最近一次奖励日，best=历史最佳点亮率 */
     arenaClears:0, arenaDay:"", arenaBest:null,
     /* v59 剧情工坊：内置剧情覆写/过场台词覆写/自定义道具（随存档导出） */
@@ -2420,6 +2430,11 @@ function reconcile(){
   st.cards=st.cards||{}; st.seenHearts=st.seenHearts||{};
   st.edits=st.edits||{}; st._treeExp=st._treeExp||{};
   st.personas=st.personas||{}; st.aiBrief=st.aiBrief||{};
+  /* v81：书页预告/卷尾总结缓存独立成袋 bookBrief；顺带把早期版本误存进 aiBrief 的 brief: 字符串稿迁过来，
+     避免被剧情 schema 清理逻辑误删 */
+  st.bookBrief=st.bookBrief||{};
+  Object.keys(st.aiBrief).forEach(k=>{ if(k.slice(0,6)==="brief:"){ st.bookBrief[k]=st.aiBrief[k]; delete st.aiBrief[k]; } });
+  st.oralBrief=st.oralBrief||{};
   st.questLines=st.questLines||{};
   st.cutscenes=st.cutscenes||{};
   st.dailyCtx=st.dailyCtx||{};
@@ -2551,6 +2566,12 @@ function reconcile(){
   if(st.ver!==PLAN_VERSION){ /* 版本升级时打印迁移日志 */
     console.log("[v52] 存档版本升级:"+st.ver+"→"+PLAN_VERSION);
     st.ver=PLAN_VERSION;
+  }
+  /* v70：口语句/导游段落只走传译与复述形态——清掉它们在旧逻辑下误入笔试错题簿的残留（幂等） */
+  if(Array.isArray(st.wrong)){
+    const _wb=st.wrong.length;
+    st.wrong=st.wrong.filter(we=>we&&/^S[1-5]-/.test(we.pid));
+    if(st.wrong.length!==_wb) console.log("[v70] 清退非笔试错题 "+(_wb-st.wrong.length)+" 条（口语/段落改走传译、复述）");
   }
 }
 /* ---------- 状态派生：上限由配置中心属性决定；状态栏每秒刷新 ---------- */
@@ -3151,6 +3172,7 @@ function _renderGame(){
   <div class="navline">
     <button data-v="chat">对话</button>
     <button data-v="board">任务</button>
+    <button data-v="dash">看板</button>
     <button data-v="oral">修诵</button>
     <button data-v="lib">藏经阁</button>
     <button data-v="night">巡夜</button>
@@ -3166,7 +3188,7 @@ function _renderGame(){
   <div class="inputbar"><input id="chatInput" placeholder="${inputHint()}" autocomplete="off">
   <button class="btn sm" id="sendBtn">发送</button></div>
   <button class="fab" id="oralFab" title="修诵 · 英文导游词线" type="button">🎙️</button>
-  <footer>问道之旅 · 四十五日 · 金榜台于 ${D.examDate}</footer>`;
+  <footer>问道之旅 · 四十五日 · 金榜台于 ${D.examDate} · 构建 ${BUILD_VERSION}</footer>`;
   bindNav(); switchView(view);
   renderSidePanel();
   $("#oralFab").onpointerdown=()=>{ SFX.tap(); switchView("oral"); };
@@ -3553,10 +3575,13 @@ function buildQuestAckMsgs(q){
 function buildBookExtraMsgs(mode,pts){
   pts=pts||[];
   const titles=pts.slice(0,6).map(p=>ptTitle(p,p.id));
-  const facts=pts.slice(0,3).map(p=>cleanMd(p.text).slice(0,100));
+  const facts=pts.slice(0,6).map(p=>cleanMd(p.text).slice(0,180));
   const sys=mode==="preview"
-    ?"你是备考游戏《问道之旅》的NPC。深入理解以下考点内容，结合你的知识库，输出两行：\n第1行：一个第二人称代入式思考题（≤30字），引导考生从实际带团场景出发思考；\n第2行：3~5个重点概念（顿号分隔），必须是考点中的核心术语，不要泛泛而谈。\n只输出两行，不输出其他内容。"
-    :"你是备考游戏《问道之旅》的NPC。深入理解以下考点内容，结合你的知识库，输出四段文本：\n段前缀固定为 总结：/补充：/趣闻：/引导： ，每段≤40字。\n要求：总结要精准提炼考点核心；补充要补充考点中未展开但相关的知识；趣闻要用导游工作场景类比；引导要给出具体的下一步行动建议。\n只输出四段文本。";
+    ?"你是备考游戏的阅读引导设计者。下面给出本页考点原文。输出两行纯文本：\n"
+    +"第1行：一句话说明这一页要读的是哪个领域、什么主题的内容（如菜系归属、某景点的规制、北京的地理概况、中轴线顺序），让玩家先知道接下来读的是什么、由哪几条事实组成；\n"
+    +"第2行：「带读问题：」开头，接一个建立在原文具体信息上的问题（围绕具体数字、名称、因果、区别设问），让玩家带着问题阅读，答案必须能从原文找到。\n"
+    +"铁律：禁止罗列关键词清单；禁止出现带团、宣讲、向游客解释、导游工作、游客等现实场景词，只谈内容本身；只输出这两行，不要其他文字。"
+    :"你是备考游戏《问道之旅》的NPC。下面给出本页考点原文。输出四段文本，段前缀固定为 总结：/补充：/串联：/引导： ，每段≤40字。\n要求：总结=从原文提炼的核心结论（含关键数字/术语）；补充=把原文中并列要点之间的关系讲清；串联=说明本页几条考点如何挂成一条线；引导=给出具体的复习动作（重读哪类句子、记哪些数字）。\n铁律：所有内容只能来自考点原文本身，禁止出现带团、宣讲、导游工作、游客等现实场景词，禁止编造原文没有的趣闻与前提。\n只输出四段文本。";
   const user="考点标题："+titles.join("、")+"\n考点内容：\n"+facts.join("\n");
   return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish",max_tokens:mode==="summary"?450:200}};
 }
@@ -3583,20 +3608,21 @@ function buildWrongReplyMsgs(z,mine,okA,npc,q){
     z.kind==="judge"
       ?"先用引号引用题面中被改错的原词（指出题面把什么写成了什么），一句话点明错在哪，再给出正确写法（用<b>标出），最后给一个记忆抓手。绝不允许只说「答案为伪」或只复述题面。"
     :z.kind==="choice"
-      ?"逐项讲评全部选项：正确项说明它为何是答案（关键内容用<b>标出）；每一个错误项都必须交代——本身表述有误的指出错在哪个词（应为X），本身没错的说明它属于哪个考点、为何答非本题所问。错误项一个都不许跳过，更不许只讲玩家选中的那一项。"
+      ?"逐项讲评全部选项：正确项一句话说明它为何是答案（关键内容用<b>标出）；每一个错误项都必须先讲清「它本身是什么」——调用你的常识与知识库给出归属（例如白切鸡是粤菜、剁椒鱼头是湘菜、佛跳墙是闽菜福州名菜），再说明它为什么不回答本题。错误项一个都不许跳过，更不许只讲玩家选中的那一项；禁止用「与事实不符」「表述不成立」这类不给出具体信息的空话搪塞。"
     :z.kind==="wrongone"
-      ?"指出真正错误项错在哪个词（应为X，用<b>标出），并逐项说明其余选项为什么是正确陈述（各属什么考点）。错误项以外的每一项也都要讲到，不许跳过。"
+      ?"直接点明：四个选项里唯一与考点原文不符的是「X」，它错在哪个词（应为……，用<b>标出）；再逐项讲清其余三项各是什么、各自成立的依据（可调用常识，如菜系归属、地理位置）。禁止使用「正确答案那句」「错误答案那句」「真正错的是……」这类自相矛盾、指代不清的说法；四项一个都不许漏。"
     :z.kind==="multi"
-      ?"分「漏选」与「错选」两小类，逐项给出依据；正确项内容用<b>标出。"
+      ?"分「漏选」与「错选」两小类，逐项给出依据；每个错选项同样要讲清它本身是什么、为何不能入选；正确项内容用<b>标出。"
       :"逐空讲解——先指出该空的正确内容（用<b>标出），再给记忆或词源线索；多空分条换行。";
-  const sys="你是日式RPG《问道之旅·四十五日》中的NPC「"+dName(nid)+"·"+dTitle(nid)+"」，刚目睹玩家答错一道试炼题。\n"
+  const sys="你是日式RPG《问道之旅·四十五日》中的NPC「"+dName(nid)+"·"+dTitle(nid)+"」，也是玩家的随身私教，正在为答错的玩家逐题讲评。\n"
     +(window.WDChat&&WDChat.masterRule?WDChat.masterRule():"")
     +"\n输出要求：\n"
     +"1. 开头用 ≤12 字先接住情绪，严禁指责/讽刺/施压/PUA；\n"
-    +"2. 严格按本题型结构讲解，讲解必须落到题面的具体词句与考点内容，正确与关键内容统一用 <b>…</b> 标出；\n"
-    +"3. 严禁输出任何 emoji 表情符号；严禁空泛口号（如「加油哦」「再接再厉」凑字数）；严禁只复述答案标签；\n"
-    +"4. 总字数 "+(isOptKind?"160～340":"120～240")+" 字，可用换行分条，不要标题，不要用引号包裹全文；\n"
-    +"5. "+kindRule;
+    +"2. 严格按本题型结构讲解，讲解必须落到题面的具体词句、考点内容与你的常识，正确与关键内容统一用 <b>…</b> 标出；\n"
+    +"3. 严禁输出任何 emoji 表情符号；严禁空泛口号（如「加油哦」「再接再厉」凑字数）；严禁只复述答案标签；严禁「与事实不符」「表述不成立」这类零信息空话——必须说出具体归属、具体错词、具体事实；\n"
+    +"4. 语言简洁直给，一句一个信息点，不要绕弯、不要语病、不要歧义指代（尤其禁止「正确答案那句」「错误答案那句」）；\n"
+    +"5. 总字数 "+(isOptKind?"200～420":"120～240")+" 字，用换行分条，不要标题，不要用引号包裹全文；\n"
+    +"6. "+kindRule;
   let detail="";
   if(z.kind==="judge"){
     const fact=quizFactOf(z);
@@ -3611,10 +3637,13 @@ function buildWrongReplyMsgs(z,mine,okA,npc,q){
       const isAns=ansSet.has(String(o));
       let why="";
       if(m&&m.t==="bad") why=`本身有误：把「${m.from}」写成了「${m.to}」`;
-      else if(m&&m.t==="other") why=`本身没错，属「${quizOptPname(m.pid)}」考点（答非本题所问）`;
-      else if(m&&m.t==="fill") why="凑数项，与本题考点无关";
-      else if(m&&m.t==="mismatch") why="与本题考点事实不符";
-      else if(!isAns) why="（无预设归因——请依据考点全文判断：表述有误就指出错词，表述无误就说明它为何不是本题所问）";
+      else if(m&&m.t==="other"&&m.pid) why=`本身没错，属「${quizOptPname(m.pid)}」考点（答非本题所问）`;
+      else if(m&&m.t==="fill") why="出题时标记为凑数项（与本题考点无关），请核实它实际指什么并说明为何无关";
+      else if(!isAns){
+        const src=quizOptSource(z.pid,o);
+        why=src?("本身没错，属「"+src.name+"」相关内容（答非本题所问），请展开讲清它的归属")
+                :"无预设归因——请调用常识与知识库讲清它本身指什么（如菜系/地点/朝代/数字的归属），再说明它为何不回答本题；若它表述本身有误，指出错词";
+      }
       return `${i+1}. ${isAns?"【正确项】":"【错误项】"}「${String(o)}」${why?("——"+why):""}`;
     });
     if(rows.length) detail="\n全部选项清单（逐项讲评，错误项一个都不许漏）：\n"+rows.join("\n");
@@ -4052,6 +4081,13 @@ function openQuest(qid){
       return;
     }
   }
+  /* v81：回看自愈——书页缺键、空数组、或结构全坏（v80 曾把理经误造成问契页：非 rev 任务
+     至少应有一页带内容载荷 items/wenqi/transCard/oralLines/oralBriefData）都按快照重建；失败留痕不再静默吞错 */
+  const _ls0=D.lectures[qid];
+  const _lsOK=(_ls0||[]).some(pg=>(pg.items&&pg.items.length)||pg.wenqi||pg.transCard||pg.oralLines||pg.oralBriefData);
+  if(q.rt&&q.cards&&q.cards.length&&q.rtCat!=="rev"&&!_lsOK){
+    try{ rtInjectContent(q,q.rtCat); }catch(e){ console.warn("[rtInject] 回看自愈失败",qid,e); }
+  }
   const pages=D.lectures[qid]||[];
   let quiz=(D.quizzes[qid]||[]).map(sanitizeQuiz); /* v69：静态题入口过清洗——旧档“原句判伪”脏题就地翻正 */
   const npc=resolveNpc(q.npc);
@@ -4298,23 +4334,61 @@ function openQuest(qid){
     const ids=[...new Set([...(q.cards||[]), ...pages.flatMap(p=>(p.items||[]).map(it=>it.id))])];
     return ids.map(id=>D.pointsLib.find(p=>p.id===id)).filter(Boolean);
   }
+  /* v80：本地预告=领域主题概述 + 一个建立在原文具体内容上的带读问题（离线确定性；不再罗列关键词、不提带团场景） */
+  function localPreviewQuestion(pt){
+    const t=cleanMd(pt.text||"");
+    let m=t.match(/(\d[\d.,]*\s*(?:年|米|平方米|公里|个|位|处|座|间|次|万|亿|%|％))/);
+    if(m){
+      const before=t.slice(0,m.index).split(/[。；;！!？?]/).pop()||"";
+      const subj=(before.split(/[，、,：:]/).pop()||ptTitle(pt,pt.id)).trim().slice(-14);
+      return `读时留意「${subj}」——${m[1].trim()} 说的是哪一项事实？`;
+    }
+    m=t.match(/[「“"]([^」”"]{2,12})[」”"]/);
+    if(m) return `读时弄清：「${m[1]}」在这一条里指的是什么、和前后内容怎么连？`;
+    return `读时用一句话回答：「${ptTitle(pt,pt.id)}」的核心特征是什么？`;
+  }
   function localPreview(){
     const pts=questPoints();
-    const q0=pts.length?`带着问题读：若有人问起「${ptTitle(pts[0],pts[0].id)}」，你会怎么开口？`:"带着问题翻开这一卷——它究竟要回答什么？";
-    const concepts=pts.slice(0,5).map(p=>ptTitle(p,p.id));
-    return q0+"\n"+(concepts.length?("重点概念："+concepts.join("、")):"重点概念已在书页内标出，留意金色字样。");
+    if(!pts.length) return "这一页没有节点卡——直接进入下一环即可。";
+    const mods=[...new Set(pts.map(p=>cleanMd(p.module||"")).filter(Boolean))];
+    const scope=mods.slice(0,3).join("、")||"本卷考点";
+    const overview=`本页 ${pts.length} 张节点卡都在「${scope}」这一域，先弄清它们各自讲的是哪桩事实，再读细节。`;
+    /* 带读问题取信息量最高的一条（优先含数字/引号的考点） */
+    const ranked=pts.slice().sort((a,b)=>(/\d/.test(b.text)?2:0)+(/[「“"]/.test(b.text)?1:0)-((/\d/.test(a.text)?2:0)+(/[「“"]/.test(a.text)?1:0)));
+    return overview+"\n带读问题："+localPreviewQuestion(ranked[0]||pts[0]);
   }
-  /* v78：书页预告/卷尾总结提示词组装提为全局（实发/预演共用，单一事实源） */
-  /* 灵脉补注（在线才调用，不阻塞本地呈现；输出纯文本就地替换） */
+  /* v81：书页预告/卷尾总结——本地兜底即时上屏，AI 成功才替换；按任务缓存（回看直接用稿）；12 秒超时保住本地版 */
   function aiBookExtra(mode, slot, fallback){
     if(!slot) return;
-    if(!dsReady()){ if(fallback) slot.textContent=fallback; return; }
-    slot.textContent="灵脉拟稿中…";
+    const cacheKey="brief:"+(q&&q.id)+":"+mode;
+    st.bookBrief=st.bookBrief||{};
+    const showLocal=()=>{ slot.textContent=fallback||""; };
+    const hit=st.bookBrief[cacheKey];
+    if(hit){ slot.textContent=hit; return; }          /* 已生成过：回看/重进零等待 */
+    if(!dsReady()){ showLocal(); return; }
+    showLocal();                                       /* ① 先给确定内容，绝不空转"拟稿中" */
+    let done=false;
+    const badge=document.createElement("div");
+    badge.style.cssText="font-size:10px;color:var(--dim);margin-top:4px;letter-spacing:.05em";
+    badge.textContent="灵脉润色中……";
+    try{ slot.parentNode&&slot.parentNode.appendChild(badge); }catch(e){}
+    const finish=()=>{ done=true; try{ badge.remove(); }catch(e){} };
+    const timer=setTimeout(()=>{ if(!done) finish(); },12000);
     const built=buildBookExtraMsgs(mode,questPoints());
     dsChat(built.messages,Object.assign({ch:"bookExtra"},built.opts)).then(t=>{
-      if(!slot.isConnected||!t){ if(fallback) slot.textContent=fallback; return; }
-      slot.textContent=t.trim();
-    }).catch(()=>{ if(fallback) slot.textContent=fallback; });
+      if(done||!slot.isConnected){ finish(); return; }
+      clearTimeout(timer);
+      if(!t){ finish(); return; }
+      const cleaned=filterNpcText(t.trim());
+      /* AI 若擅自引入现实场景，或预告没有带读问题/退化成关键词罗列，整段拒收保本地兜底 */
+      const badScene=/带团|带过团|导游工作|宣讲|游客/.test(cleaned);
+      const badPreview=mode==="preview"&&(!/带读问题|读时|读着|带着问题/.test(cleaned)||!/[?？]/.test(cleaned)||cleaned.split("、").length>8);
+      if(!badScene&&!badPreview&&cleaned.length>=8){
+        st.bookBrief[cacheKey]=cleaned; save();
+        slot.textContent=cleaned;
+      }
+      finish();
+    }).catch(()=>{ clearTimeout(timer); finish(); });
   }
   /* v62 Task12：灵脉批量英化 b 类试炼（JSON；离线/失败静默，保留本地+待补标注） */
   function aiBilingualQuiz(items,onReady){
@@ -4410,8 +4484,8 @@ function openQuest(qid){
     const tip=pts.map(p=>cleanMd(p.exam_tip||p.anchor||"")).filter(Boolean)[0]||"";
     const localTxt=
       "总结：本卷围绕「"+(titles[0]||"本关考点")+"」等 "+titles.length+" 个要点展开，读完应能说出各自关键处。\n"
-      +"补充："+(tip?("记牢速记锚点——"+tip.slice(0,60)):"书页中的金色关键词与数字，是最容易出题的位置。")+"\n"
-      +"趣闻：这些考点都源自真实带团与导游工作场景——记住场景，数字就不再枯燥。\n"
+      +"补充："+(tip?("抓住速记锚点——"+tip.slice(0,60)):"书页中的金色关键词与数字，是最容易出题的位置。")+"\n"
+      +"串联：把这几条要点按因果或时间顺序默背一遍，能互相勾起，记忆才牢。\n"
       +"引导：上滑可重读全卷；准备好便进入试炼，答错也有逐题讲解。";
     const sec=document.createElement("div");
     sec.style.cssText="margin-top:12px;padding:10px 12px;border:1px solid var(--gold);border-radius:8px;background:rgba(255,215,0,0.04)";
@@ -4436,7 +4510,10 @@ function openQuest(qid){
   function renderStageBookPage(){
     const p=pages[bookPageIdx]||{title:"卷尾",lines:[{t:"p",x:"本页无更多内容。"}]};
     let body="";
-    if(p.lines) body=p.lines.map(l=>{ const tx=filterNpcText(l.x); return l.t==="n"?`<div class="npcnote">${esc(tx)}</div>`:`<div class="pt" style="border:none">${esc(tx)}</div>`; }).join("");
+    /* v80：双语问契页 / 单句传译底稿页 */
+    if(p.wenqi){ body=wenqiPageHtml(p.wenqi); }
+    else if(p.transCard){ body=transCardPageHtml(p.transCard); }
+    else if(p.lines) body=p.lines.map(l=>{ const tx=filterNpcText(l.x); return l.t==="n"?`<div class="npcnote">${esc(tx)}</div>`:`<div class="pt" style="border:none">${esc(tx)}</div>`; }).join("");
     if(p.items) body=p.items.map(it=>{
       if(it.qa){
         const eff=/^S5-/.test(it.id) ? getEdit("point:"+it.id, it.qa.a) : it.qa.a;
@@ -4479,6 +4556,10 @@ function openQuest(qid){
         <div style="font-size:11px;color:var(--gold);margin-bottom:4px">✦ 校订说明</div>
         <div style="font-size:11.5px;color:var(--fg2);line-height:1.6">点击每句右侧 ✏️ 可校订该句中文或英文；校订实时存档，可随时回退官方原文。校订后传译页题目与参考同步更新。</div>
       </div>`;
+    }
+    /* v81：整景理解——本地概括即时上屏（内容地图+带读问题），AI 通读全段后异步整体替换 */
+    if(p.oralBriefData){
+      body+=`<div id="oralBriefSlot" style="margin-top:10px;padding:10px 12px;border:1px solid var(--neon);border-radius:8px;background:rgba(100,200,255,0.05)">${oralBriefHtml(p.oralBriefData.local,false)}</div>`;
     }
     const pgNav=pages.length>1?`<div class="pager" style="margin-top:10px;justify-content:center">
       <button class="btn sm ghost" id="bkPrev">←</button>
@@ -4556,15 +4637,54 @@ function openQuest(qid){
         };
       });
     }
+    /* v80：单句传译底稿页（中英分块、术语标记、每块独立校订） */
+    if(p.transCard){
+      stageHost.querySelectorAll(".trans-edit-btn").forEach(btn=>{
+        btn.onpointerdown=e=>{ e.stopPropagation(); SFX.tap();
+          const tc=p.transCard, lang=btn.dataset.lang;
+          const eid="oral:"+tc.id+":"+lang;
+          openEditor({id:eid,catLabel:"传译底稿 · "+tc.id+" · "+(lang==="zh"?"中文":"英文"),
+            title:eid, body:getEdit(eid,lang==="zh"?tc.zh:tc.en),
+            editable:true, editId:eid, onSaved:()=>{ try{
+              const fresh=rtCardOf(tc.id); if(!fresh)return;
+              tc.zh=fresh.zh; tc.en=fresh.en;
+              if(q.rtCat==="d") rtInjectContent(q,"d");
+              renderStageBookPage();
+            }catch(_){} }});
+        };
+      });
+    }
+    /* v80：双语问契页——揭示答案（中英分区）；首次进入书页时后台批量补 AI 双语稿 */
+    if(p.wenqi){
+      const rv=$("#wqReveal",stageHost);
+      if(rv) rv.onpointerdown=()=>{ SFX.tap();
+        const ans=$("#wqAns",stageHost); if(ans) ans.hidden=false;
+        rv.style.display="none";
+      };
+      if(q.rtCat==="b"&&!stageHost.__wenqiAiKicked){
+        stageHost.__wenqiAiKicked=true;
+        ensureWenqiAI(q.cards||[],up=>{ try{
+          if(!up.length||(STAGES[stageIdx]||{}).id!=="book"||!ov.isConnected)return;
+          const cur=pages[bookPageIdx];
+          if(cur&&cur.wenqi&&up.includes(cur.wenqi.id)){ rtInjectContent(q,"b"); renderStageBookPage(); }
+        }catch(_){} });
+      }
+    }
+    /* v80：双语问契页/单句传译底稿是富交互参考页（含揭示/校订按钮），打字机会整体重写容器导致绑定失效——这两类直接静态呈现 */
+    const skipTypewriter=!!(p.wenqi||p.transCard);
+    /* v81：整景理解——本地概括已随页上屏；灵脉在线时通读全段，真概括+带读问题返回后整体替换（超时/违规保本地） */
+    const obSlot=$("#oralBriefSlot",stageHost);
+    if(obSlot&&p.oralBriefData){ try{ aiOralBriefUpgrade(p.oralBriefData,obSlot); }catch(e){ /* 概括升级失败不影响读书页 */ } }
     try{ twBindGlossary(stageHost); }catch(e){ /* 保险：词谱绑定故障不阻断翻页 */ }
     /* 书页打字机：启动；读完显示继续提示（末页=进入试炼，否则=翻页） */
     setHint("");
-    try{ stopTypewriter(); startTypewriter(stageHost); }catch(e){ /* 保险：打字机故障不阻断 bookDone */ }
+    if(!skipTypewriter){ try{ stopTypewriter(); startTypewriter(stageHost); }catch(e){ /* 保险：打字机故障不阻断 bookDone */ } }
+    else stopTypewriter();
     const bookDoneHint=()=>{
       bookDone=true;
       if(bookPageIdx>=pages.length-1){
         if(q.rtCat==="c") setHint("▼ 轻触继续 · 进入复述");
-        else if(q.rtCat==="d") setHint("▼ 轻触继续 · 进入传译");
+        else if(q.rtCat==="d") setHint("▼ 轻触继续 · 进入逐句练习（先重读，再练第 1 句）");
         else { setHint(""); showBookSummary(); }
       } else setHint("▼ 轻触继续 · 翻页");
     };
@@ -4635,8 +4755,7 @@ function openQuest(qid){
     const tag=document.createElement('div'); tag.className='illu-fog-idx'; tag.textContent='考点 '+(idx+1);
     node.appendChild(ball); node.appendChild(tag);
     const ratio=_illu.total>1?idx/(_illu.total-1):0.5;
-    const jitter=(idx%2?1:-1)*4;
-    node.style.left=(8+ratio*78+jitter)+'%';
+    node.style.top=(4+ratio*86)+'%';
     _illu.fogArea.appendChild(node);
     _illu.fogs[key]=node;
     requestAnimationFrame(()=>node.classList.add('show'));
@@ -4658,10 +4777,10 @@ function openQuest(qid){
     const key='q'+idx; let node=_illu.fogs[key];
     if(!node&&_illu.fogArea){ node=document.createElement('div'); node.className='illu-fog show fail';
       const ball=document.createElement('div'); ball.className='illu-fog-ball'; ball.textContent='👻';
-      node.appendChild(ball); node.style.left=(20+Math.random()*60)+'%';
+      node.appendChild(ball); node.style.top=(8+Math.random()*80)+'%';
       _illu.fogArea.appendChild(node); _illu.fogs[key]=node;
-      setTimeout(()=>{ if(node) node.classList.remove('fail'); },520); }
-    else if(node){ node.classList.add('fail'); setTimeout(()=>node.classList.remove('fail'),520); }
+      setTimeout(()=>{ if(node){ node.classList.remove('fail'); node.classList.add('done'); } },520); }
+    else if(node){ node.classList.add('fail'); setTimeout(()=>{ if(node){ node.classList.remove('fail'); node.classList.add('done'); } },520); }
   }
   function illuSetHp(n){
     if(!_illu||!_illu.hpFill) return;
@@ -4800,13 +4919,15 @@ function openQuest(qid){
     const est=rtSpkMin(cur.split(/\s+/).length);
     const o=rtOralOf(key);
     if(!recT0) recT0=Date.now();
-    /* v64 p5：状态机 句读→句复述→整段复述；暂离存档续关
-       v77：续关恢复句序，但一律先落在「精读原句」——必须先看到原句、再手动遮文复述，
-       绝不允许重进任务时直接弹复述输入（"先显原句、再要求复述"的铁序）。 */
+    /* v64 p5：状态机 句读→句复述→整段通读→整段复述；暂离存档续关
+       v77：续关恢复句序一律先落「精读原句」；v70：末句复述后必须先「整段通读」再遮文整段复述，
+       full 三态 false/"read"/"recite"，旧档布尔 true 一律落到 "read"（合卷前再看一眼全文）。 */
     const stt={i:0,phase:"read",scores:[],full:false,fullScore:null};
     if(!readonly){ const rp=(curProg()||{}).recite;
       if(rp){ try{ stt.i=Math.min(+rp.i||0,sentences.length-1); stt.phase="read";
-        stt.scores=Array.isArray(rp.scores)?rp.scores:[]; stt.full=!!rp.full; stt.fullScore=(rp.fullScore==null?null:+rp.fullScore); }catch(e){} }
+        stt.scores=Array.isArray(rp.scores)?rp.scores:[];
+        stt.full=(rp.full===true||rp.full==="recite"||rp.full==="read")?"read":false;
+        stt.fullScore=(rp.fullScore==null?null:+rp.fullScore); }catch(e){} }
     }
     function persist(){ if(readonly)return; saveProg({recite:{i:stt.i,phase:stt.phase,scores:stt.scores,full:stt.full,fullScore:stt.fullScore}}); }
     function finish(g){
@@ -4836,20 +4957,36 @@ function openQuest(qid){
       if(rcAi) rcAi.onpointerdown=()=>{ SFX.tap();
         if(!dsReady()){ toast("灵脉未通——请在配置中填入密钥后启用 AI 评讲"); return; }
         rcAi.disabled=true; rcAi.textContent="灵脉评讲中…";
-        aiReciteReview(key,cur,$("#rcAiOut",host));
+        aiReciteReview(key,cur,$("#rcAiOut",host),()=>{ if(rcAi.isConnected){ rcAi.disabled=false; rcAi.textContent="✨ 请灵脉评讲"; } });
       };
     }
     function draw(){
       const total=sentences.length;
-      if(stt.full){
+      if(stt.full==="read"){
+        /* v70：整段通读——合卷前最后一眼，全文再过一遍，然后才遮文整段复述 */
+        stageHost.innerHTML=`<div style="padding:6px">
+          <div style="font-size:13px;color:var(--neon);margin-bottom:6px;font-weight:bold">✦ 整段通读 · 合卷前最后一眼${o?` · ${esc(o.name)} §${o.sec+1}`:""}</div>
+          <div style="font-size:11px;color:var(--dim);margin-bottom:10px">逐句已过 ${total}/${total} · 句均 ${Math.round(stt.scores.reduce((a,b)=>a+b,0)/total)} 分 · 预估本段约 ${est} 分钟</div>
+          <div class="book"><div class="bp">整段原文 · 出声连读一遍</div>
+            <div style="font-size:14.5px;line-height:2.1">${sentences.map(s=>hlOralAnchors(s)).join("<br>")}</div></div>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn sm ghost" id="rcFullRereadSen" type="button">回末句再练练</button>
+            <button class="btn sm primary" id="rcFullToRec" type="button">我记住了 · 遮文整段复述</button>
+          </div>
+        </div>`;
+        $("#rcFullToRec",stageHost).onpointerdown=()=>{ SFX.tap(); stt.full="recite"; persist(); draw(); };
+        $("#rcFullRereadSen",stageHost).onpointerdown=()=>{ SFX.tap(); stt.full=false; stt.i=total-1; stt.phase="read"; persist(); draw(); };
+        return;
+      }
+      if(stt.full==="recite"){
         stageHost.innerHTML=`<div style="padding:6px">
           <div style="font-size:13px;color:var(--neon);margin-bottom:6px;font-weight:bold">✦ 整段复述 · 验诵${o?` · ${esc(o.name)} §${o.sec+1}`:""}</div>
           <div style="font-size:11px;color:var(--dim);margin-bottom:10px">逐句已过 ${total}/${total} · 句均 ${Math.round(stt.scores.reduce((a,b)=>a+b,0)/total)} 分 · 预估本段约 ${est} 分钟</div>
-          <div class="book" style="min-height:90px"><div class="bp">原文已收起 · 凭记忆整段诵出（${total} 句）</div>
+          <div class="book" style="min-height:70px"><div class="bp">原文已收起 · 凭记忆整段诵出（${total} 句）</div>
             <div style="color:var(--dim);font-size:13px;line-height:1.9">出声诵过一遍后，把整段打出来对照——这是此环最后一关。</div></div>
           <textarea id="rcFullInp" placeholder="凭记忆打出完整一段英文……" style="width:100%;min-height:170px;margin-top:10px"></textarea>
           <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn sm primary" id="rcFullSub" type="button">提交整段复述</button>
+            <button class="btn sm primary" id="rcFullSub" type="button">提交对照</button>
           </div>
           <div id="rcFullOut" style="margin-top:10px"></div>
         </div>`;
@@ -4858,12 +4995,19 @@ function openQuest(qid){
           const typed=(ta&&ta.value||"").trim();
           const score=oralScore(typed,cur);
           stt.fullScore=score; persist();
-          const g=score>=70?2:(score>=40?1:0);
-          $("#rcFullOut",stageHost).innerHTML=`<div class="note" style="border-left-color:${g>=2?"var(--ok)":"var(--gold)"}">
-            <div>整段对照 <b style="color:${g>=2?"var(--ok)":"var(--gold)"}">${score}%</b> · 自评档：${g>=2?"顺畅诵出":(g===1?"断续想起":"雾未散")}</div>
-            <div style="margin-top:6px;color:var(--fg2)">参考：<span style="font-size:12px">${esc(cur)}</span></div></div>`;
-          $("#rcFullSub",stageHost).disabled=true;
-          finish(g);
+          const out=$("#rcFullOut",stageHost);
+          out.innerHTML=`<div class="note" style="border-left-color:var(--gold)">
+            <div style="margin-bottom:6px">整段词命中 <b style="color:var(--gold)">${score}%</b>——重合度只作参考，按下方逐词对照如实自评：</div>
+            ${oralDiffHtml(typed,cur,true)}
+            <div style="margin-top:8px;font-size:12px;color:var(--fg2)">对照后如实自评：</div>
+            <div style="margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn sm primary" data-g="2" type="button">顺畅诵出</button>
+              <button class="btn sm" data-g="1" type="button">断续想起</button>
+              <button class="btn sm ghost" data-g="0" type="button">雾未散</button>
+            </div></div>`;
+          $("#rcFullSub",stageHost).disabled=true; ta.disabled=true;
+          out.querySelectorAll("[data-g]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
+            out.querySelectorAll("[data-g]").forEach(x=>x.disabled=true); finish(+b.dataset.g); });
         };
         return;
       }
@@ -4898,73 +5042,97 @@ function openQuest(qid){
         stt.scores[i]=score;
         const last=i===total-1;
         $("#rcOut",stageHost).innerHTML=`<div class="note" style="border-left-color:${score>=70?"var(--ok)":"var(--gold)"}">
-          <div>本句对照 <b>${score}%</b>${score>=70?"——稳":(score>=40?"——磕绊可修":"——差距尚远")}</div>
-          <div style="margin-top:6px;color:var(--fg2)">参考：<span style="font-size:12.5px">${esc(sentences[i])}</span></div></div>
+          <div style="margin-bottom:4px">本句词命中 <b>${score}%</b>${score>=70?"——稳":(score>=40?"——磕绊可修":"——差距尚远")} · 重合度只作参考，逐词对照如下：</div>
+          ${oralDiffHtml(typed,sentences[i],true)}</div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn sm ${score>=70?"primary":""}" id="rcNext" type="button">${last?"句级皆过 · 开始整段复述":"下一句"}</button>
+          <button class="btn sm ${score>=70?"primary":""}" id="rcNext" type="button">${last?"句级皆过 · 通读整段":"下一句"}</button>
           <button class="btn sm ghost" id="rcRetry" type="button">本句再试一次</button>
         </div>`;
         $("#rcSub",stageHost).disabled=true;
         $("#rcRetry",stageHost).onpointerdown=()=>{ SFX.tap(); draw(); };
         $("#rcNext",stageHost).onpointerdown=()=>{ SFX.tap();
-          if(last){ stt.full=true; persist(); draw(); }
+          if(last){ stt.full="read"; persist(); draw(); }
           else { stt.i=i+1; stt.phase="read"; persist(); draw(); }
         };
       };
     }
     /* v77：返回键=严格的上一步（不跳书页、不回首页）：
-       整段复述→末句原句；遮文复述→重读本句原句；第 N 句原句→上一句原句；第 1 句原句→交回 backOne 回书页 */
+       v70：整段复述→整段通读；整段通读→末句原句；遮文复述→重读本句原句；第 N 句原句→上一句原句；第 1 句原句→交回 backOne 回书页 */
     innerBack=()=>{
-      if(stt.full){ stt.full=false; persist(); draw(); return true; }
+      if(stt.full==="recite"){ stt.full="read"; persist(); draw(); return true; }
+      if(stt.full==="read"){ stt.full=false; stt.i=sentences.length-1; stt.phase="read"; persist(); draw(); return true; }
       if(stt.phase==="recite"){ stt.phase="read"; persist(); draw(); return true; }
       if(stt.i>0){ stt.i--; stt.phase="read"; persist(); draw(); return true; }
       return false;
     };
     draw();
   }
-  /* ============ v54 批 1：d 类传译·传译页 ============
-     中→英 / 英→中双方向；提交后揭示参考译文＋重合度对照＋三档自评（本地评分；
-     AI 纠错讲解按钮批 3 接入——离线零阻断）。 */
+  /* ============ v80：d 类传译·练习页（首读在书页完成；这里逐句"重读→练习"） ============
+     每句先重读双语底稿，再遮住参考动笔；提交后逐词对照＋三档自评＋可选 AI 评讲。 */
   function renderStageTrans(){
     const cards=(q.cards||[]).map(rtCardOf).filter(Boolean);
-    let ti=0;
+    /* v80：{i,phase:"reread"|"practice"} 随暂离存档；旧档 ti 数字兼容 */
+    const stt={i:0,phase:"reread"};
+    if(!readonly){ const rp=(curProg()||{}).trans;
+      if(rp){ try{ stt.i=Math.min(+rp.i||0,cards.length-1); stt.phase=rp.phase==="practice"?"practice":"reread"; }catch(e){} }
+    }
+    function persist(){ if(readonly)return; saveProg({trans:{i:stt.i,phase:stt.phase}}); }
     if(!recT0) recT0=Date.now();
-    function tokEn(s){ return new Set(String(s||"").toLowerCase().replace(/[^a-z0-9' ]/g," ").split(/\s+/).filter(Boolean)); }
-    function tokZh(s){ const t=String(s||"").replace(/[，。、；：？！,.:;?!""'']/g,""); const set=new Set(); for(let i=0;i<t.length-1;i++) set.add(t.slice(i,i+2)); return set; }
-    function overlap(a,b,en){ const A=en?tokEn(a):tokZh(a), B=en?tokEn(b):tokZh(b); if(!B.size) return 0; let n=0; A.forEach(x=>{ if(B.has(x)) n++; }); return Math.round(n/B.size*100); }
+    function finishAll(){
+      const secs=Math.max(1,Math.round((Date.now()-recT0)/1000));
+      stageHost.innerHTML=`<div style="padding:12px 6px">
+        <div class="note" style="border-left-color:var(--ok)">${cards.length} 句传译皆已对照——用时 ${Math.round(secs/cards.length)} 秒/句。自评已入雾回潮名册。</div>
+        ${readonly?'<div style="font-size:11px;color:var(--dim);margin-top:8px;text-align:center">回看模式 · 传译记录已留。</div>':""}</div>`;
+      quizPerfect=true;
+      if(!readonly){
+        showClearGate({title:"五句皆通——此环功成",line:`双向往返 ${cards.length} 句，平均 ${Math.round(secs/cards.length)} 秒/句——灵脉之间的路你已走顺。确认交割，修行与灵铢即刻入账。`});
+      } else if(finBtn){ finBtn.disabled=false; finBtn.textContent="交割 · 完成此环"; }
+      SFX.win();
+    }
     function draw(){
-      if(ti>=cards.length){
-        const secs=Math.max(1,Math.round((Date.now()-recT0)/1000));
-        stageHost.innerHTML=`<div style="padding:12px 6px">
-          <div class="note" style="border-left-color:var(--ok)">五句传译皆已对照——用时 ${Math.round(secs/cards.length)} 秒/句。自评已入雾回潮名册。</div>
-          ${readonly?'<div style="font-size:11px;color:var(--dim);margin-top:8px;text-align:center">回看模式 · 传译记录已留。</div>':""}</div>`;
-        quizPerfect=true;
-        if(!readonly){
-          showClearGate({title:"五句皆通——此环功成",line:`双向往返 ${cards.length} 句，平均 ${Math.round(secs/cards.length)} 秒/句——灵脉之间的路你已走顺。确认交割，修行与灵铢即刻入账。`});
-        } else if(finBtn){ finBtn.disabled=false; finBtn.textContent="交割 · 完成此环"; }
-        SFX.win();
+      if(stt.i>=cards.length){ finishAll(); return; }
+      const c=cards[stt.i]; const dir=stt.i%2===0?"zh2en":"en2zh";
+      const src=dir==="zh2en"?c.zh:c.en, ref=dir==="zh2en"?c.en:c.zh;
+      if(stt.phase==="reread"){
+        /* 重读：与书页同款中英分块，整句再过一遍 */
+        stageHost.innerHTML=`<div style="padding:6px">
+          <div style="font-size:13px;color:var(--neon);margin-bottom:8px;font-weight:bold">✦ 重读底稿 · 第 ${stt.i+1}/${cards.length} 句 · ${dir==="zh2en"?"此界文 → 彼界文":"彼界文 → 此界文"}</div>
+          ${transCardPageHtml(c)}
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+            ${stt.i>0?'<button class="btn sm ghost" id="trRereadPrev" type="button">回上一句</button>':""}
+            <button class="btn sm primary" id="trToPractice" type="button">读好了 · 遮住参考动笔</button>
+          </div>
+        </div>`;
+        /* 重读态的校订按钮同样可用 */
+        stageHost.querySelectorAll(".trans-edit-btn").forEach(btn=>{
+          btn.onpointerdown=e=>{ e.stopPropagation(); SFX.tap();
+            const lang=btn.dataset.lang, eid="oral:"+c.id+":"+lang;
+            openEditor({id:eid,catLabel:"传译底稿 · "+c.id+" · "+(lang==="zh"?"中文":"英文"),
+              title:eid,body:getEdit(eid,lang==="zh"?c.zh:c.en),editable:true,editId:eid,
+              onSaved:()=>{ const f=rtCardOf(c.id); if(f){c.zh=f.zh;c.en=f.en;} draw(); }});
+          };
+        });
+        $("#trToPractice",stageHost).onpointerdown=()=>{ SFX.tap(); stt.phase="practice"; persist(); draw(); };
+        if(stt.i>0) $("#trRereadPrev",stageHost).onpointerdown=()=>{ SFX.tap(); stt.i--; stt.phase="practice"; persist(); draw(); };
         return;
       }
-      const c=cards[ti]; const dir=ti%2===0?"zh2en":"en2zh";
-      const src=dir==="zh2en"?c.zh:c.en;
+      /* 练习：只给题目，提交后逐词对照+自评 */
       stageHost.innerHTML=`<div style="padding:6px">
-        <div style="font-size:13px;color:var(--neon);margin-bottom:8px;font-weight:bold">✦ 通界传译 · ${ti+1}/${cards.length} · ${dir==="zh2en"?"此界文 → 彼界文":"彼界文 → 此界文"}</div>
-        <div class="book"><div class="bp">题目</div><div style="font-size:15px;line-height:1.9">${esc(src)}</div></div>
+        <div style="font-size:13px;color:var(--neon);margin-bottom:8px;font-weight:bold">✦ 动笔传译 · ${stt.i+1}/${cards.length} · ${dir==="zh2en"?"此界文 → 彼界文":"彼界文 → 此界文"}</div>
+        <div class="book"><div class="bp">题目（只看这一边）</div><div style="font-size:15px;line-height:1.9">${dir==="zh2en"?hlTransZh(src):hlOralAnchors(src)}</div></div>
         <div style="margin-top:10px"><textarea id="trIn" style="width:100%;min-height:90px" placeholder="${dir==="zh2en"?"在此写出对应英文…":"在此写出对应中文…"}"></textarea></div>
-        <div style="margin-top:8px;display:flex;gap:8px"><button class="btn sm primary" id="trSub" type="button">提交对照</button></div>
+        <div style="margin-top:8px;display:flex;gap:8px"><button class="btn sm primary" id="trSub" type="button">提交对照</button>
+          <button class="btn sm ghost" id="trBackReread" type="button">回看原句</button></div>
         <div id="trOut" style="margin-top:10px"></div>
       </div>`;
       const ta=$("#trIn",stageHost); if(ta) ta.focus();
+      $("#trBackReread",stageHost).onpointerdown=()=>{ SFX.tap(); stt.phase="reread"; persist(); draw(); };
       $("#trSub",stageHost).onpointerdown=()=>{ SFX.tap();
         const mine=(ta&&ta.value||"").trim();
-        const ref=dir==="zh2en"?c.en:c.zh;
-        const pct=overlap(mine,ref,dir==="zh2en");
         const out=$("#trOut",stageHost);
         out.innerHTML=`<div class="note" style="border-left-color:var(--gold)">
-          <div style="font-size:12px;color:var(--dim)">与参考重合约 ${pct}%</div>
-          <div style="margin-top:6px"><b style="color:var(--gold)">参考：</b>${esc(ref)}</div>
-          <div style="margin-top:4px;color:var(--fg2)">你的：<span>${esc(mine||"（未作答）")}</span></div>
-          <div style="margin-top:8px;font-size:12px;color:var(--fg2)">对照后如实自评：</div>
+          ${oralDiffHtml(mine,ref,dir==="zh2en")}
+          <div style="margin-top:8px;font-size:12px;color:var(--fg2)">传译允许与参考不同的表达——按信息传到的程度如实自评：</div>
           <div style="margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn sm primary" data-gr="2" type="button">大体无碍</button>
             <button class="btn sm" data-gr="1" type="button">磕绊可修</button>
@@ -4973,18 +5141,26 @@ function openQuest(qid){
           <div style="margin-top:8px;text-align:center"><button class="btn sm ghost" id="trAiBtn" type="button" ${dsReady()?"":"disabled"}>✨ 请灵脉评讲</button></div>
           <div id="trAiOut" style="margin-top:8px"></div></div>`;
         $("#trSub",stageHost).disabled=true;
-        out.querySelectorAll("[data-gr]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); srsReview(c.key,+b.dataset.gr); ti++; draw(); });
-        /* v55 批3-⑤：可选 AI 评分与纠错——替换本地评分，提供讲解分析 */
+        out.querySelectorAll("[data-gr]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
+          const gr=+b.dataset.gr;
+          out.querySelectorAll("[data-gr]").forEach(x=>x.disabled=true);
+          srsReview(c.key,gr);
+          recordTransWrong(c,dir,mine,ref,gr);
+          stt.i++; stt.phase="reread"; persist(); draw(); });
         const trAi=$("#trAiBtn",out);
         if(trAi) trAi.onpointerdown=()=>{ SFX.tap();
           if(!dsReady()){ toast("灵脉未通——请在配置中填入密钥后启用 AI 评讲"); return; }
           trAi.disabled=true; trAi.textContent="灵脉评讲中…";
-          aiTransReview(src,mine,ref,dir,c.key,$("#trAiOut",out));
+          aiTransReview(src,mine,ref,dir,c.key,$("#trAiOut",out),()=>{ if(trAi.isConnected){ trAi.disabled=false; trAi.textContent="✨ 请灵脉评讲"; } });
         };
       };
     }
-    /* v77：传译返回键=上一张卡（第 1 张交回 backOne 回书页），不跳阶段 */
-    innerBack=()=>{ if(ti>0){ ti--; draw(); return true; } return false; };
+    /* v80：返回键=练习回重读、重读回上句练习；第 1 句重读交回 backOne 回书页 */
+    innerBack=()=>{
+      if(stt.phase==="practice"){ stt.phase="reread"; persist(); draw(); return true; }
+      if(stt.i>0){ stt.i--; stt.phase="practice"; persist(); draw(); return true; }
+      return false;
+    };
     draw();
   }
   /* —— 点击推进（v44）：整页点击流转阶段 —— */
@@ -5128,15 +5304,15 @@ function openQuest(qid){
         goStage(idx);
         if(saved.stage==="quiz") try{ toast("已回到上次暂离的进度","dim"); }catch(e){}
         loadAiBriefData();
-        if(q.rtCat==="b") aiBilingualQuiz(quiz,()=>{
-          if(ov.isConnected&&STAGES[stageIdx].id==="quiz"&&!answered) drawQuiz();
+        if(q.rtCat==="b") ensureWenqiAI((quiz||[]).map(zz=>zz.pid).filter(Boolean),up=>{
+          if(ov.isConnected&&STAGES[stageIdx].id==="quiz"&&!answered&&up.includes(quiz[qi]&&quiz[qi].pid)) drawQuiz();
         });
         return;
       }
     }
     STAGES[0].render();
-    if(q.rtCat==="b") aiBilingualQuiz(quiz,()=>{
-      if(ov.isConnected&&STAGES[stageIdx].id==="quiz"&&!answered) drawQuiz();
+    if(q.rtCat==="b") ensureWenqiAI((quiz||[]).map(zz=>zz.pid).filter(Boolean),up=>{
+      if(ov.isConnected&&STAGES[stageIdx].id==="quiz"&&!answered&&up.includes(quiz[qi]&&quiz[qi].pid)) drawQuiz();
     });
     loadAiBriefData();
   }
@@ -5246,8 +5422,17 @@ function openQuest(qid){
     if(qdraft[qi]&&qdraft[qi].answered){
       const zd=quiz[qi], dd=qdraft[qi];
       const correctD=zd.kind==="judge"?(zd.a?"真":"伪"):zd.a;
+      /* v80：回看还原当时的 AI 讲评/英文讲解（持久化在 st.aiExplain），不再清空 */
+      const saved=getAiExplain(zd);
+      const savedBubble=saved&&saved.html?`<div class="qreplwrap" style="margin-top:8px">
+          <div class="qav" style="background:var(--cyber)">${esc(npcName[0]||"?")}</div>
+          <div class="qbub" style="background:rgba(61,240,255,0.07);border:1px solid var(--cyber)">
+            <div class="qname">${esc(npcName)} · 当时的讲评</div>
+            <div class="qrepl" style="color:var(--fg2)">${saved.html}</div>
+          </div></div>`:"";
       host.innerHTML=`<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · 已作答 · 回看</span>${esc(zd.q)}</div>
-        <div class="fb ${dd.ok?'ok':'no'}">${dd.ok?"✓ 你答对了——":"✗ 你的作答——「"+esc(dd.mine||"…")+"」"}${quizExplainHtml(zd,correctD,dd.mine)}</div>`;
+        <div class="fb ${dd.ok?'ok':'no'}">${dd.ok?"✓ 你答对了——":"✗ 你的作答——「"+esc(dd.mine||"…")+"」"}${quizExplainHtml(zd,correctD,dd.mine)}</div>
+        ${savedBubble}`;
       const navD=document.createElement("div");
       navD.style.cssText="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap";
       navD.innerHTML=`<button class="btn sm primary" id="qvNext" type="button">${qdraft[qi+1]&&qdraft[qi+1].answered?"继续看下一题":"继续作答下一题"}</button>
@@ -5287,7 +5472,7 @@ function openQuest(qid){
     const pendingBanner=z._enPending
       ? `<div style="margin:0 0 10px;padding:6px 10px;border:1px dashed var(--gold);border-radius:8px;font-size:11.5px;color:var(--gold)">🌐 英文题面将在灵脉恢复后补全——先以当前题面作答，灵脉恢复后自动补英文版。</div>` : "";
     /* v44：NPC 串场词（AI 生成的 intro 优先，否则按 NPC 口癖池取） */
-    const kindLabel=z.kind==="judge"?"是非判断":z.kind==="choice"?"选择作答":z.kind==="multi"?"多项选择":z.kind==="wrongone"?"选出错误项":z.kind==="recall"?"来客之问":"填空作答";
+    const kindLabel=z.kind==="judge"?"是非判断":z.kind==="choice"?"选择作答":z.kind==="multi"?"多项选择":z.kind==="wrongone"?"选出错误项":z.kind==="trans"?"通界传译":z.kind==="oralrec"?"整段复述":z.kind==="recall"?"来客之问":"填空作答";
     const intro=(z.intro&&String(z.intro).trim())?String(z.intro).trim():"";
     const introPool=QUIZ_INTROS[npc.id]||QUIZ_INTROS_FALLBACK;
     const introTxt=intro||introPool[(q.id+"_"+qi).split("").reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,0)%introPool.length];
@@ -5336,43 +5521,153 @@ function openQuest(qid){
       };
       /* 重放未提交的勾选 */
       if(qdraft[qi]&&Array.isArray(qdraft[qi].picked)){ qdraft[qi].picked.forEach(i=>picked.add(i)); syncPick(); }
+    } else if(z.kind==="trans"||z.kind==="oralrec"){
+      /* v70：翻译题/整段复述题——保持传译与复述的本来形态，提交后逐词对照+三档自评（从不说"答错"）。
+         草稿与揭示态随暂离存档；oralrec 必须先「整段回看」再遮文复述。 */
+      const isRec=z.kind==="oralrec";
+      const en2zh=z.dir==="en2zh";
+      const tag=isRec?"整段回看 → 遮文整段复述":(en2zh?"彼界文 → 此界文":"此界文 → 彼界文");
+      const ph=isRec?"凭记忆打出完整一段英文……":(en2zh?"在此写出对应中文…":"在此写出对应英文…");
+      const gradeBtns=`<div style="margin-top:10px;font-size:12px;color:var(--fg2)">${isRec?"对照逐词差异，如实自评：":"传译允许与参考不同的表达——按信息传到的程度如实自评："}</div>
+        <div style="margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm primary" data-gr="2" type="button">${isRec?"顺畅诵出":"大体无碍"}</button>
+          <button class="btn sm" data-gr="1" type="button">${isRec?"断续想起":"磕绊可修"}</button>
+          <button class="btn sm ghost" data-gr="0" type="button">${isRec?"雾未散":"没写出来"}</button>
+        </div>`;
+      const persistDraft=patch=>{ if(readonly)return; qdraft[qi]=Object.assign(qdraft[qi]||{},patch);
+        saveProg({stage:"quiz",qi, quiz:quiz.slice(), draft:qdraft.map(x=>Object.assign({},x)), ended:_quizEnded}); };
+      const showReview=(typed)=>{
+        const fb=$("#fb",host);
+        const refEn=isRec||!en2zh;
+        fb.innerHTML=oralDiffHtml(typed,z.a,refEn)+gradeBtns;
+        fb.querySelectorAll("[data-gr]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
+          fb.querySelectorAll("[data-gr]").forEach(x=>x.disabled=true);
+          const gr=+b.dataset.gr; z._grade=gr;
+          if(z.kind==="trans") recordTransWrong({key:z.key,topic:z.topic},z.dir,typed,z.a,gr);
+          persistDraft({review:true,answered:true});
+          answer(gr>=2,gr>=2?(isRec?"自评·顺畅诵出":"自评·大体无碍"):(gr===1?(isRec?"自评·断续想起":"自评·磕绊可修"):(isRec?"自评·雾未散":"自评·没写出来")));
+        });
+      };
+      const showInput=()=>{
+        host.innerHTML=`${introHtml}<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · ${kindLabel} · ${tag}</span>${isRec?"原文已收起 · 凭记忆整段诵出":esc(z.q)}</div>
+          <textarea id="spInp" style="width:100%;min-height:${isRec?170:90}px;margin-top:8px" placeholder="${ph}"></textarea>
+          <div class="jbtns"><button class="btn sm primary" id="spSub" type="button">提交对照</button></div>
+          <div class="fb" id="fb"></div>`;
+        const inp=$("#spInp",host); if(inp){ inp.focus();
+          const d0=qdraft[qi]; if(d0&&d0.typed) inp.value=d0.typed;
+          inp.addEventListener("input",()=>persistDraft({typed:inp.value,review:false})); }
+        $("#spSub",host).onpointerdown=()=>{ SFX.tap();
+          const typed=(inp&&inp.value||"").trim();
+          $("#spSub",host).disabled=true; if(inp)inp.disabled=true;
+          persistDraft({typed,review:true});
+          showReview(typed);
+        };
+        const d0=qdraft[qi];
+        if(d0&&d0.review&&!d0.answered){ $("#spSub",host).disabled=true; if(inp)inp.disabled=true; showReview(d0.typed||""); }
+      };
+      if(isRec){
+        const d0=qdraft[qi]||{};
+        if(d0.oralPhase!=="input"){
+          const sents=oralSplitSentences(z.a);
+          host.innerHTML=`${introHtml}<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · ${kindLabel}</span>${esc(z.q)}</div>
+            <div class="book" style="margin-top:8px"><div class="bp">整段原文 · 先通读一遍（合卷后凭记忆诵出）</div>
+              <div style="font-size:14px;line-height:2">${sents.map(s=>hlOralAnchors(s)).join("<br>")}</div></div>
+            <div class="jbtns"><button class="btn sm primary" id="orToRec" type="button">我记住了 · 遮文整段复述</button></div>
+            <div class="fb" id="fb"></div>`;
+          $("#orToRec",host).onpointerdown=()=>{ SFX.tap(); persistDraft({oralPhase:"input"}); showInput(); };
+        } else showInput();
+      } else {
+        host.innerHTML=`${introHtml}<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · ${kindLabel} · ${tag}</span>${esc(z.q)}</div>
+          <textarea id="spInp" style="width:100%;min-height:90px;margin-top:8px" placeholder="${ph}"></textarea>
+          <div class="jbtns"><button class="btn sm primary" id="spSub" type="button">提交对照</button></div>
+          <div class="fb" id="fb"></div>`;
+        const inp=$("#spInp",host); if(inp){ inp.focus();
+          const d0=qdraft[qi]; if(d0&&d0.typed) inp.value=d0.typed;
+          inp.addEventListener("input",()=>persistDraft({typed:inp.value,review:false})); }
+        $("#spSub",host).onpointerdown=()=>{ SFX.tap();
+          const typed=(inp&&inp.value||"").trim();
+          $("#spSub",host).disabled=true; if(inp)inp.disabled=true;
+          persistDraft({typed,review:true});
+          showReview(typed);
+        };
+        const d0=qdraft[qi];
+        if(d0&&d0.review&&!d0.answered){ $("#spSub",host).disabled=true; if(inp)inp.disabled=true; showReview(d0.typed||""); }
+      }
+    } else if(z.kind==="recall"&&z.lang==="en"){
+      /* v80：AI 双语稿可能在题目构建后才到——渲染前用缓存实时覆盖题面/参考 */
+      const live=wenqiQAOf(z.pid);
+      if(live){ z.q=live.qen||live.qzh||z.q; if(live.aen)z.a=live.aen; z.cn={q:live.qzh,a:live.azh}; z.enOnly=live.zhOnly; }
+      const persistDraft=patch=>{ if(readonly)return; qdraft[qi]=Object.assign(qdraft[qi]||{},patch);
+        saveProg({stage:"quiz",qi, quiz:quiz.slice(), draft:qdraft.map(x=>Object.assign({},x)), ended:_quizEnded}); };
+      const enRef=String(z.a||"");
+      const cnRef=(z.cn&&z.cn.a)||"";
+      const gradeBar=`<div style="margin-top:10px;font-size:12px;color:var(--fg2)">信息点传到了多少，如实自评：</div>
+        <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm primary" data-gr="2" type="button">要点齐全</button>
+          <button class="btn sm" data-gr="1" type="button">断续想起</button>
+          <button class="btn sm ghost" data-gr="0" type="button">未想起</button>
+        </div>`;
+      const showReview=(typed)=>{
+        const fb=$("#fb",host);
+        fb.innerHTML=(enRef?oralDiffHtml(typed,enRef,true):`<div style="font-size:12px;color:var(--dim)">英文参考待灵脉补全——先对照中文要点。</div>`)
+          +`<div style="margin-top:10px;font-size:11px;color:var(--gold)">English reference</div>
+            <div style="line-height:1.9;color:var(--fg)">${enRef?hlOralAnchors(enRef):"（灵脉连通后自动补全）"}</div>
+            <div style="margin-top:8px;font-size:11px;color:var(--dim)">中文要点：</div>
+            <div style="line-height:1.9;color:var(--fg2)">${hlTransZh(cnRef)}</div>
+            <div style="margin-top:8px;text-align:center"><button class="btn sm ghost" id="wqAiBtn" type="button" ${dsReady()?"":"disabled"}>✨ 请晚棠讲评我的英文</button></div>
+            <div id="wqAiOut" style="margin-top:8px"></div>`
+          +gradeBar;
+        const aiBtn=$("#wqAiBtn",fb);
+        const runAi=()=>{ if(!dsReady()){ toast("灵脉未通——配置密钥后启用 AI 讲评"); return; }
+          aiBtn.disabled=true; aiBtn.textContent="灵脉讲评中…";
+          aiWenqiReview(z,typed,$("#wqAiOut",fb),()=>{ if(aiBtn.isConnected){ aiBtn.disabled=false; aiBtn.textContent="✨ 再讲评一次"; } }); };
+        if(aiBtn) aiBtn.onpointerdown=()=>{ SFX.tap(); runAi(); };
+        if(dsReady()) runAi();   /* 在线即自动讲评，玩家也可再点 */
+        fb.querySelectorAll("[data-gr]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
+          fb.querySelectorAll("[data-gr]").forEach(x=>x.disabled=true);
+          z._grade=+b.dataset.gr;
+          persistDraft({answered:true});
+          answer(z._grade>=2,z._grade>=2?"自评·要点齐全":(z._grade===1?"自评·断续想起":"自评·未想起"));
+        });
+      };
+      const renderInput=(typed0)=>{
+        host.innerHTML=`${introHtml}<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · ${kindLabel}</span>
+            <div style="font-size:11px;color:var(--neon);letter-spacing:.1em;margin:2px 0">Answer in English · 用英文作答</div>
+            <div style="font-size:14.5px;line-height:1.9;color:var(--fg)">${esc(stemQ)}</div>
+            ${z.cn&&z.cn.q?`<div style="margin-top:6px;font-size:11.5px;color:var(--dim)">中文问题：${esc(z.cn.q)}</div>`:""}
+          </div>
+          <textarea id="wqInp" style="width:100%;min-height:110px;margin-top:8px" placeholder="先在这里写下你的英文答案——别怕不完整，写完就有讲评。"></textarea>
+          <div class="jbtns"><button class="btn primary" id="wqSub" type="button">提交我的答案</button></div>
+          <div class="fb" id="fb"></div>`;
+        const inp=$("#wqInp",host); if(inp){ inp.focus(); if(typed0)inp.value=typed0;
+          inp.addEventListener("input",()=>persistDraft({typed:inp.value,review:false})); }
+        $("#wqSub",host).onpointerdown=()=>{ SFX.tap();
+          const typed=(inp&&inp.value||"").trim();
+          $("#wqSub",host).disabled=true; if(inp)inp.disabled=true;
+          persistDraft({typed,review:true});
+          showReview(typed);
+        };
+      };
+      const d0=qdraft[qi];
+      if(d0&&d0.review&&!d0.answered){ renderInput(d0.typed||""); const b=$("#wqSub",host); if(b){ b.disabled=true; const inp=$("#wqInp",host); if(inp)inp.disabled=true; } showReview(d0.typed||""); }
+      else renderInput(d0&&d0.typed);
     } else if(z.kind==="recall"){
-      /* v54 批 1：问契/回潮卡——先凭记忆作答，揭示要点后三档自评（零挫败，从不说"答错"）。
-         v62 Task12：b 类中英双语——英文题面/英文参考答案+中文要点/英文 AI 讲解。 */
-      const enGuide=(en||z.lang==="en")?'<div style="font-size:11px;color:var(--gold);margin:3px 0">🌐 Answer in English（英文作答）</div>':"";
-      const cnSub=(en&&z.cn)?`<div style="margin-top:6px;font-size:11.5px;color:var(--dim)">中文问题：${esc(z.cn.q)}</div>`:"";
-      host.innerHTML=`${introHtml}${pendingBanner}<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · ${kindLabel}</span>${enGuide}${esc(stemQ)}${cnSub}</div>
+      /* QM 自录中文问契——先凭记忆作答，揭示要点后三档自评（零挫败） */
+      host.innerHTML=`${introHtml}${pendingBanner}<div class="qz"><span class="kk">试炼 ${qi+1}/${quiz.length} · ${kindLabel}</span>${esc(stemQ)}</div>
         <div class="jbtns"><button class="btn primary" id="rcReveal" type="button">心里作答完毕 · 揭示要点</button></div>
         <div class="fb" id="fb"></div>`;
       $("#rcReveal",host).onpointerdown=()=>{ SFX.tap();
-        /* v62 Task4：揭示态固化（暂离重入停在自评环节） */
         const _d=qdraft[qi]=qdraft[qi]||{}; _d.revealed=true;
         if(!readonly) saveProg({stage:"quiz",qi, quiz:quiz.slice(), draft:qdraft.map(x=>Object.assign({},x)), ended:_quizEnded});
         const rv=$("#rcReveal",host); if(rv) rv.style.display="none";
         const fb=$("#fb",host);
-        if(en||z.lang==="en"){
-          const enRef=en?en.a:String(z.a||"").split("\n")[0];
-          const cnRef=z.cn?z.cn.a:(String(z.a||"").split("【中文要点】")[1]||"");
-          fb.innerHTML=`<div style="font-size:11px;color:var(--gold)">English reference</div>
-            <div style="line-height:1.9;color:var(--fg)">${esc(enRef)}</div>
-            <div style="margin-top:8px;font-size:11px;color:var(--dim)">中文要点：${esc(cnRef)}</div>
-            <div id="enAiOut" style="margin-top:8px"></div>
-            <div style="margin-top:10px;font-size:12px;color:var(--fg2)">对照参考，如实自评：</div>
-            <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn sm primary" data-gr="2" type="button">要点齐全</button>
-              <button class="btn sm" data-gr="1" type="button">断续想起</button>
-              <button class="btn sm ghost" data-gr="0" type="button">未想起</button>
-            </div>`;
-          aiEnExplain(z,$("#enAiOut",fb));
-        } else {
-          fb.innerHTML=`<div style="line-height:1.9;color:var(--fg)">${esc(z.a||"")}</div>
-            <div style="margin-top:10px;font-size:12px;color:var(--fg2)">对照要点，如实自评：</div>
-            <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn sm primary" data-gr="2" type="button">要点齐全</button>
-              <button class="btn sm" data-gr="1" type="button">断续想起</button>
-              <button class="btn sm ghost" data-gr="0" type="button">未想起</button>
-            </div>`;
-        }
+        fb.innerHTML=`<div style="line-height:1.9;color:var(--fg)">${esc(z.a||"")}</div>
+          <div style="margin-top:10px;font-size:12px;color:var(--fg2)">对照要点，如实自评：</div>
+          <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn sm primary" data-gr="2" type="button">要点齐全</button>
+            <button class="btn sm" data-gr="1" type="button">断续想起</button>
+            <button class="btn sm ghost" data-gr="0" type="button">未想起</button>
+          </div>`;
         fb.querySelectorAll("[data-gr]").forEach(b=>{
           b.onpointerdown=()=>{ SFX.tap(); fb.querySelectorAll("[data-gr]").forEach(x=>x.disabled=true);
             z._grade=+b.dataset.gr; answer(z._grade>=2, z._grade>=2?"自评·要点齐全":(z._grade===1?"自评·断续想起":"自评·未想起")); };
@@ -5453,18 +5748,18 @@ function openQuest(qid){
           : `题里「${esc(clipClause(stem,26))}」这个说法不成立哦。正确概念是「${esc(fact||okA)}」——记正解比记原句管用呀。`)
         : `这其实是道真命题呢——「${esc(fact||okA)}」，依据顺一遍就好，别急呀。`;
     } else if(z.kind==="choice"){
-      /* v69：所选项按 ometa 归因——本身有误（划错处）或不符题意（属其他考点） */
+      /* v80：逐项「它是什么」交给 AI；本地只就玩家所选项给一句确定信息，不硬编其余选项 */
       const om=z.ometa&&z.ometa[z.opts.indexOf(String(mine||""))];
       const why=om&&om.t==="bad"
         ? `它把「${om.from}」写成了「${om.to}」，表述本身有误`
         : om&&om.t==="other"
           ? `它说的是「${quizOptPname(om.pid)}」的内容——这句话没错，只是答非本题所问`
-          : om&&om.t==="fill"?"它与本题考点无关，是凑数项":"它与本题考点的事实对不上";
-      core=`你选的「${esc(String(mine||"…"))}」站不住——${why}。正解是「${esc(okA)}」，对照着记一遍吧。`;
+          : om&&om.t==="fill"?"它与本题考点无关，是凑数项":"它不是本题要的那一项";
+      core=`你选的「${esc(String(mine||"…"))}」——${why}。正解是「${esc(okA)}」。每个选项各自指什么、错在哪，我在下面逐条给你讲。`;
     } else if(z.kind==="wrongone"){
       const om=z.ometa&&z.ometa[z.opts.indexOf(String(z.a||""))];
-      const why=om&&om.t==="bad"?`其中「${om.to}」应为「${om.from}」`:"其中有一处与考点事实不符";
-      core=`要找的错误项是「${esc(okA)}」——${why}。其余选项都是别的考点的正确陈述，留意题干问的是“错误”哦。`;
+      const why=om&&om.t==="bad"?`它把「${om.to}」写成了「${om.from}」`:"它与考点原文不一致";
+      core=`四个选项里与原文不符的是「${esc(okA)}」——${why}。其余三项各指什么、为什么成立，我在下面逐条讲清。`;
     } else if(z.kind==="multi"){
       const want=z.a||[];
       const mineArr=String(mine||"").split(" / ").filter(Boolean);
@@ -5493,25 +5788,47 @@ function openQuest(qid){
     const kws=extractKeyWords(fact);
     return kws.some(w=>w.length>=4&&s.includes(w));
   }
+  /* v80：AI 讲解持久化——按题面签名存档，回看已作答题目/重进任务都能还原，不再"清空" */
+  function saveAiExplain(z,html,tag){
+    try{
+      if(!z)return;
+      st.aiExplain=st.aiExplain||{};
+      st.aiExplain[quizNormKey(z)]={html:String(html||"").slice(0,4000),tag:tag||"wrong",at:new Date().toISOString()};
+      save();
+    }catch(e){}
+  }
+  function getAiExplain(z){ try{ return (z&&st.aiExplain&&st.aiExplain[quizNormKey(z)])||null; }catch(e){ return null; } }
   function aiWrongReply(z,mine,okA,wrap){
-    if(!dsReady()) return;
+    if(!dsReady()){
+      /* v80：离线不编造逐项讲解——气泡里明说逐项讲解待灵脉连通 */
+      const el=wrap&&wrap.isConnected?wrap.querySelector(".qrepl"):null;
+      if(el){ const opt=z.kind==="choice"||z.kind==="wrongone"||z.kind==="multi";
+        el.innerHTML=esc(opt?"每个选项各自指什么、错在哪，灵脉连通后我会逐条讲给你——先把正解与考点全文记住。":"灵脉未通，详细讲评稍后补；先按上方正解与正确说法记一遍。");
+      }
+      return;
+    }
     const built=buildWrongReplyMsgs(z,mine,okA,npc,q);
     dsChat(built.messages,Object.assign({ch:"wrongReply"},built.opts)).then(t=>{
       /* v69：emoji 剥离 + 实质校验——空话讲解弃用，保留本地讲解（不浪费这块版面） */
       const txt=(t||"").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu,"").trim().replace(/^["「」]+|["」]+$/g,"");
       const el=wrap&&wrap.isConnected?wrap.querySelector(".qrepl"):null;
-      if(el&&txt&&replyHasSubstance(txt,z)) el.innerHTML=quizMdLite(txt);
-      else if(el&&txt&&!replyHasSubstance(txt,z)) console.warn("[aiWrongReply] 讲解无实质内容，保留本地版",txt.slice(0,60));
+      if(txt&&replyHasSubstance(txt,z)){
+        const html=quizMdLite(txt);
+        if(el) el.innerHTML=html;
+        saveAiExplain(z,html,"wrong");
+      } else if(el&&txt){ console.warn("[aiWrongReply] 讲解无实质内容，保留本地版",txt.slice(0,60)); }
     }).catch(()=>{ /* 本地回复已在，静默 */ });
   }
   function answer(ok,mine){
     if(answered) return; answered=true;
-    /* v62：落本题作答快照（回上一题只读回看/暂离还原数据源；保留未提交输入 typed） */
+    /* v62 落本题作答快照（回上一题只读回看/暂离还原数据源；保留未提交输入 typed） */
     qdraft[qi]=Object.assign(qdraft[qi]||{},{mine:String(mine==null?"":mine), ok:!!ok, answered:true});
+    /* v70：trans/oralrec 与 recall 同为三档自评题（用 _grade，不走对错判分/错题本） */
+    const SELF_GRADE=z0=>z0&&(z0.kind==="recall"||z0.kind==="trans"||z0.kind==="oralrec");
     /* v54 批 1：SRS 雾回潮钩子——答题结果直接驱动记忆档位 */
     const host0=stageHost._quizHost; const z0=host0?quiz[qi]:null;
     if(q.rt&&z0&&z0.key){
-      if(z0.kind==="recall") srsReview(z0.key, z0._grade||0);
+      if(SELF_GRADE(z0)) srsReview(z0.key, z0._grade||0);
       else if(ok) srsReview(z0.key,2);
       else srsLapse(z0.key);
     }
@@ -5525,19 +5842,31 @@ function openQuest(qid){
     const isLast = qi>=quiz.length-1;
     if(ok){ okCount++; st.quizOk++; SFX.ok(); fb.className="fb ok"; defeatFog(qi); }
     else { SFX.no(); fb.className="fb no"; failFog(qi);
-      if(z.kind!=="recall"){ pushWrongEntry(q.id, z);
+      if(!SELF_GRADE(z)){ pushWrongEntry(q.id, z);
         if(window.WDMem){ const pt=D.pointsLib.find(p=>p.id===z.pid); WDMem.wrong(q.npc,wTopic({pid:z.pid}),pt?+pt.star:null); } }
     }
-    /* v54：自评题（来客之问）反馈——零挫败，从不说"答错" */
+    /* v54：自评题（来客之问/通界传译/整段复述）反馈——零挫败，从不说"答错" */
     if(z.kind==="recall"){
       fb.className="fb "+(ok?"ok":"no");
       fb.innerHTML=(ok?"✓ 要点齐备——收进袖中。":"✓ 已对照——未全想起也没关系，要点在上方，印记已记入回潮名册，回潮期再见分晓。");
     }
+    else if(z.kind==="trans"){
+      fb.className="fb "+(ok?"ok":"no");
+      fb.innerHTML=(ok?"✓ 这一传得到位——灵脉之间的路又顺了一分。":"✓ 已对照——磕绊处已记入误译册，稍后会有同题材的句子再来找你，到时把它扳回来。");
+    }
+    else if(z.kind==="oralrec"){
+      fb.className="fb "+(ok?"ok":"no");
+      fb.innerHTML=(ok?"✓ 整段诵下来了——这段已经长在你身上。":"✓ 已对照——这一段已入回潮名册，明天再出声诵一遍，句子会自己找上门。");
+    }
     else fb.innerHTML=(ok?"✓ 答对了！":"✗ 答错了——")+quizExplainHtml(z,correct,mine);
-    /* v44：答案对照段下方追加 NPC 智能回复 */
-    const repText=ok?praiseReply():wrongLocalReply(z,mine,correct);
+    /* v44：答案对照段下方追加 NPC 智能回复（自评题给确定性收口语，不触发错题 AI 讲解） */
+    let repText;
+    if(ok) repText=praiseReply();
+    else if(z.kind==="trans") repText="记下了，同题材的句子我会再排给你——多见几面就不生了。";
+    else if(z.kind==="oralrec") repText="别急着求全，先让每一句各自站稳，整段自然就接上了。";
+    else repText=wrongLocalReply(z,mine,correct);
     const wrap=quizReplyBubble(repText);
-    if(!ok) aiWrongReply(z,mine,correct,wrap);
+    if(!ok&&!SELF_GRADE(z)) aiWrongReply(z,mine,correct,wrap);
     const next=document.createElement("button");
     next.className="btn sm primary"; next.type="button";
     next.textContent = isLast ? "知道了，完成试炼" : "知道了，继续";
@@ -6262,6 +6591,7 @@ function renderLib(){
   <div class="cardsearch">
     <input id="cardQ" placeholder="搜索编号 / 关键词 / 英文句…" value="${esc(st._libQ)}">
     <select id="cardCat">${catSel.map(o=>`<option value="${o[0]}"${st._libCat===o[0]?" selected":""}>${esc(o[1])}</option>`).join("")}</select>
+    <button class="btn sm gold" id="cOralReplace" type="button">📖 导游词替换台</button>
   </div>
   <div class="cardsearch" style="margin-top:6px">
     <select id="cardSub">${subSel.map(o=>`<option value="${esc(o[0])}"${st._libSub===o[0]?" selected":""}>${esc(o[1])}</option>`).join("")}</select>
@@ -6289,6 +6619,7 @@ function renderLib(){
     /* myoral 是结构化问答字段，走专用录入面板而非通用文本编辑器 */
     if(cur.cat==="qmine"){ openOralInput(cur.id); return; }
     openEditor(cur); };
+  const cOR=$("#cOralReplace",stream); if(cOR) cOR.onpointerdown=()=>{ SFX.tap(); renderOralReplace(); };
   /* FIX-P7：中文输入法保护——组词期间不重建 DOM，组词结束才搜索；搜索计数自增（修复「藏书」成就只读不自增） */
   const cardQEl=$("#cardQ",stream);
   if(cardQEl){
@@ -6385,6 +6716,58 @@ function openEditor(card){
     aiCardExpand(cur, card, $("#edAiOut",ov), area, markDirty);
   };
   drawHist();
+}
+/* ==================== v70：导游词替换台（六篇 × 各节，整段粘贴替换） ====================
+   唯一事实源仍是 st.edits["full:<id>:<sec>"]：替换即校订，分句/锚点/逐句复述/整段复述/
+   预估时长全部从最新校订版派生（rtOralText/rtOralPages），版本历史与回退沿用 openEditor。 */
+function oralSecWords(s){ return String((s&&(s.text||s.en))||"").split(/\s+/).filter(Boolean).length; }
+function renderOralReplace(){
+  const rows=D.oralFull.map(o=>{
+    const secs=o.sections||[];
+    const mins=rtSpkMin(secs.reduce((n,s)=>n+oralSecWords(s),0));
+    const doneN=secs.filter((s,i)=>hasEdit("full:"+o.id+":"+i)).length;
+    return `<div style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div class="rp-head" style="padding:10px 12px;cursor:pointer;background:rgba(255,255,255,0.03);display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span style="min-width:0"><b>${esc(o.name)}</b>
+          <span style="color:var(--dim);font-size:12px;margin-left:6px">${esc(o.aid)} · ${secs.length} 节 · 约 ${mins} 分钟</span>
+          ${doneN?`<span style="color:var(--ok);font-size:11px;margin-left:6px">✎ ${doneN}/${secs.length} 节已校订</span>`:""}</span>
+        <span class="rp-arrow" style="color:var(--dim);flex-shrink:0">▸ 展开</span>
+      </div>
+      <div class="rp-body" hidden style="padding:4px 12px 10px"></div>
+    </div>`;
+  }).join("");
+  const ov=panel(`<h2>导游词替换台 · 六篇整段校订</h2>
+    <div class="mt">逐节点「整段替换」，把整节新英文稿粘进去保存即可——分句、锚点高亮、逐句复述、整段通读/复述、预估时长都会自动随新稿走。<b style="color:var(--gold)">只贴英文稿，不要夹带中文注释</b>；每节保留完整版本历史，可随时一键回退官方原文。传译用的中英句对在「修诵句」分类或传译底稿页单独校订。</div>
+    <div style="margin-top:12px;max-height:62vh;overflow:auto;padding-right:4px">${rows}</div>`);
+  ov.querySelectorAll(".rp-head").forEach((h,hi)=>{
+    h.onpointerdown=()=>{ SFX.tap();
+      const body=h.nextElementSibling; if(!body) return;
+      body.hidden=!body.hidden;
+      h.querySelector(".rp-arrow").textContent=body.hidden?"▸ 展开":"▾ 收起";
+      if(body.dataset.loaded) return;
+      body.dataset.loaded="1";
+      const o=D.oralFull[hi]; if(!o) return;
+      const fillList=()=>{
+        body.innerHTML=(o.sections||[]).map((s,i)=>{
+          const eid="full:"+o.id+":"+i;
+          const ed=hasEdit(eid), words=oralSecWords(s);
+          return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px dashed var(--border)">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px">§${i+1} ${esc(s.h||"（无标题）")} ${ed?'<span style="color:var(--ok);font-size:10px" title="当前使用你的校订版">✎ 已替换</span>':'<span style="color:var(--dim);font-size:10px">官方版</span>'}</div>
+              <div style="font-size:11px;color:var(--dim)">${words} 词 · 约 ${rtSpkMin(words)} 分钟</div>
+            </div>
+            <button class="btn sm ${ed?"":"gold"}" data-i="${i}" type="button" style="flex-shrink:0">${ed?"更新校订":"整段替换"}</button>
+          </div>`;
+        }).join("");
+        body.querySelectorAll("button[data-i]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
+          const i=+b.dataset.i, s=o.sections[i], eid="full:"+o.id+":"+i;
+          openEditor({id:eid,catLabel:"修诵卷 · "+o.name+" §"+(i+1),title:(s.h||("第"+(i+1)+"节")),
+            body:getEdit(eid,s.text||s.en||""),editable:true,editId:eid,onSaved:fillList});
+        });
+      };
+      fillList();
+    };
+  });
 }
 /* ==================== 问契·自录面板 ==================== */
 /* b2-2：玩家可随时从晚棠/云汀处进入，一问一答录入；定稿后交沈昭入库，与经匣同构。 */
@@ -6570,6 +6953,153 @@ function rtCardOf(key){
   if(/^ORB-/.test(key)){ const o=rtOralOf(key); return o?{key,id:key,text:rtOralText(key),star:2,cat:"c",oral:o}:null; }
   const t=D.oralLib.find(x=>x.id===key); return t?{key,id:key,en:getEdit("oral:"+key+":en",t.en),zh:getEdit("oral:"+key+":zh",t.zh),topic:t.topic,text:t.en,star:1,cat:"d"}:null;
 }
+/* ==================== v70：传译误译档案（记录失误→围绕失误出相似题） ====================
+   st.transWrongs[key]={topic,n,dir,typos[],miss[],at}；自评「大体无碍」即销档，
+   磕绊/没写出来累计——正修传译轮掺入误译原句+同 topic 相似句，轻修套由 SRS 到期自然回访。 */
+function recordTransWrong(c,dir,mine,ref,gr){
+  try{
+    if(!c||!c.key) return;
+    st.transWrongs=st.transWrongs||{};
+    if(gr>=2){ if(st.transWrongs[c.key]){ delete st.transWrongs[c.key]; save(); } return; }
+    const en=dir==="zh2en", typos=[], miss=[];
+    if(en){
+      const tok=s=>String(s).replace(/[^A-Za-z0-9'’\-]/g," ").split(/\s+/).filter(Boolean);
+      const ops=_lcsOps(tok(mine),tok(ref),w=>String(w).toLowerCase());
+      ops.forEach(o=>{ if(o.t==="typo")typos.push(o.w+"→"+o.r); if(o.t==="miss"&&!DIFF_STOP.has(String(o.r).toLowerCase()))miss.push(o.r); });
+    }else{
+      const facts=String(ref).match(/[A-Za-z][A-Za-z'\-]*(?:\s+[A-Za-z][A-Za-z'\-]*)*|\d+(?:\.\d+)?(?:万|亿|平方米|公里|米|年|位|处|个)?/g)||[];
+      facts.forEach(f=>{ if(!String(mine).includes(f))miss.push(f); });
+    }
+    const old=st.transWrongs[c.key];
+    st.transWrongs[c.key]={key:c.key,topic:c.topic||"",at:Date.now(),n:(old?old.n:0)+1,gr,dir,
+      typos:[...new Set(typos)].slice(0,6),miss:[...new Set(miss)].slice(0,8)};
+    save();
+  }catch(e){}
+}
+/* 取本轮传译应掺入的复习句：误译原句优先，再用同 topic 的其他句做相似题，最多 limit 句 */
+function transReviewPick(limit){
+  const w=(st&&st.transWrongs)||{};
+  const valid=Object.keys(w).filter(k=>D.oralLib.some(x=>x.id===k));
+  if(!valid.length) return [];
+  valid.sort((a,b)=>(w[b].n-w[a].n)||(w[a].at-w[b].at));
+  const picked=valid.slice(0,Math.max(1,Math.floor(limit/2)));
+  const topics=[...new Set(picked.map(k=>w[k].topic).filter(Boolean))];
+  const pool=D.oralLib.filter(x=>topics.includes(x.topic)&&!picked.includes(x.id));
+  shuffleArr(pool);
+  for(const x of pool){ if(picked.length>=limit) break; picked.push(x.id); }
+  return picked.slice(0,limit);
+}
+/* v80：中英双语问契（S5 官料问契）——离线确定性构造，AI 在线时以 st.aiWenqiQ[pid] 覆写升级。
+   英文参考来源：考点标题里的语料编号（佛香阁（SUM-08）→ oralLib:SUM-08）→ 同 topic 的 INT/QA 句 → 无则留空待 AI。 */
+function wenqiOralMatch(p){
+  try{
+    const title=String((p&&p.title)||"");
+    const m=title.match(/[A-Z]+-\d+/);
+    if(m){ const x=D.oralLib.find(o=>o.id===m[0]); if(x)return x; }
+    const site=moduleSubject(p);
+    return D.oralLib.find(o=>o.topic===title||(site&&o.topic===site)||(o.topic&&title.includes(o.topic)))||null;
+  }catch(e){ return null; }
+}
+function localWenqiQA(p){
+  const azh=cleanMd(p&&p.text||"");
+  const oral=wenqiOralMatch(p);
+  const aen=oral?getEdit("oral:"+oral.id+":en",oral.en):"";
+  const site=enSiteName(p);
+  /* 锚点=考点标题去掉语料编号（佛香阁/排云殿/周口店北京人遗址），保证逐题问题不雷同 */
+  const anchor=String((p&&p.title)||"").replace(/[（(][A-Z]+-\d+[)）]/g,"").trim()||moduleSubject(p)||"这里";
+  const t=azh;
+  let qzh="",qen="";
+  let m=t.match(/([\d.]+)\s*米(?:[^。；]*(?:高))?/);
+  if(/高|通高/.test(t)&&m){ qzh="「"+anchor+"」有多高？它的建筑形制有什么特点？"; qen='How high is the "'+anchor+'" at '+site+'? Describe its structure briefly.'; }
+  if(!qzh){ m=t.match(/(\d{3,4})\s*年/);
+    if(m){ qzh="关于「"+anchor+"」，"+m[1]+" 年发生了什么？"; qen='What happened to the "'+anchor+'" in '+m[1]+'?'; } }
+  if(!qzh){ m=t.match(/(\d+(?:\.\d+)?)\s*(?:平方公里|公里|万|座|处|个)/);
+    if(m){ qzh="读时留意「"+anchor+"」的数字「"+m[0]+"」——它说明哪一项事实？"; qen='What does '+m[0]+' tell us about the "'+anchor+'"?'; } }
+  if(!qzh){ qzh="请介绍「"+anchor+"」的要点：它是什么、有什么标志性意义？"; qen='What can you tell us about the "'+anchor+'"? Why is it notable?'; }
+  return {qzh,qen,azh,aen,enId:oral?oral.id:"",zhOnly:!aen};
+}
+/* AI 中英问契批量升级（书页与试炼共用缓存，一次调用两处受益） */
+let _wenqiAiInflight=null;
+function ensureWenqiAI(pids,onDone){
+  try{
+    st.aiWenqiQ=st.aiWenqiQ||{};
+    const need=[...new Set((pids||[]).filter(k=>/^S5-/.test(k)&&!st.aiWenqiQ[k]))];
+    if(!need.length){ onDone&&onDone([]); return; }
+    if(!dsReady()){ need.forEach(k=>{ if(!st.aiWenqiQ[k]) st.aiWenqiQ[k]=null; }); return; }
+    if(_wenqiAiInflight){ _wenqiAiInflight.push(onDone); return; }
+    _wenqiAiInflight=[onDone].filter(Boolean);
+    const items=need.map(pid=>{
+      const p=D.pointsLib.find(x=>x.id===pid), bq=localWenqiQA(p);
+      return {pid, site:moduleSubject(p), zh:bq.azh, qzh:bq.qzh, en_hint:bq.aen||""};
+    });
+    const sys="You are creating bilingual Q&A for a Beijing tour-guide exam. Return ONLY a JSON array; each item: {\"pid\":string,\"qzh\":string,\"qen\":string,\"aen\":string}. qzh=基于中文要点的中文问题（具体到数字/名称/因果，每题不同）；qen=its natural English version；aen=标准英文参考回答（1-3句，含关键数字与专名，术语用 Tian'anmen Rostrum / the Palace Museum / the Summer Palace / the Temple of Heaven / the Great Wall / the Ming Tombs 等）。";
+    dsChat([{role:"system",content:sys},{role:"user",content:JSON.stringify(items)}],{ch:"bilingualQuiz",kind:"bilingualQuiz",max_tokens:2400,response_format:"json_object"})
+      .then(t=>{
+        let arr=null;
+        try{ const s=String(t).trim(); const j=JSON.parse(s.slice(s.indexOf("["),s.lastIndexOf("]")+1)); arr=Array.isArray(j)?j:null; }catch(e){}
+        const upgraded=[];
+        (arr||[]).forEach(o=>{ if(o&&o.pid&&need.includes(o.pid)){
+          st.aiWenqiQ[o.pid]={qzh:String(o.qzh||"").slice(0,100),qen:String(o.qen||"").slice(0,160),aen:String(o.aen||"").slice(0,500)};
+          upgraded.push(o.pid);
+        } });
+        need.forEach(k=>{ if(!st.aiWenqiQ[k]) st.aiWenqiQ[k]=null; });  /* 失败的留空，下次可再试 */
+        save();
+        const cbs=_wenqiAiInflight||[]; _wenqiAiInflight=null;
+        cbs.forEach(fn=>{ try{fn(upgraded);}catch(e){} });
+      }).catch(()=>{ const cbs=_wenqiAiInflight||[]; _wenqiAiInflight=null;
+        need.forEach(k=>{ if(!st.aiWenqiQ[k]) st.aiWenqiQ[k]=null; });
+        cbs.forEach(fn=>{ try{fn([]);}catch(e){} }); });
+  }catch(e){ _wenqiAiInflight=null; }
+}
+function wenqiQAOf(pid){
+  const p=D.pointsLib.find(x=>x.id===pid); if(!p)return null;
+  const bq=localWenqiQA(p), ai=(st.aiWenqiQ&&st.aiWenqiQ[pid])||null;
+  return {id:pid,star:p.star,sub:moduleSubject(p),
+    qzh:(ai&&ai.qzh)||bq.qzh, qen:(ai&&ai.qen)||bq.qen,
+    azh:bq.azh, aen:(ai&&ai.aen)||bq.aen, zhOnly:!(ai&&ai.aen)&&!bq.aen};
+}
+/* v70：任务内容注入（书页+题组）——mk 构建与回看自愈共用同一事实源。
+   旧问题：已交付任务走快照分支不注入，刷新内存后 D.lectures 缺键，
+   回看时 pages=[] 被兜底成「卷尾·本页无更多内容」空页。 */
+function rtInjectContent(o,cat){
+  cat=cat||o.rtCat;
+  if(cat==="a"){
+    /* v81：理经恢复单页考点卡（书页预告挂此页）——v80 误与 b 类合并导致理经书页丢失 */
+    const cardsObj=o.cards.map(rtCardOf).filter(Boolean);
+    D.lectures[o.id]=[{title:"经匣 · "+(o.name||""),lines:[{t:"p",x:"沈昭把节点卡推到你面前——读通它们，雾就有裂缝。"}],
+      items:cardsObj.map(c=>({id:c.key,text:c.text,star:c.star}))}];
+    if(!D.quizzes[o.id]) D.quizzes[o.id]=rtQuizForCards(o.cards);
+  } else if(cat==="b"){
+    const cardsObj=o.cards.map(rtCardOf).filter(Boolean);
+    /* 一问契一页（中英双语）；自录问契 QM 同样独立成页（中文） */
+    const bPages=cardsObj.map((c,i)=>{
+      const isQM=/^QM-/.test(c.key);
+      if(isQM){
+        return {title:"问契 · 自录 "+(i+1)+"/"+cardsObj.length,
+          wenqi:{id:c.key,star:c.star,sub:"自录问契",qzh:c.title||"来客之问",qen:"",azh:c.text,aen:"",zhOnly:true,self:true}};
+      }
+      const qa=wenqiQAOf(c.key)||{id:c.key,star:c.star,sub:"",qzh:c.title,qen:"",azh:c.text,aen:"",zhOnly:true};
+      return {title:"问契 · 来客 "+(i+1)+"/"+cardsObj.length, wenqi:qa};
+    });
+    D.lectures[o.id]=[{title:(o.name||"问契")+" · 本环 "+cardsObj.length+" 问",lines:[{t:"p",x:"晚棠把来客的疑问誊在签上——一问一页，先读问题，再揭示中英双语答法。"}],items:[]},...bPages];
+    if(!D.quizzes[o.id]) D.quizzes[o.id]=rtQuizForCards(o.cards);
+  } else if(cat==="rev"){
+    D.lectures[o.id]=D.lectures[o.id]||[];
+    if(!D.quizzes[o.id]) D.quizzes[o.id]=rtQuizForCards(o.cards);
+  } else if(cat==="c"){
+    const oo=rtOralOf(o.cards[0]);
+    D.lectures[o.id]=oo?rtOralPages(oo):[];
+    D.quizzes[o.id]=[];
+  } else if(cat==="d"){
+    const cardsObj=o.cards.map(rtCardOf).filter(Boolean);
+    /* 一句一页——中文块、英文块分开排版并分别标记难词/术语；首读轮逐页通读，进传译阶段后逐句"重读→练习" */
+    const dPages=cardsObj.map((c,i)=>({title:"传译底稿 · 句 "+(i+1)+"/"+cardsObj.length,
+      transCard:{id:c.id,topic:c.zh,zh:c.zh,en:c.en,i,cardsObj:null}}));
+    dPages.forEach(pg=>{ pg.transCard.cardsObj=cardsObj; });
+    D.lectures[o.id]=[{title:"传译底稿 · 今日 "+cardsObj.length+" 句",lines:[{t:"p",x:"晚棠把通界语料铺开——先逐页通读全部句子，随后从第 1 句开始：重读一遍，再遮住一边动笔传译。两个方向轮流来。"}],items:[]},...dPages];
+    D.quizzes[o.id]=[];
+  }
+}
 
 /* —— 3. 运行时排程器 ——
    游标从 st.done × st.rtPlan 快照反推：未做完的卡次日自动滚动重排（熬夜兜底，不惩罚）。
@@ -6608,6 +7138,26 @@ function weightedPid(pids,cnt){
   for(let i=0;i<pool.length;i++){ r-=ws[i]; if(r<=0) return pool[i]; }
   return pool[pool.length-1];
 }
+/* v70：口语句卡（oralLib 内的中英句对）只允许出「翻译题」，绝不允许异化为选择/填空/判断——
+   导游英语的复习方式就是双向传译；ORB 段落只允许出「整段复述题」（先回看再遮文诵）。 */
+const _oralLibIdSet=new Set();
+function isOralLibId(k){
+  if(!_oralLibIdSet.size) (D.oralLib||[]).forEach(x=>x&&x.id&&_oralLibIdSet.add(x.id));
+  return _oralLibIdSet.has(k);
+}
+function mkTransQuiz(key,dirForce){
+  const t=D.oralLib.find(x=>x.id===key); if(!t) return null;
+  const dir=dirForce||(Math.random()<0.5?"zh2en":"en2zh");
+  const zh=getEdit("oral:"+key+":zh",t.zh), en=getEdit("oral:"+key+":en",t.en);
+  return sanitizeQuiz({kind:"trans",key,pid:key,dir,zh,en,
+    q:dir==="zh2en"?zh:en,a:dir==="zh2en"?en:zh,topic:t.topic||"",why:"通界传译 "+key});
+}
+function mkOralRecQuiz(key){
+  const o=rtOralOf(key); if(!o) return null;
+  const text=rtOralText(key);
+  return sanitizeQuiz({kind:"oralrec",key,pid:key,h:o.h,name:o.name,sec:o.sec,
+    q:"整段回看后，凭记忆诵出「"+o.name+" · "+(o.h||("第"+(o.sec+1)+"节"))+"」",a:text,why:"整段复述 "+key});
+}
 function rtQuizForCards(cards,targetN){
   const pts=cards.map(k=>D.pointsLib.find(p=>p.id===k)).filter(Boolean);
   const mods=new Set(pts.map(p=>p.module).filter(Boolean));
@@ -6625,20 +7175,24 @@ function rtQuizForCards(cards,targetN){
     return z;
   };
   for(const c of cards){
+    /* v70：oralLib 中英句对（WEL/FAR/CITY/…）即便被烘焙进 pointsLib，也只出翻译题，
+       绝不出判断/填空/选择——从根上消灭「My name is ____」「注意安全（判断正误）」这类异化物 */
+    if(isOralLibId(c)){
+      const z=mkTransQuiz(c);
+      if(z){ z.key=c; seenCov.add(quizNormKey(z)); out.push(z); }
+      continue;
+    }
     const ent=kws.find(x=>x.p.id===c);
     if(ent){
-      /* v62 Task12：b 类问契 S5 → 英文来客之问（本地最小英文模板；无法构造则中文+待补标注） */
+      /* v80：b 类问契 S5 → 中英双语来客之问（一问一答，离线用语料库/模板，在线由 ensureWenqiAI 升级） */
       if(/^S5-/.test(c)){
-        const sub=moduleSubject(ent.p);
-        const cnQ=(sub?sub+" · ":"")+ptTitle(ent.p,c), cnA=cleanMd(ent.p.text);
-        const le=localEnRecall(ent.p);
-        let z;
-        if(le){
-          z=sanitizeQuiz({kind:"recall",lang:"en",key:c,pid:c,q:le.q,
-            a:le.a+"\n【中文要点】"+cnA,cn:{q:cnQ,a:cnA},why:"中英问契 "+c});
-        } else {
-          z=sanitizeQuiz({kind:"recall",key:c,pid:c,q:cnQ,a:cnA,_enPending:true,why:"问契 "+c});
-        }
+        const bq=wenqiQAOf(c)||{qzh:ptTitle(ent.p,c),qen:"",azh:cleanMd(ent.p.text),aen:"",zhOnly:true};
+        const z=sanitizeQuiz({kind:"recall",lang:"en",key:c,pid:c,
+          q:bq.qen||bq.qzh,
+          a:bq.aen||bq.azh,
+          cn:{q:bq.qzh,a:bq.azh},
+          enOnly:!bq.aen,
+          why:"中英问契 "+c});
         z.key=c; seenCov.add(quizNormKey(z)); out.push(z); continue;
       }
       /* v62 Task6：覆盖题也题面去重——5 类题型逐个试，题型前缀互异保证必然取到不重复题面 */
@@ -6651,30 +7205,42 @@ function rtQuizForCards(cards,targetN){
       if(!z) z=genOne(ent,"judge");
       seenCov.add(quizNormKey(z)); z.key=c; z.pid=c; out.push(z); continue;
     }
-    /* 非笔试卡 → 来客之问（自评三档）：问契 / 修诵回潮 / 传译回潮 */
+    /* 非笔试卡：修诵段落 → 整段复述题（先回看再遮文诵）；传译句 → 翻译题；问契 → 来客之问（自评三档） */
     const cd=rtCardOf(c); if(!cd) continue;
+    if(cd.cat==="c"){
+      const z=mkOralRecQuiz(c);
+      if(z){ z.key=c; seenCov.add(quizNormKey(z)); out.push(z); }
+      continue;
+    }
+    if(cd.cat==="d"){
+      const z=mkTransQuiz(c);
+      if(z){ z.key=c; seenCov.add(quizNormKey(z)); out.push(z); }
+      continue;
+    }
     let qt="",at="",wy="先凭记忆作答，再对照要点自评——断续或未想起都会进入回潮名册。";
     if(cd.cat==="b"){
       if(/^QM-/.test(c)) qt=cd.title||"来客之问";
       else { const pp=D.pointsLib.find(x=>x.id===c); const sub=pp?moduleSubject(pp):""; qt=(sub?sub+" · ":"")+(cd.title||"来客之问"); }
       at=cd.text;
     }
-    else if(cd.cat==="c"){ const o=cd.oral; qt="凭记忆诵出「"+o.name+" · "+(o.h||("第"+(o.sec+1)+"节"))+"」这一段"; at=cd.text; }
-    else if(cd.cat==="d"){ qt="传译：「"+cd.zh+"」"; at=cd.en; }
     if(qt){ const z=sanitizeQuiz({kind:"recall",key:c,pid:c,q:qt,a:at,why:wy}); z.key=c; seenCov.add(quizNormKey(z)); out.push(z); }
   }
-  /* 题量 = 显式 targetN（验界/守关 boss 传 8/10/12，不动）否则 b=Math.round(2.2a)：先每卡 1 题覆盖，追加题权重抽取、同卡不超 3、题面去重 */
-  const target=Math.max(1,Math.round(targetN||quizTargetN(cards.length)));
+  /* 题量 = 显式 targetN（验界/守关 boss 传 8/10/12，不动）。
+     v80：b 问契/口语/段落卡严格"一卡一题"（不追加笔试题）；纯 a 笔试点才按 2.2a 追加。 */
+  const oneEach=cards.every(c=>/^S5-|^QM-/.test(c)||isOralLibId(c)||/^ORB-/.test(c));
+  const target=targetN?Math.max(1,Math.round(targetN)):(oneEach?cards.length:Math.max(1,Math.round(quizTargetN(cards.length))));
   let guard=0;
   const seenQ=new Set(out.map(quizNormKey));
   while(out.length<target&&kws.length&&guard<target*4){ guard++;
     const cnt={}; out.forEach(z=>cnt[z.pid]=(cnt[z.pid]||0)+1);
     const pidPick=weightedPid(pids,cnt);
     if(!pidPick) break;
+    /* v80：追加题只允许 S1-4 笔试点；S5 问契卡一律一卡一题，不得补判断/填空 */
+    if(!/^S[1-4]-/.test(pidPick)) continue;
     const ent=kws.find(x=>x.p.id===pidPick);
     const z=genOne(ent,forms[Math.floor(Math.random()*forms.length)]);
-    z.key=ent.p.id; z.pid=ent.p.id;
-    if(/^S5-/.test(z.pid)) z._enPending=true;   /* v62 Task12：等灵脉补英文版 */
+    if(!z) continue;
+    z.key=pidPick; z.pid=pidPick;
     if(seenQ.has(quizNormKey(z))) continue;
     seenQ.add(quizNormKey(z)); out.push(z);
   }
@@ -6692,34 +7258,183 @@ function hlOralAnchors(text){
   });
   return out;
 }
+/* v80：传译/问契中文块标记——数字与计量单位、引号术语分别高亮 */
+function hlTransZh(s){
+  let h=esc(s);
+  h=h.replace(/\d[\d.,]*(?:\s?(?:万|亿|平方米|平方公里|公里|米|年|位|处|座|间|个|次|％|%))?/g,m=>`<em>${m}</em>`);
+  h=h.replace(/(「[^」]*」|“[^”]*”|『[^』]*』)/g,m=>`<b style="color:var(--gold)">${m}</b>`);
+  return h;
+}
+/* v80：单句传译底稿页（阅读态）——中文/英文分开成块，各带校订入口 */
+function transCardPageHtml(tc){
+  return `<div style="padding:6px">
+    <div class="book" style="border-color:var(--gold)">
+      <div class="bp">此界文 · 中文 <button class="btn sm ghost trans-edit-btn" data-lang="zh" type="button" style="float:right;font-size:11px;padding:2px 8px">✏️ 校订</button></div>
+      <div style="font-size:14.5px;line-height:2.1">${hlTransZh(tc.zh)}</div>
+    </div>
+    <div style="text-align:center;color:var(--dim);font-size:13px;margin:10px 0">⇅ 对照</div>
+    <div class="book" style="border-color:var(--neon)">
+      <div class="bp">彼界文 · English <button class="btn sm ghost trans-edit-btn" data-lang="en" type="button" style="float:right;font-size:11px;padding:2px 8px">✏️ 校订</button></div>
+      <div style="font-size:14px;line-height:2.1">${hlOralAnchors(tc.en)}</div>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--dim)">${esc(tc.topic||"通用")} · <em style="font-style:normal;color:var(--gold)">金色</em>为数字/术语/专名，先通读理解，练习阶段再动笔。</div>
+  </div>`;
+}
+/* v80：双语问契书页——问题双语并列，答案揭示后英文/中文分块 */
+function wenqiPageHtml(w){
+  const star="★".repeat(+w.star||1);
+  const zhQ=`<div style="margin-bottom:10px">
+      <div style="font-size:11px;color:var(--gold);letter-spacing:.1em;margin-bottom:3px">来客之问 · 中文</div>
+      <div style="font-size:15px;line-height:1.9;color:var(--fg)">${hlTransZh(w.qzh)}</div>
+    </div>`;
+  const enQ=w.qen?`<div style="margin-bottom:6px">
+      <div style="font-size:11px;color:var(--neon);letter-spacing:.1em;margin-bottom:3px">Question · English</div>
+      <div style="font-size:14px;line-height:1.9;color:var(--fg)">${esc(w.qen)}</div>
+    </div>`:"";
+  const enA=w.aen?`<div class="book" style="border-color:var(--neon);margin-top:10px">
+      <div class="bp">English reference</div>
+      <div style="font-size:13.5px;line-height:2">${hlOralAnchors(w.aen)}</div>
+    </div>`:(w.self?"":`<div style="margin-top:10px;padding:8px 10px;border:1px dashed var(--gold);border-radius:8px;font-size:12px;color:var(--gold)">🌐 英文参考将在灵脉连通后自动补全——先记中文答法。</div>`);
+  const zhA=`<div class="book" style="margin-top:10px">
+      <div class="bp">中文要点</div>
+      <div style="font-size:13.5px;line-height:2">${hlTransZh(w.azh)}</div>
+    </div>`;
+  return `<div style="padding:6px">
+    <div class="pt" style="border:none;padding:0">
+      <div style="font-size:11px;color:var(--dim);margin-bottom:6px">${esc(w.id)} · ${esc(w.sub||"")} ${star}</div>
+      ${zhQ}${enQ}
+      <button class="btn sm primary" id="wqReveal" type="button" style="margin-top:4px">揭示中英双语答法</button>
+      <div id="wqAns" hidden style="margin-top:10px">${enA}${zhA}</div>
+    </div>
+  </div>`;
+}
+/* v81：整景理解本地概括——用景点中文名+功能画像组织"内容地图"，只就真正的年份/数字
+   直问具体事实，绝不嵌英文小标题、不列英文词单。返回 {summary, questions[]}；
+   AI 在线时由 aiOralBriefUpgrade 用真概括整体替换。 */
+function localOralBrief(x){
+  const {name,tags,nums,sentences}=x;
+  const tagSet=new Set(tags||[]);
+  const isYear=n=>/^(1\d{3}|20[0-9]\d)$/.test(n);   /* 1000–2099 才算年份，排除 654/600 等数量词 */
+  const years=(nums||[]).filter(isYear);
+  const measures=(nums||[]).filter(n=>!isYear(n)).slice(0,4);
+  const site=name||"这处地方";
+  let summary;
+  if(tagSet.has("history")){
+    summary="这一节按时间顺序讲「"+site+"」的来历与变迁"+(years.length?("，年份线索有 "+years.slice(0,4).join("、")):"")+"。读的时候把每个年份各自对应到一件事——始建、被毁、重建或列入遗产，时间线就清楚了。";
+  } else if(tagSet.has("scale")){
+    summary="这一节用数字交代「"+site+"」的规模与规制"+(measures.length?("（"+measures.join("、")+"）"):"")+"。读时弄清每个数字各自量的是什么——面积、高度、间数还是长度，别让它们互相串门。";
+  } else if(tagSet.has("route")){
+    summary="这一节是行进路线：按顺序交代从哪进入、依次经过哪几处、在哪收尾。跟着脚步记次序，不要跳。";
+  } else if(tagSet.has("remind")){
+    summary="这一节是当面叮嘱，提了几条要做与不要做的事。读时分清每条的要求与理由，这正是现场最容易考、也最实用的部分。";
+  } else if(tagSet.has("meaning")){
+    summary="这一节解释这处建筑或陈设的名称由来与规制寓意。读时抓住『字面意思—实际说法—象征什么』三层。";
+  } else if(tagSet.has("greet")){
+    summary="这是开场致意：问候来客、自我介绍、交代今日安排与注意事项。读时按『问候→介绍→路线→提醒』四环拆开，每环对应一句话。";
+  } else if(tagSet.has("closing")){
+    summary="这是收尾道别：总结行程、致谢、送上祝福。读时留意它按什么顺序收束，以及固定礼貌套话的说法。";
+  } else {
+    const dn=[...years,...measures].slice(0,4);
+    summary="这一节共 "+(sentences||[]).length+" 句，围绕「"+site+"」展开"+(dn.length?("，读时先盯住数字（"+dn.join("、")+"）各自对应哪桩事实"):"")+"，再把句子串成一条线。";
+  }
+  const questions=[];
+  if(tagSet.has("history")){
+    years.slice(0,3).forEach(n=>questions.push(n+" 年这一年，原文说发生了什么事？"));
+    questions.push("它后来获得了什么认定（世界遗产或文物保护单位）？是哪一年？");
+  } else if(tagSet.has("scale")){
+    measures.slice(0,3).forEach(n=>questions.push("数字 "+n+" 量的是哪一项——面积、高度、间数还是长度？"));
+    if(!measures.length) questions.push("这一节报了哪些数字？各自量的是什么？");
+  } else if(tagSet.has("route")){
+    questions.push("按原文，行进路线从哪里开始、依次经过哪几处？");
+    questions.push("路线的终点是哪里？中途最不能错过的一处是什么？");
+  } else if(tagSet.has("remind")){
+    questions.push("原文一共提了几条要求？哪几条是『要做』、哪几条是『不要做』？");
+    questions.push("这些提醒各自的理由是什么？");
+  } else if(tagSet.has("meaning")){
+    questions.push("这处地方为什么叫这个名字？字面本义和实际说法分别是什么？");
+    questions.push("它的规制或摆设象征什么？");
+  } else {
+    questions.push("用三句话说出这一节讲了哪几件事。");
+    questions.push("这一节里最关键的一个数字或事实是什么？它支撑哪件事？");
+  }
+  if(!questions.length) questions.push("用三句话说出这一节讲了哪几件事。");
+  return {summary,questions:questions.slice(0,3)};
+}
+/* v81：整景理解 AI 通路——读原文真概括、抓重点，转化为带读问题；按"节+内容签名"缓存（校订后自动失效） */
+function buildOralBriefMsgs(d){
+  const sys="你是北京导游资格备考游戏的英文阅读教练。考生精读前，你先帮他建立理解框架。根据下面的英文段落原文输出两部分，全部用中文：\n"
+    +"【概括】2~3 句：这一段实际讲了什么、重点事实是什么（时间、地点、人物、数字、因果、顺序），像一张内容地图；要提炼，不要逐句翻译，不要引用英文原句。\n"
+    +"【带读问题】2~3 个：考生带着这些问题去读原文，每个问题的答案都必须能在原文中找到；要具体到段落里的事实（哪一年、从哪到哪、为什么、几个、多高），不要空泛、不要问'是年份还是高度'这类元问题。\n"
+    +"铁律：只依据原文，不编造原文没有的事实；禁止带团、宣讲、导游工作、游客等现实场景词；不要 emoji、不要寒暄、不要标题以外的说明；总字数不超过 240。";
+  return {messages:[{role:"system",content:sys},{role:"user",content:"景点："+d.name+"\n小节："+d.h+"\n英文段落原文：\n"+d.fullText}],
+    opts:{ch:"oralBrief",kind:"polish",max_tokens:520}};
+}
+function oralBriefHtml(b,ai){
+  return `<div class="ob-wrap">
+    <div style="font-size:11px;color:var(--gold);letter-spacing:.1em;margin-bottom:3px">${ai?"✦ 整景概括（灵脉）":"这一节在讲什么"}</div>
+    <div style="font-size:13.5px;line-height:2;color:var(--fg)">${esc(b.summary)}</div>
+    <div style="font-size:11px;color:var(--neon);letter-spacing:.1em;margin:10px 0 3px">带着这些问题读</div>
+    <ol style="margin:0;padding-left:20px;font-size:13px;line-height:2;color:var(--fg2)">
+      ${(b.questions||[]).map(q=>`<li>${esc(q)}</li>`).join("")}
+    </ol></div>`;
+}
+async function aiOralBriefUpgrade(d,slot){
+  if(!slot||!slot.isConnected||!dsReady()) return;
+  st.oralBrief=st.oralBrief||{};
+  const key=d.fullId+":"+d.sec, rec=st.oralBrief[key];
+  if(rec&&rec.sig===d.sig&&rec.brief){ slot.innerHTML=oralBriefHtml(rec.brief,true); return; }
+  const badge=document.createElement("div");
+  badge.style.cssText="font-size:10px;color:var(--dim);margin-top:6px"; badge.textContent="灵脉正在通读全段、提炼概括……";
+  slot.appendChild(badge);
+  let done=false;
+  const timer=setTimeout(()=>{ if(!done){ done=true; badge.remove(); } },15000);
+  try{
+    const built=buildOralBriefMsgs(d);
+    const raw=await dsChat(built.messages,built.opts);
+    if(done||!slot.isConnected) return;
+    clearTimeout(timer); done=true; badge.remove();
+    const txt=String(raw||"").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu,"").trim();
+    const mS=txt.match(/【?概括】?([\s\S]*?)(?:【带读问题】|$)/);
+    const mQ=txt.match(/【?带读问题】?([\s\S]*)$/);
+    if(!mS||!mQ) return;  /* 格式不符保本地 */
+    const summary=mS[1].replace(/^[\s:：\n]+|[\s]+$/g,"");
+    const questions=mQ[1].split(/\n+/).map(s=>s.replace(/^[\s0-9０-９.、）)】\-\*]+/,"").trim()).filter(Boolean).slice(0,3);
+    if(summary.length<10||questions.length<1||/带团|宣讲|导游工作|游客/.test(txt)) return;
+    const brief={summary,questions};
+    st.oralBrief[key]={sig:d.sig,brief}; save();
+    slot.innerHTML=oralBriefHtml(brief,true);
+  }catch(e){ clearTimeout(timer); try{badge.remove();}catch(_){} }
+}
 function rtOralPages(o){
   const cur=getEdit("full:"+o.fullId+":"+o.sec,o.raw);
   const sentences=cur.match(/[^.!?]+[.!?]+/g)||[cur];
   const est=rtSpkMin(cur.split(/\s+/).length);
   const whole=(D.oralFull.find(x=>x.aid===o.aid)||{sections:[]});
   const wholeEst=rtSpkMin((whole.sections||[]).reduce((s,x)=>s+((x.text||x.en||"").split(/\s+/).length),0));
-  /* v64 p7：整景理解——从本段真实数字/专名生成「云汀口吻预览」与有的放矢的问题 */
+  /* v81：整景理解——先识别这一段在全篇里的功能（开场/讲史/报数/说路线/提醒/释名/收尾），
+     本地据此给中文内容地图与具体事实问题；AI 在线时读原文真概括整体替换。 */
+  const lc=cur.toLowerCase();
+  const tags=[];
+  if(/good (morning|afternoon|evening)|welcome to|ladies and gentlemen/.test(lc)) tags.push("greet");
+  if(/coming to an end|safe journey|farewell|thank you for|hope you (have|enjoyed)/.test(lc)) tags.push("closing");
+  if(/\b(built|founded|dynasty|emperor|century|inscribed|heritage|rebuilt|renamed)\b/.test(lc)&&/\d/.test(cur)) tags.push("history");
+  if(/square meters?|\bmeters? (high|tall)\b|\bcovers\b|\d[\d,]*\s*(?:rooms?|bays?|halls?)\b/.test(lc)) tags.push("scale");
+  if(/central axis|we will (follow|visit|see|pass)|first,?\s|and then|next,?|pass(?:ed)? through|enter the/.test(lc)) tags.push("route");
+  if(/please|remember two things|don'?t|do not|stay with|flash photography|follow me/.test(lc)) tags.push("remind");
+  if(/why .{0,20}(called|named)|is called|the name means|symboli[sz]es|originally (built|named)/.test(lc)) tags.push("meaning");
   const nums=[]; (cur.match(/\b\d{2,4}(?:\.\d+)?\b/g)||[]).forEach(n=>{ if(!nums.includes(n)) nums.push(n); });
-  const props=oralKeywords(cur,10).filter(k=>/^[A-Z][a-zA-Z]+$/.test(k)&&k.length>=3&&!ORAL_STARTER.has(k)).slice(0,4);
   const hTitle=(o.h||("第"+(o.sec+1)+"节")).replace(/^\d+[.、]\s*/,"");
-  const firstSen=sentences[0]?sentences[0].trim().slice(0,35):"";
-  const lastSen=sentences.length>1?sentences[sentences.length-1].trim().slice(0,35):"";
-  const hints=nums.slice(0,3).map(n=>"数字 "+n).concat(props);
-  const prevLine=hints.length
-    ?"云汀指尖在卷上轻点，几处金字先浮了起来：「"+hints.slice(0,6).join(" · ")+"」——先和这些词、数字打个照面：等下读正文，留意它们在句中是什么身份，和前后文怎么咬合。（只助理解，不考原文）"
-    :"云汀轻声说：这一段没有冷僻的名字和数字，你只管跟着句子走，听清它在描述什么画面。（只助理解，不考原文）";
-  const qs=[];
-  if(nums[0]) qs.push("读到「"+nums[0]+"」时停一停——它说的是年份、高度还是数量？这个数字在段里支撑什么事实？");
-  if(props[0]) qs.push("「"+props.slice(0,2).join("」「")+"」是地名、寒暄称谓还是普通词？在本段里各自扮演什么角色，读到时试着用自己的话转述。");
-  qs.push("把它们串起来——这一段到底在讲什么、为什么要讲它？读完讲给我听。");
+  /* v81：本地概括即时上屏——中文名+功能画像，问题直追具体年份/数字事实；
+     AI 在线时由 aiOralBriefUpgrade 读全段原文真概括后整体替换（按内容签名缓存） */
+  const briefLocal=localOralBrief({name:o.name,tags,nums,sentences});
   return [
     {title:"整景理解 · "+o.name+" §"+(o.sec+1),
      lines:[
-      {t:"p",x:"〔通篇「"+o.name+"」约 "+wholeEst+" 分钟 · 本段约 "+est+" 分钟〕"},
-      {t:"n",x:"云汀翻开这一段：「"+hTitle+"」，"+sentences.length+" 句。先扫一眼它讲什么——从「"+firstSen+"…」"+(lastSen&&lastSen!==firstSen?"到「"+lastSen+"…」落脚":"")+"。抓住了这条线，再逐句过就不慌了。"},
-      {t:"n",x:prevLine},
-      {t:"n",x:"云汀眨眨眼，给你留了问题——"+qs.join(" ")}
-     ],_oral:{fullId:o.fullId,sec:o.sec,name:o.name,h:o.h,est,wholeEst}},
+      {t:"p",x:"〔通篇「"+o.name+"」约 "+wholeEst+" 分钟 · 本段约 "+est+" 分钟〕"}
+     ],
+     oralBriefData:{fullId:o.fullId,sec:o.sec,name:o.name,h:hTitle,est,wholeEst,
+       sig:cur.length+":"+cur.slice(0,60), local:briefLocal, fullText:cur},
+     _oral:{fullId:o.fullId,sec:o.sec,name:o.name,h:o.h,est,wholeEst}},
     {title:"咒祷辞 · 段落卡",
      lines:[
       {t:"p",x:"一句一行 · 锚点词已标出。逐句读过，心里过一遍画面；表述不妥处点「校订本段」留存你的版本。"}
@@ -6768,6 +7483,14 @@ function buildRuntimePlan(day){
       bump(snap?snap.cards:[]);
       if(snap){ let o=QMAP[id];
         if(!o) o=Object.assign({id,rt:true,rtCat:snap.cat,kind:"main",chain:"rt",tlabel:RT_TLABEL[snap.cat]||"消印",npc:RT_NPC[snap.cat]||"tina",day,gd:gds[gi]&&gds[gi].gd,name:"已交付之环",xp:0,coin:0,dur:0,minLv:1,prev:[],cards:snap.cards.slice()},opts||{});
+        o.rtCat=o.rtCat||snap.cat;
+        if(!Array.isArray(o.cards)||!o.cards.length) o.cards=snap.cards.slice();
+        /* v81：已交付任务刷新内存后缺内容/空数组/结构全坏→按快照幂等重建（rev 除外） */
+        const _le=D.lectures[o.id]||[];
+        const _leOK=_le.some(pg=>(pg.items&&pg.items.length)||pg.wenqi||pg.transCard||pg.oralLines||pg.oralBriefData);
+        if(snap.cat!=="rev"&&!_leOK){
+          try{ rtInjectContent(o,snap.cat); }catch(e){ console.warn("[rtInject] 快照重建失败",id,e); }
+        }
         quests.push(o); return o; }
       return null; }
     bump(cards);
@@ -6781,30 +7504,7 @@ function buildRuntimePlan(day){
     o.cards=cards.slice();
     o.name=o.name||"";
     st.rtPlan[id]={cat,cards:o.cards};
-    /* 内容注入：a/b/rev 走通用书页+应问；c/d 带专用页（复述/传译在最后阶段） */
-    if(cat==="a"||cat==="b"){
-      const cardsObj=o.cards.map(rtCardOf).filter(Boolean);
-      const pageTitle=cat==="a"?("经匣 · "+(o.name||"")):(o.name||"问契");
-      D.lectures[o.id]=[{title:pageTitle,lines:[{t:"p",x:cat==="a"?"沈昭把节点卡推到你面前——读通它们，雾就有裂缝。":"晚棠把来客的疑问誊在签上——先记问法，再记答法；答案在你点下「揭示」后才会出现。"}],items:cardsObj.map(c=>{
-        if(c.cat!=="b") return {id:c.key,text:c.text,star:c.star};
-        const pp=D.pointsLib.find(z=>z.id===c.key);
-        const sub=pp?moduleSubject(pp):"";
-        const qq=/^QM-/.test(c.key)?(c.title||"来客之问"):((sub?sub+" · ":"")+(c.title||"来客之问"));
-        return {id:c.key,star:c.star,qa:{q:qq,a:c.text}};
-      })}];
-      D.quizzes[o.id]=rtQuizForCards(o.cards);
-    } else if(cat==="rev"){
-      D.lectures[o.id]=[];
-      D.quizzes[o.id]=rtQuizForCards(o.cards);
-    } else if(cat==="c"){
-      const oo=rtOralOf(o.cards[0]);
-      D.lectures[o.id]=oo?rtOralPages(oo):[];
-      D.quizzes[o.id]=[];
-    } else if(cat==="d"){
-      const cardsObj=o.cards.map(rtCardOf).filter(Boolean);
-      D.lectures[o.id]=[{title:"传译底稿 · 今日五句",lines:[{t:"p",x:"晚棠把通界语料铺开——提交后对照参考，凭诚实自评；两个方向轮流来。"}].concat(cardsObj.map((c,i)=>({t:"p",x:(i+1)+". "+c.zh+"  ⟷  "+c.en, editId:"oral:"+c.id+":zh", editIdEn:"oral:"+c.id+":en"}))), transEdit:true, transCards:cardsObj}];
-      D.quizzes[o.id]=[];
-    }
+    rtInjectContent(o,cat);
     quests.push(o);
     return o;
   }
@@ -6824,7 +7524,10 @@ function buildRuntimePlan(day){
       const subA=seq[s0], subB=seq[(s0+1)%4], subC=seq[(s0+2)%4];
       const tA=cyc(RTINDEX.bySubj[subA],c2[subA],4);
       if(tA.length) mk(gi,1,"a",tA,{name:"理经 · "+RT_SUBJ_NAME[subA]+" "+tA.length+" 匣",goal:"读通"+tA.length+"张节点卡，应问破雾全数通过",dur:Math.round(2+tA.length*2.5),xp:tA.length*5+5,coin:tA.length*2+4});
-      const tD=cyc(RTINDEX.trans,c2.trans,5);
+      let tD=cyc(RTINDEX.trans,c2.trans,5);
+      /* v70：传译不机械重复——每轮掺入误译原句与同 topic 相似句（记录误译→围绕误译再练） */
+      const tReview=transReviewPick(2).filter(k=>!tD.includes(k));
+      if(tReview.length) tD=tReview.concat(tD).slice(0,5);
       if(tD.length) mk(gi,2,"d",tD,{name:"传译 · 通界五句",goal:"传译5句，对照参考自校",dur:7,xp:15,coin:8});
       /* b2-3：官料问契(S5) + 自录问契(QM final) 合并为统一 wen 索引 */
       const qmFinal=(st.myOral||[]).filter(m=>m.status==="final").map(m=>m.id);
@@ -7293,9 +7996,72 @@ function quizOptPname(pid){
   const pt=D.pointsLib.find(p=>p.id===pid);
   return pt?ptTitle(pt,pid):(pid||"其他考点");
 }
+/* v70：无 ometa 的旧题实时归因——干扰项本就是「同模块其他考点真句」，
+   在考点库中反查它真正的出处，给出「张冠李戴」式实质说明（只查同模块→同科，控性能）。 */
+function quizNormSent(s){ return String(s==null?"":s).replace(/[\s，。、；：？！,.:;?!“”‘’（）()「」【】《》—…·_-]/g,""); }
+function quizOptSource(selfPid,text){
+  const raw=String(text==null?"":text).trim();
+  const T=quizNormSent(raw);
+  if(T.length<8) return null;
+  const mod=/^(S\d+-\d+)/.exec(selfPid||""), sub=/^(S\d+)/.exec(selfPid||"");
+  const scopes=[];
+  if(mod) scopes.push(D.pointsLib.filter(p=>(p.id||"").startsWith(mod[1])));
+  if(sub) scopes.push(D.pointsLib.filter(p=>(p.id||"").startsWith(sub[1])));
+  let best=null;
+  for(const arr of scopes){
+    for(const p of arr){
+      if(p.id===selfPid) continue;
+      const body=String(p.text||"");
+      if(raw.length>=10&&body.indexOf(raw)>=0){ best={pid:p.id,name:ptTitle(p,p.id),cov:2}; break; }
+      const sentences=body.split(/[。；;！？!?\n]/);
+      for(const s0 of sentences){
+        const sen=quizNormSent(s0);
+        if(sen.length<8) continue;
+        let cov=0;
+        if(sen.includes(T)||T.includes(sen)) cov=Math.min(sen.length,T.length)/Math.max(sen.length,T.length);
+        else{
+          const mn=Math.min(sen.length,T.length);
+          if(mn<10) continue;
+          const ss=sen.length<=T.length?sen:T, ls=sen.length<=T.length?T:sen;
+          let hit=0; for(let i=0;i<ss.length-1;i++){ if(ls.indexOf(ss.slice(i,i+2))>=0) hit++; }
+          cov=hit/(ss.length-1);
+          if(cov<0.8) cov=0;
+        }
+        if(cov>0&&(!best||cov>best.cov)) best={pid:p.id,name:ptTitle(p,p.id),cov};
+      }
+      if(best&&best.cov>=0.95) break;
+    }
+    if(best&&best.cov>=0.9) return best;
+  }
+  return best;
+}
+/* v70：正解与错句的论断差分——剥出公共主语后的表语对立，替代「与事实不符」空话 */
+function quizClaimDiff(correct,wrong){
+  const A=String(correct||""),B=String(wrong||"");
+  const n=Math.min(A.length,B.length);
+  let k=0; while(k<n&&A[k]===B[k])k++;
+  if(k<2) return "";
+  const pre=A.slice(0,k);
+  const tail=A.slice(k).split(/[，。、；：！？,.:;?!（(]/)[0]||"";
+  const wtail=B.slice(k).split(/[，。、；：！？,.:;?!（(]/)[0]||"";
+  if(tail.length<3||wtail.length<3) return "";
+  const subj=pre.split(/[，。、；：！？,.:;?!]/).pop()||pre;
+  return `同一句开头「${esc(clipClause(subj,18))}」之后，正解是「<b style="color:var(--gold)">${esc(clipClause(tail,30))}</b>」，此选项换成了「<s style="color:var(--danger)">${esc(clipClause(wtail,30))}</s>」——论断被偷换。`;
+}
 /* v69：选择题/选错项/多选逐项归因——“其他选项为什么不对”：本身有误（划出错处）或不符题意（指出所属考点） */
 function quizOptWhyHtml(z){
   if(!z||!Array.isArray(z.opts)) return "";
+  /* v70：无 ometa / ometa 缺 pid 的旧题——实时反查归属考点，查不到再做论断差分；
+     绝不允许输出「与正解所述事实不符」这类零信息空话 */
+  const whyAttribution=(o)=>{
+    const src=quizOptSource(z.pid,o);
+    if(src) return `这句话本身成立，但它讲的是<b style="color:var(--cyber)">${esc(src.name)}</b>的内容——本题并未问此事，属张冠李戴。`;
+    const core=z.fact||quizPointCore(z)||"";
+    const fact=(z.kind==="wrongone"||z.kind==="multi")?core:String(z.a||"");
+    const diff=fact?quizClaimDiff(fact,o):"";
+    if(diff) return diff;
+    return `正解的明确表述是「${esc(clipClause(String(core||z.a||""),40))}」，此项不在其中。`;
+  };
   const lines=[];
   z.opts.forEach((o,i)=>{
     const m=(z.ometa&&z.ometa[i])||null;
@@ -7303,24 +8069,25 @@ function quizOptWhyHtml(z){
     if(z.kind==="choice"){
       if(o===z.a) return;
       if(m&&m.t==="bad") lines.push(`「${short}」本身表述有误——选项中「<s style="color:var(--danger)">${esc(m.to)}</s>」应为「<b style="color:var(--gold)">${esc(m.from)}</b>」。`);
-      else if(m&&m.t==="other") lines.push(`「${short}」这句话本身没错，但它属于<b style="color:var(--cyber)">${esc(quizOptPname(m.pid))}</b>的内容——答非本题所问。`);
+      else if(m&&m.t==="other"&&m.pid) lines.push(`「${short}」这句话本身没错，但它属于<b style="color:var(--cyber)">${esc(quizOptPname(m.pid))}</b>的内容——答非本题所问。`);
       else if(m&&m.t==="fill") lines.push(`「${short}」与本题考点无关，属凑数项。`);
       else {
         /* v77：排序整链类选项——逐项说明错在哪一位、哪两个环节颠倒（无 ometa 的老题同样生效） */
         const ow0=quizOrderWhy(z.a,o);
-        lines.push(ow0?`「${short}」错在次序：${ow0}`:`「${short}」与正解「${esc(clipClause(String(z.a),34))}」所述事实不符。`);
+        lines.push(ow0?`「${short}」错在次序：${ow0}`:whyAttribution(o));
       }
     } else if(z.kind==="wrongone"){
       if(o===z.a){
         if(m&&m.t==="bad") lines.push(`要找的错误项：「${short}」——其中「<s style="color:var(--danger)">${esc(m.to)}</s>」应为「<b style="color:var(--gold)">${esc(m.from)}</b>」。`);
-        else lines.push(`要找的错误项：「${short}」表述与考点事实不符。`);
-      } else if(m&&m.t==="other") lines.push(`「${short}」是<b style="color:var(--cyber)">${esc(quizOptPname(m.pid))}</b>的正确表述——并非要找的错误项。`);
+        else lines.push(`要找的错误项：${whyAttribution(o)}`);
+      } else if(m&&m.t==="other"&&m.pid) lines.push(`「${short}」是<b style="color:var(--cyber)">${esc(quizOptPname(m.pid))}</b>的正确表述——并非要找的错误项。`);
       else if(m&&m.t==="fill") lines.push(`「${short}」与本题考点无关，属凑数项。`);
+      else lines.push(`「${short}」${whyAttribution(o)}`);
     } else if(z.kind==="multi"){
       if((z.a||[]).includes(o)) return;
       if(m&&m.t==="bad") lines.push(`「${short}」是错误陈述——其中「<s style="color:var(--danger)">${esc(m.to)}</s>」应为「<b style="color:var(--gold)">${esc(m.from)}</b>」。`);
-      else if(m&&m.t==="mismatch") lines.push(`「${short}」与本题考点事实不符，不能入选。`);
-      else lines.push(`「${short}」并非本考点的正确表述。`);
+      else if(m&&m.t==="fill") lines.push(`「${short}」与本题考点无关，属凑数项。`);
+      else lines.push(`「${short}」${whyAttribution(o)}`);
     }
   });
   if(!lines.length) return "";
@@ -7338,13 +8105,11 @@ function quizExplainHtml(z,correct,mine){
     if(missed.length) parts.push(`你漏选：<b ${DANGER}>${esc(missed.join("；"))}</b>`);
     if(extra.length) parts.push(`你错选：<b ${DANGER}>${esc(extra.join("；"))}</b>`);
     if(!missed.length&&!extra.length) parts.push(`作答集合须与正确集合完全一致，少选、错选均判错。`);
-    /* v69：错选项逐项归因（错点划线 / 属其他考点 / 凑数） */
-    const ow=quizOptWhyHtml(z); if(ow) parts.push(ow);
+    /* v80：每个错项"本身是什么、为何不能选"交给 AI 逐项讲（见下方讲解气泡），本地不再硬凑 */
   } else if(z.kind==="wrongone"){
-    parts.push(`错误的说法：<b ${DANGER}>${esc(String(z.a))}</b>`);
-    if(mine!=null&&String(mine)!==String(z.a)) parts.push(`你选的「<span ${FG}>${esc(String(mine))}</span>」其实是<b ${GOLD}>正确陈述</b>，并非要找的错误项。`);
-    /* v69：逐项归因替代笼统的“其余三项均为正确陈述” */
-    const ow=quizOptWhyHtml(z); if(ow) parts.push(ow); else parts.push(`其余三项均为正确陈述。`);
+    parts.push(`四个选项里与事实不符的一项：<b ${DANGER}>${esc(String(z.a))}</b>`);
+    if(mine!=null&&String(mine)!==String(z.a)) parts.push(`你选的「<span ${FG}>${esc(String(mine))}</span>」与考点原文一致，不是要找的那一项。`);
+    /* v80：其余各项为什么成立、错误项错在哪个词，交给 AI 逐项讲 */
   } else if(z.kind==="judge"){
     parts.push(`正确答案：<b ${GOLD}>${z.a?"真":"伪"}</b>`);
     const stem=String(z.q).replace(/（判断正误）$/,"");
@@ -7375,8 +8140,7 @@ function quizExplainHtml(z,correct,mine){
   } else { /* choice */
     parts.push(`正确答案：<b ${GOLD}>${esc(String(z.a))}</b>`);
     if(mine!=null&&String(mine)!==String(z.a)) parts.push(`你选的「<span ${DANGER}>${esc(String(mine))}</span>」并非本题正解。`);
-    /* v69：逐项归因替代与正确答案重复的“正确说法”行——每个错误选项说明为什么不对 */
-    const ow=quizOptWhyHtml(z); if(ow) parts.push(ow);
+    /* v80：每个错误选项本身是什么、为什么不回答本题，交给 AI 逐项讲（下方讲解气泡） */
   }
   /* 本地出题器的 why 只是"出自考点 X"，与下方知识点全文重复，不重复展示 */
   if(z.why&&!/^出自考点|^错误项篡改自考点/.test(z.why)) parts.push(`解析：${esc(z.why)}`);
@@ -7774,7 +8538,8 @@ function fallbackQuiz(q){
   const pages=D.lectures[q.id]||[];
   const itemPids=[...new Set(pages.flatMap(p=>(p.items||[]).map(it=>it.id).filter(Boolean)))];
   const basePids=[...new Set((own||[]).map(z=>z.pid).filter(Boolean))];
-  const pids=[...new Set([...basePids,...itemPids])];
+  /* v70/v80：只有 S1-4 笔试点参与笔试补题；口语句/导游段落/S5 问契/QM 一律保留 own 原题（传译/复述/双语问契），不造异化题 */
+  const pids=[...new Set([...basePids,...itemPids])].filter(p=>/^S[1-4]-/.test(p));
   /* 1. 已有静态题作为基底（过清洗） */
   const out=(own&&own.length)?own.slice().map(sanitizeQuiz):[];
   const covered=new Set(out.map(z=>z.pid).filter(Boolean));
@@ -7785,8 +8550,9 @@ function fallbackQuiz(q){
     /* FIX-P1：干扰项严格同 module（原 OR 同 subject 导致跨模块乱捞，约 39% 任务选项不相干） */
     .filter(p=>!pids.includes(p.id)&&(p.module&&mods.has(p.module)))
     .map(p=>({s:ptKeySentence(p),pid:p.id})).filter(x=>x.s);
-  /* 3. v62 Task6：题量 b=Math.round(2.2a) */
-  const targetN=quizTargetN(pids.length);
+  /* 3. v80：题量 = 非笔试原题（传译/复述/双语问契，一卡一题）+ 笔试点的 round(2.2a) */
+  const fixedN=out.filter(z=>!/^S[1-4]-/.test(z.pid)).length;
+  const targetN=fixedN+(pids.length?quizTargetN(pids.length):0);
   const FORMS=["judge","blank","choice","multi","wrongone"];
   /* v69：归一化去重 + 每考点题型轮换 + 填空换位 */
   const seenFQ=new Set(out.map(quizNormKey));
@@ -9445,11 +10211,13 @@ const AI_CHANNELS=[
   {id:"refineYunting",label:"云汀结算润色",        model:"deepseek-chat",      prof:"polish",       where:"refineYunting @index.html",                  trig:"结算后云汀消息 1 次（不耗灵力）",         fb:"本地云汀模板"},
   {id:"wrongReply",  label:"试炼错答讲解",        model:"deepseek-chat",      prof:"polish",       where:"aiWrongReply @index.html",                    trig:"答错后每题 1 次（选项题 700tok）",       fb:"wrongLocalReply 即时本地讲解"},
   {id:"bookExtra",   label:"书页预告/卷尾总结",   model:"deepseek-chat",      prof:"polish",       where:"aiBookExtra @index.html",                    trig:"每个修诵任务在线时 2 段",                fb:"localPreview/本地总结，不阻断"},
+  {id:"oralBrief",   label:"整景理解概括+带读问题",model:"deepseek-chat",     prof:"polish",       where:"aiOralBriefUpgrade @index.html",             trig:"修诵每节整景页 1 次（按节+内容签名缓存）",fb:"localOralBrief 本地内容地图，不阻断"},
   {id:"bilingualQuiz",label:"问契批量英化",       model:"deepseek-chat",      prof:"polish",       where:"aiBilingualQuiz @index.html",                trig:"b 类试炼题进入时 1 次（JSON）",           fb:"保留中文题并挂待补标注"},
   {id:"enExplain",   label:"英文题讲解",          model:"deepseek-chat",      prof:"polish",       where:"aiEnExplain @index.html",                    trig:"英文题揭示要点后 1 次",                  fb:"不显示讲解"},
   {id:"oralReview",  label:"修诵复述评测",        model:"deepseek-chat",      prof:"polish",       where:"aiOralReview @index.html",                   trig:"每次复述提交 1 次",                      fb:"仅本地评分"},
   {id:"reciteReview",label:"背诵评测",            model:"deepseek-chat",      prof:"polish",       where:"aiReciteReview @index.html",                trig:"每次背诵提交 1 次",                      fb:"仅本地评分"},
   {id:"transReview", label:"传译评测",            model:"deepseek-chat",      prof:"polish",       where:"aiTransReview @index.html",                  trig:"每次传译提交 1 次",                      fb:"仅本地评分"},
+  {id:"wenqiReview", label:"中英问契讲评",        model:"deepseek-chat",      prof:"polish",       where:"aiWenqiReview @index.html",                  trig:"问契英文作答提交后 1 次",               fb:"本地逐词对照+自评"},
   {id:"oralStory",   label:"整景趣味扩写",        model:"deepseek-chat",      prof:"chat",         where:"aiOralStory @index.html",                    trig:"藏经阁手动点击 1 次",                    fb:"无扩写"},
   {id:"cardExpand",  label:"卡片 AI 扩写",        model:"deepseek-chat",      prof:"chat",         where:"aiCardExpand @index.html",                  trig:"藏经阁手动点击 1 次",                     fb:"无扩写"},
   {id:"cutscene",    label:"剧情 CG 文案润色",    model:"deepseek-chat",      prof:"polish",       where:"refineCutscene @index.html",                 trig:"剧情工坊手动 1 次",                       fb:"保留原文案"},
@@ -9552,6 +10320,14 @@ async function aiPreviewChannel(id){
       break;
     }
     case "bookExtra": built=buildBookExtraMsgs("preview",D.pointsLib.slice(0,3)); break;
+    case "oralBrief":{
+      const _ofs=D.oralFull||[];
+      let _of=_ofs.find(x=>x.aid==="SUM")||_ofs[0]||{id:"ORB-SUM",name:"颐和园",sections:[]};
+      let _si=Math.max(0,(_of.sections||[]).findIndex(s=>/1750|1860|1888/.test(s.text||"")));
+      let _sec=(_of.sections&&_of.sections[_si])||{h:"History: From 1750 to Today",text:"The Summer Palace was first built in 1750. It was destroyed in 1860 and rebuilt in 1888. In 1998 it joined the UNESCO World Heritage List."};
+      built=buildOralBriefMsgs({fullId:_of.id,sec:_si,name:_of.name,h:_sec.h,fullText:_sec.text});
+      break;
+    }
     case "bilingualQuiz":
       built=buildBilingualQuizMsgs([{kind:"b",q:"Which gate is the main entrance of the Forbidden City?",a:"The Meridian Gate (Wumen).",opts:["Wumen","Shenwumen"]}]);
       break;
@@ -9577,6 +10353,11 @@ async function aiPreviewChannel(id){
     case "transReview":
       built=buildTransReviewMsgs("故宫位于北京中心。","The Forbidden City locates in Beijing center.","The Forbidden City is located in the center of Beijing.","zh2en","");
       break;
+    case "wenqiReview":{
+      const fakeZ={q:"How high is the Tower of Buddhist Incense?",cn:{q:"佛香阁有多高？",a:"佛香阁高约41米。"},a:"The Tower of Buddhist Incense is 41 metres high.",pid:"S5-04-08"};
+      built=buildWenqiReviewMsgs(fakeZ,"It is 40 metre high.");
+      break;
+    }
     case "oralStory":{
       const of0=D.oralFull[0]; const sec=(of0&&of0.sections&&of0.sections[0])||{h:"概览",text:cleanMd(pt0.text).slice(0,400)};
       built=buildOralStoryMsgs({name:(of0&&of0.name)||"故宫",h:sec.h,text:sec.text});
@@ -9923,7 +10704,8 @@ function quizBankPids(q){
   const pages=D.lectures[q.id]||[];
   const basePids=[...new Set((baseQuiz||[]).map(z=>z.pid).filter(Boolean))];
   const itemPids=[...new Set(pages.flatMap(p=>(p.items||[]).map(it=>it.id).filter(Boolean)))];
-  return [...new Set([...basePids,...itemPids])];
+  /* v70：口语句/导游段落只走传译与复述形态，不进笔试题库（否则 AI 会把英文句改成判断/填空题） */
+  return [...new Set([...basePids,...itemPids])].filter(p=>!isOralLibId(p)&&!/^ORB-/.test(p));
 }
 /* v62 Task6：从题库按权重抽取 targetN 题（每知识点至少 1 题，最多 3 题）
    v69：同轮归一化去重 + 同知识点题型唯一（judge 只出一次，再抽就换题型），杜绝同型同面题 */
@@ -9960,7 +10742,9 @@ function quizBankDraw(qid,pids,targetN){
     if(!pool.length) continue;
     take(pool[Math.floor(Math.random()*pool.length)]);
   }
-  return shuffleArr(out).map(sanitizeQuiz);
+  /* v70：旧题库里可能存着口语句的判断/填空异化题（v70 前生成），出库时一律剔除——
+     口语卡的复习形态只允许是 trans/oralrec（由 rtQuizForCards 现造） */
+  return shuffleArr(out).map(sanitizeQuiz).filter(z=>!isOralLibId(z.pid)&&!/^ORB-/.test(z.pid));
 }
 async function genQuizBank(q){
   const pids=quizBankPids(q);
@@ -10055,14 +10839,15 @@ function buildReciteReviewMsgs(key,text){
   const user="段落标题："+(o?o.name+" §"+(o.sec+1):key)+"\n原文：\n"+String(text||"").slice(0,800)+"\n请评讲。";
   return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish"}};
 }
-async function aiReciteReview(key, text, container){
-  if(!container||!container.isConnected) return;
+async function aiReciteReview(key, text, container, onDone){
+  if(!container||!container.isConnected){ try{onDone&&onDone();}catch(e){} return; }
   const built=buildReciteReviewMsgs(key,text);
   try{
     const raw=await dsChat(built.messages,Object.assign({ch:"reciteReview"},built.opts));
     const txt=(raw||"").trim().slice(0,260);
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon);font-size:13px">${esc(txt)}</div>`;
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉评讲暂不可用——离线模式下自评结果已入档，继续即可。</div>`; }
+  finally{ try{ onDone&&onDone(); }catch(e){} }
 }
 /* v55 批3-⑤：传译 AI 评分与纠错——可选按钮，结论三档，不说对错 */
 /* v78：传译评测提示词组装（实发/预演共用） */
@@ -10075,14 +10860,39 @@ function buildTransReviewMsgs(src,mine,ref,dir){
   const user="方向："+(dir==="zh2en"?"中译英":"英译中")+"\n原文：\n"+String(src||"").slice(0,400)+"\n参考译文：\n"+String(ref||"").slice(0,400)+"\n考生译文：\n"+String(mine||"").slice(0,400)+"\n请评讲。";
   return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish"}};
 }
-async function aiTransReview(src, mine, ref, dir, key, container){
-  if(!container||!container.isConnected) return;
+/* v80：中英问契——玩家英文作答后的 AI 讲评（对照参考给要点/语法/地道说法，不说对错） */
+function buildWenqiReviewMsgs(z,mine){
+  const sys="你是中英导游考核的英文私教。玩家先用英文回答了一个景点问题。请对照英文参考与中文要点讲评：\n"
+    +"1. 先说玩家答案里已经传到的信息点（1 句）；\n"
+    +"2. 再分条指出漏掉或说错的信息点（具体到数字、名称、事实，用<b>标出参考说法），以及明显的语法/用词问题；\n"
+    +"3. 给一个更地道的完整英文示范（1-2 句）；\n"
+    +"4. 不说「错」「输」「扣分」，不施压；不要 emoji；220 字以内；可换行分条，不要标题。";
+  const user="English question: "+(z.q||"")
+    +"\n中文问题："+((z.cn&&z.cn.q)||"")
+    +"\n玩家英文作答：\n"+String(mine||"（空白）").slice(0,500)
+    +"\n英文参考：\n"+String(z.a||"").slice(0,500)
+    +"\n中文要点：\n"+((z.cn&&z.cn.a)||"").slice(0,300);
+  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish",max_tokens:520}};
+}
+async function aiWenqiReview(z,mine,container,onDone){
+  if(!container||!container.isConnected){ try{onDone&&onDone();}catch(e){} return; }
+  const built=buildWenqiReviewMsgs(z,mine);
+  try{
+    const raw=await dsChat(built.messages,Object.assign({ch:"wenqiReview"},built.opts));
+    const txt=(raw||"").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu,"").trim().slice(0,600);
+    container.innerHTML=`<div class="note" style="border-left-color:var(--neon);font-size:13px">${quizMdLite(txt)}</div>`;
+  }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉讲评暂不可用——先按上方参考与逐词对照自评。</div>`; }
+  finally{ try{onDone&&onDone();}catch(e){} }
+}
+async function aiTransReview(src, mine, ref, dir, key, container, onDone){
+  if(!container||!container.isConnected){ try{onDone&&onDone();}catch(e){} return; }
   const built=buildTransReviewMsgs(src,mine,ref,dir);
   try{
     const raw=await dsChat(built.messages,Object.assign({ch:"transReview"},built.opts));
     const txt=(raw||"").trim().slice(0,260);
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon);font-size:13px">${esc(txt)}</div>`;
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉评讲暂不可用——离线模式下自评结果已入档，继续即可。</div>`; }
+  finally{ try{ onDone&&onDone(); }catch(e){} }
 }
 /* v55 批3-③：整景理解趣味扩写——精灵第一人称讲这段的"身体故事"，只助理解不考原文 */
 /* v78：整景趣味扩写提示词组装（实发/预演共用） */
@@ -10745,6 +11555,7 @@ function switchView(v){
   document.querySelectorAll(".navline button").forEach(x=>x.classList.toggle("on",x.dataset.v===v));
   if(view==="chat"){ ensureGuidanceScene(); renderChat(); }
   if(view==="board") renderBoard();
+  if(view==="dash") renderDashboard();
   if(view==="oral") renderOralLine();
   if(view==="lib") renderLib();
   if(view==="night") renderNight();
@@ -10819,10 +11630,14 @@ function introNarrative(){
         lead=narrativeFromJson(wb);
       }
       /* v36：过滤 NPC 人设污染——如果 lead 里包含大量"X导游，XXXX"模式（NPC 列表描述），
-         那是用户把 NPC 人设混在了世界观里，回退到默认叙事 */
+         那是用户把 NPC 人设混在了世界观里，回退到默认叙事。
+         v70：补旧头衔（文脉/山河/律法导游等）与已退役旧角色名（云华真人等）强信号 */
       if(lead){
         const npcNoise=(lead.match(/导游/g)||[]).length;
-        if(npcNoise>=3||/主引导导游|英语导游|藏经阁守护|英语导游|次元精灵|旅行社老板/.test(lead)&&/成熟|知性|腹黑|活泼|豪爽|温婉|机灵|神秘|妩媚|冷面/.test(lead)){
+        const oldTitle=/主引导导游|文脉导游|山河导游|律法导游|接待导游|古迹导游|记忆导游|藏经阁守护|旅行社老板/.test(lead);
+        const personaWord=/成熟|知性|腹黑|活泼|豪爽|温婉|机灵|神秘|妩媚|冷面|柔声|暧昧|娓娓/.test(lead);
+        const oldName=/云华真人|云华|青玄|云蘅|铁面|柳首座|柳如烟|墨小骨|司马青衫|璇玑|玄机夫人/.test(lead);
+        if(npcNoise>=3||(oldTitle&&personaWord)||oldName){
           lead="";
         }
       }
@@ -11105,6 +11920,111 @@ function buildQuestTree(){
       plot:s.plot, state: stgDone===stgAll?"done":"", _defaultOpen:true, children:dayNodes};
   });
 }
+/* ==================== v80 全局进度看板 ==================== */
+function dashSrsOf(ids){
+  const today=srsToday();
+  let learned=0,solid=0,due=0,pending=0;
+  ids.forEach(k=>{ const r=st.srs&&st.srs[k]; if(!r||!r.tier)return;
+    learned++; if(r.tier>=3)solid++; if(r.pending)pending++; else if(r.due<=today)due++; });
+  return {total:ids.length,learned,solid,due,pending};
+}
+function dashBar(pct,color){
+  pct=Math.max(0,Math.min(100,Math.round(pct)));
+  return `<div style="height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;margin:4px 0"><div style="height:100%;width:${pct}%;background:${color||"linear-gradient(90deg,#b8923a,var(--gold))"};border-radius:4px"></div></div>`;
+}
+function dashboardStats(){
+  let gdDone=0,gdAll=0;
+  for(let d=1;d<=45;d++){ const dd=byDay[d]; if(!dd)continue;
+    (dd.quests||[]).forEach(qq=>{ gdAll++; if(qDone(qq.id))gdDone++; }); }
+  const subs={};
+  ["S1","S2","S3","S4"].forEach(s=>{
+    subs[s]={name:RT_SUBJ_NAME[s],...dashSrsOf(D.pointsLib.filter(p=>(p.id||"").startsWith(s+"-")).map(p=>p.id))};
+  });
+  subs.S5={name:"英文问契",...dashSrsOf(D.pointsLib.filter(p=>/^S5-/.test(p.id)).map(p=>p.id))};
+  const trans=dashSrsOf(D.oralLib.map(x=>x.id));
+  /* 导游段落：按六篇统计节完成（oralSecDone） */
+  const six=D.oralFull.map(o=>({aid:o.aid,name:o.name,done:oralSecDoneCount(o),total:(o.sections||[]).length}));
+  let oralSecLearned=0,oralSecTotal=0; six.forEach(o=>{oralSecLearned+=o.done;oralSecTotal+=o.total;});
+  return {
+    day:st.day||1, stage:stageOfDay(st.day||1), gdDone,gdAll,
+    today:(byDay[st.day]?dayProg(byDay[st.day]):{n:0,all:0}), todayMin:rtDayEstimate(st.day||1),
+    xp:st.xp||0, coin:st.coin||0, quizOk:st.quizOk||0,
+    subs, trans, six, oralSecLearned, oralSecTotal,
+    dueAll:srsDueKeys().length, wrong:(st.wrong||[]).length, transW:Object.keys(st.transWrongs||{}).length
+  };
+}
+function renderDashboard(){
+  const stream=$("#stream"); if(!stream)return;
+  const r=dashboardStats();
+  const dayPct=r.day/45*100, gdPct=r.gdAll?r.gdDone/r.gdAll*100:0;
+  const subjRow=(key,s)=>{
+    const p=s.total?Math.round(s.learned/s.total*100):0;
+    return `<div style="padding:8px 0;border-bottom:1px dashed var(--border)">
+      <div style="display:flex;justify-content:space-between;font-size:13px"><b>${esc(s.name)}</b>
+        <span style="color:var(--dim);font-size:12px">${s.learned}/${s.total} 已学 · ${s.solid} 巩固${s.due?` · <b style="color:var(--gold)">${s.due} 待回潮</b>`:""}</span></div>
+      ${dashBar(p)}
+    </div>`;
+  };
+  const tpct=r.trans.total?Math.round(r.trans.learned/r.trans.total*100):0;
+  const opct=r.oralSecTotal?Math.round(r.oralSecLearned/r.oralSecTotal*100):0;
+  const stageLine=STAGES.map((s,i)=>{ const cur=r.stage.id===s.id; const past=r.stage.id>s.id;
+    return `<span title="${esc(s.name)} · ${s.days[0]}-${s.days[1]} 日" style="flex:1;height:22px;line-height:22px;text-align:center;font-size:10px;border-radius:4px;margin:0 2px;white-space:nowrap;overflow:hidden;${cur?"background:var(--gold);color:#1a1208;font-weight:600":past?"background:rgba(255,215,138,.22);color:var(--gold)":"background:rgba(255,255,255,.05);color:var(--dim)"}">${i+1}</span>`;
+  }).join("");
+  stream.innerHTML=`
+  <div class="sys daysep">全局进度看板 · 第 ${r.day} 自然日 / 45</div>
+
+  <div style="margin:10px 0;padding:14px 16px;border:1px solid var(--gold);border-radius:10px;background:linear-gradient(135deg,rgba(184,146,58,.12),transparent)">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">
+      <b style="font-size:15px">第 ${r.stage.id} 阶段 · ${esc(r.stage.name)} — ${esc(r.stage.theme)}</b>
+      <span style="font-size:12px;color:var(--dim)">${esc(r.stage.days[0])}–${r.stage.days[1]} 日 · 大节点：${esc(r.stage.major)}</span>
+    </div>
+    <div style="display:flex;margin-top:10px">${stageLine}</div>
+    <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12.5px">
+      <span>自然日 <b style="color:var(--gold)">${r.day}</b>/45</span>
+      <span>纪日任务 <b style="color:var(--gold)">${r.gdDone}</b>/${r.gdAll}（${Math.round(gdPct)}%）</span>
+      <span>今日 ${r.today.n}/${r.today.all} 环${r.todayMin?` · 约 ${r.todayMin} 分钟`:""}</span>
+    </div>
+    <div style="margin-top:2px">${dashBar(dayPct)}</div>
+  </div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">
+    ${[["修行",r.xp],["灵铢",r.coin],["试炼答对",r.quizOk],["待回潮",r.dueAll],["错题知识点",r.wrong],["误译册",r.transW]]
+      .map(([k,v],i)=>`<div style="flex:1;min-width:104px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;text-align:center;background:rgba(255,255,255,.03)">
+        <div style="font-size:20px;font-weight:700;color:${i>=3?"var(--gold)":"var(--neon)"}">${v}</div>
+        <div style="font-size:11px;color:var(--dim);margin-top:2px">${k}</div></div>`).join("")}
+  </div>
+
+  <div style="margin:12px 0;padding:4px 14px 10px;border:1px solid var(--border);border-radius:10px">
+    <div style="font-size:13px;color:var(--gold);letter-spacing:.1em;padding:8px 0 2px">✦ 笔试四科 · 掌握度</div>
+    ${Object.keys(r.subs).slice(0,4).map(k=>subjRow(k,r.subs[k])).join("")}
+    <div style="padding:8px 0">
+      <div style="display:flex;justify-content:space-between;font-size:13px"><b>${r.subs.S5.name}</b>
+        <span style="color:var(--dim);font-size:12px">${r.subs.S5.learned}/${r.subs.S5.total} 已学 · ${r.subs.S5.solid} 巩固${r.subs.S5.due?` · <b style="color:var(--gold)">${r.subs.S5.due} 待回潮</b>`:""}</span></div>
+      ${dashBar(r.subs.S5.total?r.subs.S5.learned/r.subs.S5.total*100:0,"linear-gradient(90deg,#2aa198,var(--neon))")}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
+    <div style="flex:1;min-width:260px;padding:4px 14px 10px;border:1px solid var(--border);border-radius:10px">
+      <div style="font-size:13px;color:var(--gold);letter-spacing:.1em;padding:8px 0 2px">✦ 传译语料（${r.trans.learned}/${r.trans.total} 句已练）</div>
+      ${dashBar(tpct,"linear-gradient(90deg,#2aa198,var(--neon))")}
+      <div style="font-size:12px;color:var(--dim);margin-top:2px">${r.trans.solid} 句巩固 · ${r.trans.due} 句待回潮${r.transW?` · <b style="color:var(--gold)">${r.transW} 句在误译册，会带同题材句子回访</b>`:""}</div>
+    </div>
+    <div style="flex:1;min-width:260px;padding:4px 14px 10px;border:1px solid var(--border);border-radius:10px">
+      <div style="font-size:13px;color:var(--gold);letter-spacing:.1em;padding:8px 0 2px">✦ 六篇导游词整段复述（${r.oralSecLearned}/${r.oralSecTotal} 节已诵）</div>
+      ${dashBar(opct)}
+      <div style="font-size:12px;color:var(--dim);margin-top:2px">六篇共 56 节 · 替换台可整段换稿，换后分句/复述/时长自动跟随</div>
+    </div>
+  </div>
+
+  <div style="padding:10px 14px;border:1px dashed var(--border);border-radius:10px;margin-bottom:20px">
+    ${r.six.map(o=>{ const p=o.total?o.done/o.total*100:0;
+      return `<div style="margin:6px 0">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px"><span>${esc(o.name)} <span style="color:var(--dim)">（${esc(o.aid)}）</span></span><b style="color:${o.done>=o.total?"var(--ok)":"var(--fg2)"}">${o.done}/${o.total}</b></div>
+        ${dashBar(p)}
+      </div>`; }).join("")}
+  </div>`;
+}
 function renderBoard(){
   const stream=$("#stream");
   const d=byDay[st.day];
@@ -11283,6 +12203,122 @@ function oralScore(typed, refText){
   let hit=0;
   got.forEach(w=>{ if(miss[w]>0){ hit++; miss[w]--; } });
   return Math.round(hit/ref.length*100);
+}
+/* ==================== v70：复述/传译逐词对照（替代纯百分比） ====================
+   词级/字级 LCS 对齐 → 标出笔误（ctral≈central）、漏词、多词；
+   英文按词、中文按字并额外核查数字/专名/引号词覆盖。 */
+const DIFF_STOP=new Set(["the","a","an","and","or","but","of","to","in","on","at","for","with","from","by","as","is","are","was","were","be","been","this","that","these","those","it","its","we","you","your","our","their","his","her","they","them","he","she","will","would","can","could","please","here","there","have","has","had","do","does","did","not","no","if","than","so","i","me","my","am","about","into","also"]);
+function _lev(a,b){
+  const n=a.length,m=b.length; if(n>24||m>24)return 99;
+  const d=Array.from({length:n+1},()=>new Array(m+1).fill(0));
+  for(let i=0;i<=n;i++)d[i][0]=i;
+  for(let j=0;j<=m;j++)d[0][j]=j;
+  for(let i=1;i<=n;i++)for(let j=1;j<=m;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return d[n][m];
+}
+function _lcsOps(a,b,keyFn){
+  const n=a.length,m=b.length;
+  const dp=Array.from({length:n+1},()=>new Uint16Array(m+1));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--){
+    dp[i][j]=keyFn(a[i])===keyFn(b[j])?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+  }
+  const ops=[];let i=0,j=0;
+  while(i<n&&j<m){
+    if(keyFn(a[i])===keyFn(b[j])){ops.push({t:"eq",w:a[i],r:b[j]});i++;j++;}
+    else if(dp[i+1][j]>=dp[i][j+1]){ops.push({t:"miss",r:b[j]});j++;}
+    else{ops.push({t:"extra",w:a[i]});i++;}
+  }
+  while(j<m)ops.push({t:"miss",r:b[j++]});
+  while(i<n)ops.push({t:"extra",w:a[i++]});
+  /* 全等残留先消缺：LCS 多解时同形词可能各剩一个（your 不该被近似配给 tour）。
+     合成单个 eq（取 extra 位显示），对应 miss 位标记 drop（两侧不再重复渲染）。 */
+  const leftM=[];
+  ops.forEach((o,k)=>{if(o.t==="miss")leftM.push(k);});
+  const usedM0=new Set();
+  ops.forEach((o,ei)=>{ if(o.t!=="extra")return;
+    const lw=String(o.w).toLowerCase();
+    const mi=leftM.find(k=>!usedM0.has(k)&&String(ops[k].r).toLowerCase()===lw);
+    if(mi!=null){ usedM0.add(mi); ops[ei]={t:"eq",w:o.w,r:ops[mi].r}; ops[mi]={t:"drop"}; }
+  });
+  /* 拼写近似全局配对——不要求相邻：同义改写时 LCS 常把错词与正词分到不相邻的两段，
+     故在全部 extra/miss 间按编辑距离贪心最近匹配（ctral≈central、coroperation≈cooperation）。
+     阈值收紧：只认 1 字母之差、或长词（≥7）2 字母之差、或长词（≥8）≤25% 差异——
+     going/coming（4 字母之差）这种「不同的词」不算笔误。 */
+  const cand=[];
+  ops.forEach((o,ei)=>{ if(o.t!=="extra")return;
+    ops.forEach((p,mi)=>{ if(p.t!=="miss")return;
+      const w=String(o.w),r=String(p.r),lw=w.toLowerCase(),lr=r.toLowerCase();
+      if(w.length>=4&&r.length>=4&&lw!==lr){
+        const d=_lev(lw,lr);
+        const allow=d===1||(d===2&&Math.max(w.length,r.length)>=7)||(Math.max(w.length,r.length)>=8&&d/Math.min(w.length,r.length)<=0.25);
+        if(allow) cand.push({d,ei,mi,w,r});
+      }
+    });
+  });
+  cand.sort((x,y)=>x.d-y.d);
+  const usedE=new Set(),usedM=new Set();
+  cand.forEach(c=>{ if(usedE.has(c.ei)||usedM.has(c.mi))return;
+    usedE.add(c.ei); usedM.add(c.mi);
+    ops[c.ei]={t:"typo",w:c.w,r:c.r};
+    ops[c.mi]={t:"typoRef",r:c.r};
+  });
+  return ops;
+}
+function oralDiffHtml(mine,ref,en){
+  mine=String(mine==null?"":mine),ref=String(ref==null?"":ref);
+  const note=(s,color)=>`<div style="font-size:12px;color:${color||"var(--fg2)"};margin:8px 0 3px;line-height:1.8">${s}</div>`;
+  if(!mine.trim()) return note("你这题空着——先把参考读一遍：","var(--dim)")+`<div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px 10px;font-size:13px;line-height:1.9">${esc(ref)}</div>`;
+  const chips=[];
+  let mineHtml,refHtml,covPct;
+  if(en){
+    const tok=s=>String(s).replace(/[^A-Za-z0-9'’\-]/g," ").split(/\s+/).filter(Boolean);
+    const ops=_lcsOps(tok(mine),tok(ref),w=>String(w).toLowerCase());
+    mineHtml=ops.map(o=>{
+      if(o.t==="eq")return esc(o.w)+" ";
+      if(o.t==="typo")return `<span style="background:rgba(255,193,7,0.25);border-radius:3px;padding:0 2px" title="应为 ${esc(o.r)}">${esc(o.w)}</span> `;
+      if(o.t==="extra")return `<s style="color:var(--danger);opacity:.85">${esc(o.w)}</s> `;
+      return "";
+    }).join("");
+    refHtml=ops.map(o=>{
+      if(o.t==="drop")return "";
+      if(o.t==="eq")return esc(o.r)+" ";
+      if(o.t==="typo"||o.t==="typoRef")return `<b style="color:var(--gold)">${esc(o.r)}</b> `;
+      if(o.t==="miss")return `<b style="color:var(--gold);border-bottom:1px solid var(--gold)">${esc(o.r)}</b> `;
+      return "";
+    }).join("");
+    const typos=ops.filter(o=>o.t==="typo");
+    const missAll=ops.filter(o=>o.t==="miss").map(o=>o.r);
+    const missContent=missAll.filter(w=>!DIFF_STOP.has(w.toLowerCase()));
+    const missStop=missAll.length-missContent.length;
+    const extras=ops.filter(o=>o.t==="extra").map(o=>o.w).filter(w=>!DIFF_STOP.has(w.toLowerCase()));
+    if(typos.length) chips.push("疑似笔误："+typos.map(o=>`<span style="color:var(--gold)">${esc(o.w)} → ${esc(o.r)}</span>`).join("；"));
+    if(missContent.length) chips.push("漏掉的关键词："+missContent.slice(0,8).map(w=>`<b style="color:var(--gold)">${esc(w)}</b>`).join("、")+(missContent.length>8?" 等":""));
+    if(missStop) chips.push("另有 "+missStop+" 个冠词/介词/连词等小词未出现，不影响大意");
+    if(extras.length) chips.push("多写的词："+extras.slice(0,6).map(w=>`<s style="color:var(--danger)">${esc(w)}</s>`).join("、"));
+    if(!chips.length) chips.push('<span style="color:var(--ok)">用词与参考高度一致</span>');
+    covPct=oralScore(mine,ref);
+  }else{
+    /* 中文：字级对齐（去标点）+ 数字/英文专名/引号词覆盖核查 */
+    const norm=s=>String(s).replace(/[\s，。、；：？！,.:;?!“”‘’（）()【】「」『』""''\-—…·]/g,"");
+    const ops=_lcsOps(norm(mine).split(""),norm(ref).split(""),w=>w);
+    mineHtml=ops.filter(o=>o.t==="eq"||o.t==="extra"||o.t==="typo").map(o=>o.t==="extra"?`<s style="color:var(--danger);opacity:.85">${esc(o.w)}</s>`:(o.t==="typo"?`<span style="background:rgba(255,193,7,0.25)">${esc(o.w)}</span>`:esc(o.w))).join("");
+    refHtml=ops.filter(o=>o.t==="eq"||o.t==="miss"||o.t==="typoRef"||o.t==="typo").map(o=>(o.t==="miss"||o.t==="typoRef"||o.t==="typo")?`<b style="color:var(--gold);border-bottom:1px solid var(--gold)">${esc(o.r)}</b>`:esc(o.r)).join("");
+    const missN=ops.filter(o=>o.t==="miss").length, extraN=ops.filter(o=>o.t==="extra").length;
+    /* 参考中的数字/英文/专名与引号词——必须传到的硬信息 */
+    const facts=String(ref).match(/[A-Za-z][A-Za-z'\-]*(?:\s+[A-Za-z][A-Za-z'\-]*)*|\d+(?:\.\d+)?(?:万|亿|平方米|公里|米|年|位|处|个)?|「[^」]{2,12}」|“[^”]{2,12}”/g)||[];
+    const uniqFacts=[...new Set(facts.map(s=>s.trim()))];
+    const missingFacts=uniqFacts.filter(f=>!mine.includes(f)&&!(f.length<=4&&String(mine).includes(f))).slice(0,8);
+    if(missingFacts.length) chips.push("这些硬信息没传到："+missingFacts.map(f=>`<b style="color:var(--gold)">${esc(f)}</b>`).join("、"));
+    if(missN) chips.push("另有约 "+missN+" 个汉字与参考不同（同义表达可以，确认上面的专名与数字齐全即可）");
+    if(extraN>6) chips.push("你的表述比参考多出不少内容，注意别偏离原意");
+    if(!chips.length) chips.push('<span style="color:var(--ok)">关键信息齐全</span>');
+    const T=norm(ref); covPct=T.length?Math.round((T.length-missN)/T.length*100):0;
+  }
+  return `<div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px 10px;font-size:13px;line-height:2">
+      <div style="font-size:11px;color:var(--dim);margin-bottom:3px">参考重合 ${covPct}% · <span style="color:var(--gold)">金色</span>=漏失 · <span style="color:var(--gold)">黄底</span>=笔误 · <s style="color:var(--danger)">红删</s>=多写</div>
+      <div style="color:var(--dim);font-size:12px">参考：</div><div>${refHtml||'<span style="color:var(--dim)">（无参考文本）</span>'}</div>
+      <div style="color:var(--dim);font-size:12px;margin-top:5px">你的：</div><div>${mineHtml||'<span style="color:var(--dim)">（未作答）</span>'}</div>
+    </div>${note(chips.map((c,i)=>(i+1)+"）"+c).join("<br>"))}`;
 }
 /* v52 R6e：30/45 日吟游学习计划
    30 日基础指标：六篇通读 + 分站段背诵；45 日考核标准：通篇背诵达标。
