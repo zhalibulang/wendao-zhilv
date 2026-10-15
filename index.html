@@ -4695,7 +4695,136 @@ function openQuest(qid){
         row.querySelectorAll(".oraltxt .en, .oraltxt .zh").forEach(function(el){ el.style.fontSize=nf+"px"; });
       }; });
       if(maskBtn&&txt) maskBtn.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap(); txt.classList.toggle("masked"); };
-      if(typeInput){ typeInput.onkeydown=function(e){ if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); var cmp=row.querySelector("#typeCmp"); if(cmp) cmp.click(); } }; }
+      if(typeInput){ typeInput.onkeydown=function(e){ if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); var cmp=row.querySelector("#typeCmp"); if(cmp){ try{ cmp.dispatchEvent(new PointerEvent("pointerdown",{bubbles:true})); }catch(_){ cmp.click(); } } } }; }
+      /* v84：录音复述 / 回放 / 对照评分 / 自评关键词补绑——原模板只生成了 UI，从未绑定任何逻辑 */
+      var recBtnBig=row.querySelector("#recBtnBig"), recBtn=row.querySelector("#recBtn"),
+          pauseBtn=row.querySelector("#pauseBtn"), redoBtn=row.querySelector("#redoBtn"),
+          playBar=row.querySelector("#playBar"), playBtn=row.querySelector("#playBtn"),
+          recTimer=row.querySelector("#recTimer"), recState=row.querySelector("#recState"),
+          waveCv=row.querySelector("#waveCv"), typeCmpOut=row.querySelector("#typeCmpOut"),
+          kwGrid=row.querySelector("#kwGrid"), scoreBox=row.querySelector("#scoreBox"),
+          oralEnEl=row.querySelector("#oralEn");
+      var mediaRec=null, recChunks=[], recUrl=null, audioEl=null;
+      var recSecs=0, recLast=0, recTick=null, recOn=false, _waveRaf=0;
+      function _fmt(t){ var m=Math.floor(t/60),s=Math.floor(t%60); return (m<10?"0":"")+m+":"+(s<10?"0":"")+s; }
+      function _refEn(){ return oralEnEl?oralEnEl.textContent:""; }
+      function _say(msg){ if(recState) recState.textContent=msg; }
+      /* 波形：录音中画呼吸圆点做状态指示（无分析器数据，不冒充真实波形） */
+      function _wave(on){
+        if(!waveCv) return;
+        if(_waveRaf){ cancelAnimationFrame(_waveRaf); _waveRaf=0; }
+        var ctx=waveCv.getContext&&waveCv.getContext("2d"); if(!ctx) return;
+        if(!on){ ctx.clearRect(0,0,waveCv.width,waveCv.height); return; }
+        try{ waveCv.width=waveCv.offsetWidth||300; waveCv.height=36; }catch(_){ }
+        var t0=Date.now();
+        (function _loop(){
+          if(!recOn) return;
+          var w=waveCv.width||300, h=waveCv.height||36;
+          var p=(Date.now()-t0)/900;
+          ctx.clearRect(0,0,w,h);
+          ctx.fillStyle="rgba(201,111,127,0.55)";
+          for(var x=12;x<w-12;x+=18){
+            var rr=(4+3*Math.abs(Math.sin(p*Math.PI)))*(0.6+0.4*Math.sin(p*Math.PI+x*0.05));
+            ctx.beginPath(); ctx.arc(x,h/2,Math.max(1.5,rr),0,6.284); ctx.fill();
+          }
+          _waveRaf=requestAnimationFrame(_loop);
+        })();
+      }
+      function _recStopUI(){
+        recOn=false; _wave(false);
+        if(recBtn) recBtn.textContent="● 开始录音";
+        if(recBtnBig) recBtnBig.textContent="🎙️ 按住此处开始录音复述";
+        if(pauseBtn){ pauseBtn.textContent="暂停"; pauseBtn.disabled=true; }
+        if(redoBtn) redoBtn.disabled=false;
+      }
+      function _stopRec(){ if(mediaRec&&mediaRec.state!=="inactive"){ try{ mediaRec.stop(); }catch(_){} } }
+      function _recStart(){
+        if(recOn) return;
+        if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.MediaRecorder){ _say("当前环境不支持录音——切「⌨️ 打字复述」一样能练"); return; }
+        navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+          if(recOn){ stream.getTracks().forEach(function(t){ t.stop(); }); return; }
+          var mr;
+          try{ mr=new MediaRecorder(stream); }
+          catch(e){ stream.getTracks().forEach(function(t){ t.stop(); }); _say("录音初始化失败——请用打字复述"); return; }
+          mediaRec=mr; recChunks=[];
+          mr.ondataavailable=function(e){ if(e.data&&e.data.size) recChunks.push(e.data); };
+          mr.onstop=function(){
+            stream.getTracks().forEach(function(t){ t.stop(); });
+            if(recTick){ clearInterval(recTick); recTick=null; }
+            var secs=recSecs;
+            var mime=(mr&&mr.mimeType)||"audio/mp4"; /* Safari=audio/mp4，Chrome=audio/webm——自适应，不能写死 */
+            var nu=URL.createObjectURL(new Blob(recChunks,{type:mime}));
+            if(!audioEl) audioEl=new Audio();
+            audioEl.src=nu;
+            if(recUrl){ try{ URL.revokeObjectURL(recUrl); }catch(_){} }
+            recUrl=nu;
+            if(playBar) playBar.style.display="flex";
+            _say("已录 "+_fmt(secs)+" —— 点 ▶ 播放回听自评，不满意点「重录」");
+            recSecs=0; _recStopUI();
+          };
+          mr.start();
+          recOn=true; recSecs=0; recLast=Date.now();
+          recTick=setInterval(function(){
+            if(mediaRec&&mediaRec.state==="recording"){ recSecs+=(Date.now()-recLast)/1000; if(recTimer) recTimer.textContent=_fmt(recSecs); }
+            recLast=Date.now();
+          },250);
+          if(recBtn) recBtn.textContent="■ 停止录音";
+          if(recBtnBig) recBtnBig.textContent="■ 松开停止录音";
+          if(pauseBtn) pauseBtn.disabled=false;
+          if(redoBtn) redoBtn.disabled=false;
+          if(playBar) playBar.style.display="none";
+          _say("录音中……出声复述英文导游词，说完点「停止」（大按钮松开即停）");
+          _wave(true);
+        }).catch(function(err){ _say("麦克风不可用（"+((err&&err.name)||"权限")+"）——查系统麦克风权限，或用打字复述"); });
+      }
+      if(recBtn) recBtn.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap(); if(recOn) _stopRec(); else _recStart(); };
+      if(recBtnBig){
+        recBtnBig.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap(); if(!recOn) _recStart(); };
+        recBtnBig.onpointerup=function(){ if(recOn) _stopRec(); };
+        recBtnBig.onpointerleave=recBtnBig.onpointerup; recBtnBig.onpointercancel=recBtnBig.onpointerup;
+      }
+      if(pauseBtn) pauseBtn.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap();
+        if(!mediaRec) return;
+        if(mediaRec.state==="recording"){ try{ mediaRec.pause(); }catch(_){} pauseBtn.textContent="继续"; _say("已暂停——点「继续」接着录"); }
+        else if(mediaRec.state==="paused"){ try{ mediaRec.resume(); }catch(_){} pauseBtn.textContent="暂停"; recLast=Date.now(); _say("录音中……"); }
+      };
+      if(redoBtn) redoBtn.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap();
+        if(recOn){ _stopRec(); setTimeout(_recStart,400); }
+        else { recChunks=[]; if(playBar) playBar.style.display="none"; _say("已清空——点「● 开始录音」重新录"); }
+      };
+      if(playBar){
+        playBar.querySelectorAll("[data-rate]").forEach(function(b){ b.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap();
+          playBar.querySelectorAll("[data-rate]").forEach(function(x){ x.classList.toggle("cur",x===b); });
+          if(audioEl) audioEl.playbackRate=parseFloat(b.dataset.rate)||1;
+        }; });
+      }
+      if(playBtn) playBtn.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap();
+        if(!audioEl||!audioEl.src){ _say("还没有录音——先录一段再回放"); return; }
+        var cur=playBar?playBar.querySelector("[data-rate].cur"):null;
+        try{ audioEl.playbackRate=cur?(parseFloat(cur.dataset.rate)||1):1; audioEl.currentTime=0; audioEl.play(); }catch(_){ }
+      };
+      /* 对照评分：复用 v70 逐词对照 oralDiffHtml——漏词/笔误/多写逐个标出 */
+      var typeCmp2=row.querySelector("#typeCmp");
+      if(typeCmp2) typeCmp2.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap();
+        var typed=(typeInput&&typeInput.value)||"";
+        if(typeCmpOut){ typeCmpOut.style.display="block"; typeCmpOut.innerHTML=oralDiffHtml(typed,_refEn(),true); }
+      };
+      if(typeClear&&typeInput) typeClear.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap();
+        typeInput.value=""; if(typeCmpOut){ typeCmpOut.style.display="none"; typeCmpOut.innerHTML=""; } typeInput.focus();
+      };
+      /* 自评关键词：参考文本抽 5 词勾选，≥4 视为自评过关（仅本页练习，不留存） */
+      if(kwGrid){
+        var _kws=oralKeywords(_refEn(),5);
+        kwGrid.innerHTML=_kws.map(function(k,i){ return '<label style="display:inline-flex;align-items:center;gap:4px;margin:6px 10px 0 0;font-size:12.5px;cursor:pointer"><input type="checkbox" data-kw="'+i+'"> '+esc(k)+'</label>'; }).join("");
+        kwGrid.querySelectorAll("[data-kw]").forEach(function(cb){ cb.onchange=function(){
+          var n=kwGrid.querySelectorAll("[data-kw]:checked").length;
+          if(scoreBox){ scoreBox.style.display="block";
+            scoreBox.innerHTML=n>=4?'<span style="color:var(--ok)">✓ 自评 '+n+'/5 过关——可切打字模式点「对照评分」看逐词细节</span>':'<span style="color:var(--dim)">自评 '+n+'/5 · 勾满 4 个算过关</span>'; }
+        }; });
+      }
+      /* 切到打字模式时收掉录音，避免麦克风一直挂着 */
+      var _setModeBase=setMode;
+      setMode=function(mode){ _setModeBase(mode); if(mode!=="rec"&&recOn) _stopRec(); };
     })();
     /* 书页打字机：启动；读完显示继续提示（末页=进入试炼，否则=翻页） */
     setHint("");
@@ -12520,8 +12649,9 @@ function openOralStudy(aid){
         if(!mediaRec){
           navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
             chunks=[]; mediaRec=new MediaRecorder(stream);
+            const recMime=mediaRec.mimeType||"audio/mp4"; /* Safari=audio/mp4，Chrome=audio/webm——创建时记下，onstop 时 recorder 已可能被置空 */
             mediaRec.ondataavailable=e=>chunks.push(e.data);
-            mediaRec.onstop=()=>{ stream.getTracks().forEach(t=>t.stop()); recUrl=URL.createObjectURL(new Blob(chunks,{type:"audio/webm"}));
+            mediaRec.onstop=()=>{ stream.getTracks().forEach(t=>t.stop()); recUrl=URL.createObjectURL(new Blob(chunks,{type:recMime}));
               stEl.innerHTML='<audio controls src="'+recUrl+'"></audio> 回放自评后，再打字对照'; };
             mediaRec.start(); this.textContent="■ 停止录音"; stEl.textContent="录音中……";
           }).catch(()=>stEl.textContent="麦克风不可用，请用打字对照");
