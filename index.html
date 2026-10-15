@@ -4676,6 +4676,27 @@ function openQuest(qid){
     const obSlot=$("#oralBriefSlot",stageHost);
     if(obSlot&&p.oralBriefData){ try{ aiOralBriefUpgrade(p.oralBriefData,obSlot); }catch(e){ /* 概括升级失败不影响读书页 */ } }
     try{ twBindGlossary(stageHost); }catch(e){ /* 保险：词谱绑定故障不阻断翻页 */ }
+    /* v82：c 类修诵书页的录音复述 / 打字复述 kitbar 交互补绑（原 HTML 已生成但未绑定） */
+    (function _bindOralKitbar(){
+      var row=stageHost.querySelector(".oralrow"); if(!row) return;
+      var recZone=row.querySelector("#recZone"), typeZone=row.querySelector("#typeZone"), typeInput=row.querySelector("#typeInput");
+      var modeBtns=row.querySelectorAll("[data-mode]"), fzBtns=row.querySelectorAll("[data-fz]"), maskBtn=row.querySelector("[data-mask]");
+      var txt=row.querySelector(".oraltxt");
+      function setMode(mode){
+        modeBtns.forEach(function(b){ b.classList.toggle("cur", b.dataset.mode===mode); b.classList.toggle("ghost", b.dataset.mode!==mode); });
+        if(recZone) recZone.style.display=(mode==="rec")?"block":"none";
+        if(typeZone) typeZone.style.display=(mode==="type")?"block":"none";
+        if(mode==="type"&&typeInput){ setTimeout(function(){ try{ typeInput.focus(); }catch(e){} },60); }
+      }
+      modeBtns.forEach(function(b){ b.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap(); setMode(b.dataset.mode||"rec"); }; });
+      fzBtns.forEach(function(b){ b.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap();
+        var cur=parseFloat(getComputedStyle(row.querySelector(".oraltxt .en")||row).fontSize)||15;
+        var nf=Math.max(10,Math.min(26, cur+(b.dataset.fz==="+"?1:-1)));
+        row.querySelectorAll(".oraltxt .en, .oraltxt .zh").forEach(function(el){ el.style.fontSize=nf+"px"; });
+      }; });
+      if(maskBtn&&txt) maskBtn.onpointerdown=function(){ SFX&&SFX.tap&&SFX.tap(); txt.classList.toggle("masked"); };
+      if(typeInput){ typeInput.onkeydown=function(e){ if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); var cmp=row.querySelector("#typeCmp"); if(cmp) cmp.click(); } }; }
+    })();
     /* 书页打字机：启动；读完显示继续提示（末页=进入试炼，否则=翻页） */
     setHint("");
     if(!skipTypewriter){ try{ stopTypewriter(); startTypewriter(stageHost); }catch(e){ /* 保险：打字机故障不阻断 bookDone */ } }
@@ -12687,6 +12708,60 @@ function renderCal(){
   });
 }
 boot();
+/* v82：iOS/macOS 可编辑元素补丁——确保系统语音输入的麦克风按钮能触发 */
+(function _iosSpeechInputPatch(){
+  if(typeof document==="undefined"||typeof window==="undefined") return;
+  var HT=window.HTMLTextAreaElement, HI=window.HTMLInputElement;
+  if(!HT&&!HI) return;
+  /* 1. 补齐属性：inputmode/enterkeyhint/拼写检查，软键盘会显示麦克风按钮 */
+  function _patch(el){
+    if(!el||el.dataset.spPatch) return;
+    var tag=el.tagName;
+    if(tag==="TEXTAREA"||tag==="INPUT"){
+      var type=(el.type||"text").toLowerCase();
+      if(tag==="INPUT"&&!["text","search","url","tel","email","password"].includes(type)) return;
+      if(!el.inputMode) el.inputMode="text";
+      if(!el.enterKeyHint) el.enterKeyHint="done";
+      el.setAttribute("spellcheck","true");
+      el.setAttribute("autocomplete","off");
+      el.setAttribute("autocapitalize","off");
+      el.dataset.spPatch="1";
+    }
+  }
+  try{
+    (document.querySelectorAll("textarea,input[type=text],input:not([type])")).forEach(_patch);
+    if(typeof MutationObserver!=="undefined"&&document.body){
+      new MutationObserver(function(muts){
+        muts.forEach(function(m){ (m.addedNodes||[]).forEach(function(n){
+          if(n.nodeType!==1) return;
+          if(n.tagName&&(n.tagName==="TEXTAREA"||(n.tagName==="INPUT"&&(!n.type||n.type.toLowerCase()==="text")))) _patch(n);
+          if(n.querySelectorAll) n.querySelectorAll("textarea,input[type=text],input:not([type])").forEach(_patch);
+        }); });
+      }).observe(document.body,{childList:true,subtree:true});
+    }
+  }catch(_){}
+  /* 2. focus 时机：iOS PWA 上同步 focus 常因 layout 未完成被吞——延后一帧让软键盘可靠弹出 */
+  try{
+    var _inRaf=false;
+    if(HT&&HT.prototype&&typeof HT.prototype.focus==="function"){
+      var _nativeFocus=HT.prototype.focus;
+      Object.defineProperty(HT.prototype,"focus",{configurable:true,writable:true,value:function(opts){
+        if(_inRaf||document.readyState!=="complete") return _nativeFocus.call(this,opts);
+        var self=this;
+        requestAnimationFrame(function(){ _inRaf=true; _nativeFocus.call(self,opts); _inRaf=false; });
+      }});
+    }
+    if(HI&&HI.prototype&&typeof HI.prototype.focus==="function"){
+      var _nativeIfocus=HI.prototype.focus;
+      Object.defineProperty(HI.prototype,"focus",{configurable:true,writable:true,value:function(opts){
+        var t=(this.type||"text").toLowerCase();
+        if(_inRaf||document.readyState!=="complete"||!["text","search","url","tel","email","password"].includes(t)) return _nativeIfocus.call(this,opts);
+        var self=this;
+        requestAnimationFrame(function(){ _inRaf=true; _nativeIfocus.call(self,opts); _inRaf=false; });
+      }});
+    }
+  }catch(_){}
+})();
 /* v2（R3.3）：主动触发器——boot 后 30s 检查一次（本地规则零成本，每日 ≤3 条，可在配置中心关闭） */
 setTimeout(()=>{
   try{
