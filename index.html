@@ -4832,13 +4832,13 @@ function openQuest(qid){
         if(recOn) _stopRec(); /* 录音中先收麦，避免抢占麦克风 */
         var ta2=typeInput;
         if(!ta2){ if(recAsrSt) recAsrSt.textContent="未找到打字框"; return; }
+        var dft=asrDraftBinder(ta2); /* v89：草稿实时上屏 */
         var rec=asrOnce("en-US",function(fin,inter){
-          var piece=(fin||"").trim();
-          if(!piece){ if(inter&&recAsrSt) recAsrSt.textContent="听到："+inter; return; }
-          ta2.value=(ta2.value&&!/\s$/.test(ta2.value)?ta2.value+" ":"")+piece;
-          try{ ta2.dispatchEvent(new Event("input",{bubbles:true})); }catch(_){ }
-          if(recAsrSt) recAsrSt.textContent="已转写……继续说，说完再点一次结束";
-        },function(msg){ if(recAsrSt) recAsrSt.textContent=msg; });
+          dft.feed(fin,inter);
+          var shown=(fin||inter||"").trim();
+          if(!shown) return;
+          if(recAsrSt) recAsrSt.textContent=fin?"已转写……继续说，说完再点一次结束":"听到："+shown.slice(-40);
+        },function(msg){ if(recAsrSt) recAsrSt.textContent=msg; dft.reset(); });
         if(!rec) return;
         self._rec=rec; self.textContent="■ 结束转写";
         if(recAsrSt) recAsrSt.textContent="转写中……直接说英文即可";
@@ -7013,15 +7013,13 @@ function openOralInput(editId){
     SFX.tap();
     const stEl=$("#oiMicSt",ov);
     if(this._rec){ try{this._rec.stop();}catch(e){} this._rec=null; this.textContent="🎙️ 口述"; if(stEl) stEl.textContent=""; return; }
+    const dft=asrDraftBinder(aEl); /* v89：草稿实时上屏 */
     const rec=asrOnce("zh-CN",(fin,inter)=>{
-      /* v85：只在最终结果追加——临时结果反复触发会重复堆积；临时内容仅作状态提示 */
-      const piece=(fin||"").trim();
-      if(!piece){ if(inter&&stEl) stEl.textContent="听到："+inter; return; }
-      const cur=aEl.value;
-      aEl.value=(cur&&!/\s$/.test(cur)?cur+" ":"")+piece;
-      aEl.dispatchEvent(new Event("input"));
-      if(stEl) stEl.textContent="口述中……说完再点一次结束";
-    },(msg)=>{ if(stEl) stEl.textContent=msg; });
+      dft.feed(fin,inter);
+      const shown=(fin||inter||"").trim();
+      if(!shown) return;
+      if(stEl) stEl.textContent=fin?"口述中……说完再点一次结束":"听到："+shown.slice(-40);
+    },(msg)=>{ if(stEl) stEl.textContent=msg; dft.reset(); });
     if(!rec) return;
     this._rec=rec; this.textContent="■ 结束口述"; if(stEl) stEl.textContent="口述中……说完再点一次结束";
     try{ rec.start(); }catch(e){ if(stEl) stEl.textContent="启动失败，请直接打字"; this._rec=null; this.textContent="🎙️ 口述"; }
@@ -8512,6 +8510,25 @@ function runBattleQuiz(host,qs,opts){
 }
 /* —— Web Speech API 语音转写（浏览器自带免费识别；不可用/失败走回调提示，静默回退打字）—— */
 function asrSupport(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+/* v89: 听写草稿管理器——识别草稿实时上屏（GPT 式），终稿到达转正。
+   用法：var dft=asrDraftBinder(ta); 消费回调里 dft.feed(fin,inter); */
+function asrDraftBinder(ta){
+  let d0=-1; /* 草稿在 textarea 中的起点；-1=无草稿 */
+  function apply(txt){
+    const v=ta.value||"";
+    if(d0<0) d0=v.length;
+    ta.value=v.slice(0,d0)+txt;
+    try{ ta.setSelectionRange(ta.value.length,ta.value.length); }catch(_){ }
+    try{ ta.dispatchEvent(new Event("input",{bubbles:true})); }catch(_){ }
+  }
+  return {
+    feed(fin,inter){
+      if(fin){ apply(fin); d0=-1; }      /* 终稿转正 */
+      else if(inter){ apply(inter); }    /* 草稿覆盖上屏 */
+    },
+    reset(){ d0=-1; }
+  };
+}
 function asrOnce(lang,onText,onErr){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ if(onErr) onErr("此环境不支持语音识别，请直接打字"); return null; }
@@ -8541,7 +8558,8 @@ function asrOnce(lang,onText,onErr){
        v87：Safari 常只给临时草稿不给终稿——重启前把草稿当终稿交给消费方落地，一句话都不丢 */
     if(lastInter){ const p=lastInter; lastInter=""; if(onText) onText(p,""); }
     if(restartTimer) clearTimeout(restartTimer);
-    restartTimer=setTimeout(()=>{ if(rec._stopped) return; try{ rec.start(); }catch(_){ /* start 竞态由下一轮 onend 兜底 */ } },300);
+    /* v89：重启间隔 300→150ms，压缩句间盲区，快说少丢词 */
+    restartTimer=setTimeout(()=>{ if(rec._stopped) return; try{ rec.start(); }catch(_){ /* start 竞态由下一轮 onend 兜底 */ } },150);
   };
   /* 包装 stop：消费方调 stop() 即真正结束（设标志），停止前把草稿也落地；不会被 onend 自动重启救活 */
   const _nativeStop=rec.stop.bind(rec);
@@ -12724,13 +12742,13 @@ function openOralStudy(aid){
         SFX.tap();
         const stEl=box.querySelector("#ftRecSt"), ta=box.querySelector("#ftInp");
         if(this._rec){ try{this._rec.stop();}catch(e){} this._rec=null; this.textContent="🗣️ 语音转写"; return; }
+        const dft=asrDraftBinder(ta); /* v89：草稿实时上屏 */
         const rec=asrOnce("en-US",(fin,inter)=>{
-          /* v85：只用最终结果追加，防临时结果反复触发导致文字重复；临时内容进状态栏 */
-          const piece=(fin||"").trim();
-          if(!piece){ if(inter&&stEl) stEl.textContent="听到："+inter; return; }
-          ta.value=(ta.value&&!/\s$/.test(ta.value)?ta.value+" ":"")+piece;
-          if(stEl) stEl.textContent="已转写……继续说，说完再点一次结束";
-        },(msg)=>{ stEl.textContent=msg; });
+          dft.feed(fin,inter);
+          const shown=(fin||inter||"").trim();
+          if(!shown) return;
+          if(stEl) stEl.textContent=fin?"已转写……继续说，说完再点一次结束":"听到："+shown.slice(-40);
+        },(msg)=>{ stEl.textContent=msg; dft.reset(); });
         if(!rec) return;
         this._rec=rec; this.textContent="■ 结束转写"; stEl.textContent="转写中……诵读即可，说完再点一次结束";
         try{ rec.start(); }catch(e){ stEl.textContent="启动失败，请直接打字"; this._rec=null; this.textContent="🗣️ 语音转写"; }
@@ -12961,13 +12979,13 @@ boot();
           _live=true; btn.textContent="⏺"; btn.style.opacity="1"; btn.style.background="rgba(184,92,92,0.25)";
         };
         recognition.onresult=function(e){
-          /* v87：从 resultIndex 增量处理——持续监听模式下 results 累积历史，全量遍历会重复插入 */
+          /* v89：interim 覆盖式（同句草稿取最新，防重复累积）；草稿实时上屏——识别给多少显示多少 */
           for(var i=e.resultIndex||0;i<e.results.length;i++){
             var t=e.results[i][0].transcript||"";
-            if(e.results[i].isFinal) finalText+=t; else _interimText+=t;
+            if(e.results[i].isFinal) finalText+=t; else _interimText=t;
           }
-          if(finalText){ _insertAtCursor(ta, finalText); finalText=""; _interimText=""; }
-          if(_interimText) btn.title="识别中："+_interimText.slice(-40);
+          if(finalText){ _commit(finalText); finalText=""; _interimText=""; btn.title="语音输入 · 听写填入此处"; }
+          else if(_interimText){ _applyText(_interimText); btn.title="识别中："+_interimText.slice(-40); }
         };
         recognition.onerror=function(err){
           var er=err&&err.error;
@@ -12982,22 +13000,26 @@ boot();
            v87：Safari 常只给临时草稿不给最终结果——重启前把草稿也落地，一句话都不丢 */
         recognition.onend=function(){
           if(!_live) return;
-          if(finalText){ _insertAtCursor(ta, finalText); finalText=""; }
-          if(_interimText){ _insertAtCursor(ta, _interimText); _interimText=""; btn.title="语音输入 · 听写填入此处"; }
+          if(finalText){ _commit(finalText); finalText=""; }
+          if(_interimText){ _commit(_interimText); _interimText=""; btn.title="语音输入 · 听写填入此处"; }
           if(_restartT) clearTimeout(_restartT);
-          _restartT=setTimeout(function(){ if(!_live||!recognition) return; try{ recognition.start(); }catch(_){} },300);
+          /* v89：重启间隔 300→150ms，压缩句间盲区 */
+          _restartT=setTimeout(function(){ if(!_live||!recognition) return; try{ recognition.start(); }catch(_){} },150);
         };
         recognition.start();
       }catch(e){ toast("语音输入不可用——本浏览器不支持 Web Speech API","danger"); }
     }
-    function _stop(silent){ _live=false; if(_restartT){ clearTimeout(_restartT); _restartT=null; } btn.textContent="🎙️"; btn.title="语音输入 · 听写填入此处"; btn.style.background="rgba(201,111,127,0.22)"; if(recognition){ try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _insertAtCursor(ta, finalText); finalText=""; } if(!silent&&_interimText){ _insertAtCursor(ta, _interimText); _interimText=""; } }
-    function _insertAtCursor(ta, txt){
-      var v=ta.value||""; var s=ta.selectionStart??v.length, e=ta.selectionEnd??v.length;
-      ta.value=v.slice(0,s)+txt+v.slice(e);
-      try{ ta.setSelectionRange(s+txt.length,s+txt.length); }catch(_){}
+    function _stop(silent){ _live=false; if(_restartT){ clearTimeout(_restartT); _restartT=null; } btn.textContent="🎙️"; btn.title="语音输入 · 听写填入此处"; btn.style.background="rgba(201,111,127,0.22)"; if(recognition){ try{ recognition.stop(); }catch(_){} recognition=null; } if(!silent&&finalText){ _commit(finalText); finalText=""; } if(!silent&&_interimText){ _commit(_interimText); _interimText=""; } _draftStart=-1; }
+    /* v89：草稿区写入——草稿只占文本末尾一块区域，反复覆盖；定稿后释放草稿区 */
+    var _draftStart=-1;
+    function _applyText(txt){
+      var v=ta.value||"";
+      if(_draftStart<0) _draftStart=v.length;
+      ta.value=v.slice(0,_draftStart)+txt;
+      try{ ta.setSelectionRange(ta.value.length,ta.value.length); }catch(_){}
       try{ ta.dispatchEvent(new Event("input",{bubbles:true})); }catch(_){}
-      ta.focus();
     }
+    function _commit(txt){ _applyText(txt); _draftStart=-1; try{ ta.focus(); }catch(_){} }
     btn.onpointerdown=function(ev){ ev&&ev.stopPropagation(); if(_live) _stop(false); else _start(); };
     wrap.appendChild(btn);
     ta.dataset.micBtn="1";
