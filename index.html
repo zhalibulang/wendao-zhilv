@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>问道之旅 · 四十五日</title>
+<title>问道之旅 · 二十五日</title>
 <style>
 :root{
   --bg:#f6efe4; --bg2:#efe5d2; --bg3:#e5d8bf;
@@ -716,6 +716,8 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 <div class="toasts" id="toasts"></div>
 <script src="game-data.js?v53"></script>
 <script src="exam-2026-data.js?v53"></script>
+<script src="exam-2026-data-ext.js?v1"></script>
+<script src="task-units.js?v1"></script>
 <script src="npc-registry.js"></script>
 <script src="wd-cfg.js?v58b"></script>
 <script src="wd-terms.js?v55"></script>
@@ -726,6 +728,7 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 <script src="wd-fx.js"></script>
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v67"></script>
+<script src="wd-v25.js?v1"></script>
 <script>
 
 "use strict";
@@ -1117,7 +1120,7 @@ const PLAN_REG={
   plotActionSplit:true,           /* R4：剧情与游戏行为渲染分离 */
   styleBlacklist:true,            /* R1：违禁词三层防线 */
   stageCount:9,                   /* 九阶段历法 */
-  naturalDays:45,                 /* 1现实日=1自然日推进，总45日 */
+  naturalDays:25,                 /* 1现实日=1自然日推进，总25日（v25） */
 };
 /* v52 R5：启动一致性自检——校验各模块字段是否同步到 PLAN_REG 登记值 */
 function checkPlanConsistency(){
@@ -1159,7 +1162,11 @@ if(window.EXAM_2026_DATA && Array.isArray(EXAM_2026_DATA) && EXAM_2026_DATA.leng
     t=t.replace(/[，、；]\s*$/,"").replace(/。{2,}/g,"。");
     return {t,anchors};
   }
-  D.pointsLib=EXAM_2026_DATA.map(d=>{
+  /* v25：合并补充材料库（exam-2026-data-ext.js，EXAM_2026_DATA_EXT），与主库同格式 */
+  const _EXT=(window.EXAM_2026_DATA_EXT&&Array.isArray(EXAM_2026_DATA_EXT))?EXAM_2026_DATA_EXT:[];
+  const _ALLPTS=EXAM_2026_DATA.concat(_EXT);
+  if(_EXT.length) console.log("[v25] 补充材料库已并入:", _EXT.length, "条");
+  D.pointsLib=_ALLPTS.map(d=>{
     const _tx=_stripMeta(d.text||"");
     let _anchor=_stripMd(d.anchor||"");
     if(!_anchor&&_tx.anchors.length) _anchor=_tx.anchors.join("；");
@@ -1175,17 +1182,14 @@ if(window.EXAM_2026_DATA && Array.isArray(EXAM_2026_DATA) && EXAM_2026_DATA.leng
   console.log("[v49] 考点数据库已替换为 2026 修正版:", D.pointsLib.length, "条 (旧:", _oldCnt, "条)");
 }
 
-/* —— 2. 三套时钟：游戏日(1-225) / 雾涌日(45→1 倒计时) / 自然日 —— */
-/* v50：1 现实自然日 = 1 自然日推进（DAYS 按自然日组织）；次元内游戏日 = 自然日×5 */
+/* —— 2. 时钟：25 自然日周期（v25 废纪日机制，不再有游戏日×5/雾涌日）—— */
 function ensureClocks(){
-  /* v49：st.day 为 undefined/0/NaN 时强制初始化为 1，防止 stageOfDay 返回错误 */
   if(!st.day||isNaN(st.day)||st.day<1) st.day=1;
-  if(st.day>45) st.day=45;
+  if(st.day>25) st.day=25;                       /* v25：周期上限 25 自然日 */
   if(!st.lastNaturalDay) st.lastNaturalDay=new Date().toISOString().slice(0,10);
-  if(st.fogDay==null||isNaN(st.fogDay)) st.fogDay=45;
-  /* v50：游戏日（次元内日）= (自然日-1)×5 + 1，上限 225；叙事层 1自然日=5游戏日 */
-  st.gameDay=((st.day-1)*5)+1;
-  try{ console.log("[v50] clocks:",{naturalDay:st.day,gameDay:st.gameDay,fog:st.fogDay,stage:stageOfDay(st.day).name}); }catch(e){}
+  st.fogDay=Math.max(1,26-st.day);               /* v25：仅存为兼容字段，UI 不再展示 */
+  st.gameDay=st.day;                             /* v25：纪日=自然日，废除 ×5 */
+  try{ console.log("[v25] clocks:",{naturalDay:st.day}); }catch(e){}
 }
 function advanceNaturalDay(){
   /* v50：每过 1 个现实自然日，游戏自然日 +1（DAYS 按自然日组织任务），雾涌日 -1（最低 1），恢复心气/灵力 */
@@ -1196,8 +1200,8 @@ function advanceNaturalDay(){
   /* v50 修正：1 现实日 = 1 自然日推进（旧版错误地 +5 导致跳过任务） */
   const natAdv=elapsed;
   const oldDay=st.day||1;
-  st.day=Math.min(45, oldDay+natAdv);
-  st.fogDay=Math.max(1, (st.fogDay||45)-natAdv);
+  st.day=Math.min(25, oldDay+natAdv);            /* v25：上限 25 自然日 */
+  st.fogDay=Math.max(1, 26-st.day);              /* v25：由自然日派生，不再独立倒计时 */
   /* v58c：跨自然日后按完成度对齐当前纪日，不再恒置周一 */
   syncGameDay();
   /* v53 修复：离线推进自然日时，同步推进任务解锁自然日——现实时间已流逝，
@@ -1207,205 +1211,8 @@ function advanceNaturalDay(){
   const hpCap=maxHP(); st.hp=Math.min(hpCap,(st.hp||0)+Math.round(hpCap*0.3*elapsed));
   const enCap=maxEnergy(); st.energy=enCap;
   st.lastNaturalDay=today;
-  /* v52 R2：自然日奖励剧情点——每推进 1 个现实自然日额外 +1（按日期幂等发放 elapsed 个） */
-  try{
-    for(let i=0;i<elapsed;i++){
-      const d=new Date(new Date(st.lastNaturalDay).getTime()-((elapsed-1-i)*86400000));
-      addPlotPoints("naturalDay", d.toISOString().slice(0,10));
-    }
-  }catch(e){}
-  /* v58c：推进到新的一周后，补发当前纪日手札开场（更早纪日静默回填） */
-  try{ ensureGdMilestone(st.day); }catch(e){}
-  /* v55 批3-⑦⑧：跨阶段时触发 R1 群聊指导与传译出题（异步，不阻塞） */
-  try{ r1StageTrigger(oldDay, st.day); }catch(e){}
   save();
   return elapsed;
-}
-
-/* —— 3. 剧情推演系统（剧情与进度分离）—— */
-/* 触发门槛：完成的任务量达到该日剧情所需。每游戏日 1 段小型日常剧情。 */
-const PLOT_THEMES={
-  1:{title:"圣约初结",chars:["yunting","tina"],type:"major",cg:"cg_bonding"},
-  2:{title:"藏经阁初认",chars:["yunting","shenzhao"],type:"small"},
-  3:{title:"协律初示范",chars:["wantang"],type:"small"},
-  4:{title:"踏春行第一单",chars:["chengxiu"],type:"small"},
-  5:{title:"初醒的微光",chars:["yunting","tina"],type:"small_reward",cg:"cg_first_light",item:"初醒符"},
-  6:{title:"紫宸的袖口",chars:["gugong"],type:"small"},
-  7:{title:"魔化面一闪",chars:["shenzhao"],type:"small"},
-  8:{title:"星盘初成",chars:["tina"],type:"small"},
-  9:{title:"祷祝师的衣摆",chars:["wantang","chengxiu"],type:"small"},
-  10:{title:"首套时装",chars:["yunting","wantang"],type:"medium_reward",cg:"cg_first_costume",item:"时装·初醒"},
-  11:{title:"太和殿·胸口",chars:["gugong"],type:"small"},
-  12:{title:"后三宫·私密",chars:["gugong","wantang"],type:"small"},
-  13:{title:"魔化守关",chars:["shenzhao"],type:"small"},
-  14:{title:"错题成星",chars:["chengxiu","tina"],type:"small"},
-  15:{title:"紫宸清醒",chars:["gugong","yunting"],type:"major",cg:"cg_shengqi_first"},
-  16:{title:"藏经阁第一层",chars:["shenzhao"],type:"small"},
-  17:{title:"魔化面守关",chars:["shenzhao"],type:"small"},
-  18:{title:"数据接口",chars:["tina","shenzhao"],type:"small"},
-  19:{title:"圣女的疲惫",chars:["yunting"],type:"small"},
-  20:{title:"经匣点亮",chars:["shenzhao","yunting"],type:"major",cg:"cg_jingxia"},
-  21:{title:"国门长安",chars:["tiananmen"],type:"small"},
-  22:{title:"祭天祈年",chars:["temple-heaven"],type:"small"},
-  23:{title:"半醒漱玉",chars:["summer"],type:"small"},
-  24:{title:"关山与眠鹤",chars:["great-wall","ming-tombs"],type:"small"},
-  25:{title:"北京矩阵初成",chars:["all"],type:"major",cg:"cg_six_spirits"},
-  26:{title:"雾回潮",chars:["tina"],type:"small"},
-  27:{title:"魔化变重",chars:["shenzhao"],type:"small"},
-  28:{title:"金身蒙尘",chars:["chengxiu"],type:"small"},
-  29:{title:"我怕",chars:["yunting"],type:"small"},
-  30:{title:"学会守住",chars:["all"],type:"major",cg:"cg_keep"},
-  31:{title:"独扛的真相",chars:["yunting"],type:"small"},
-  32:{title:"一魂双面的由来",chars:["shenzhao"],type:"small"},
-  33:{title:"被遗忘的记忆",chars:["tina"],type:"small"},
-  34:{title:"各自的小雾",chars:["wantang","chengxiu"],type:"small"},
-  35:{title:"三人心结松动",chars:["yunting","shenzhao","tina"],type:"major",cg:"cg_night_talk"},
-  36:{title:"演界开始",chars:["yunting"],type:"small"},
-  37:{title:"全科统验",chars:["shenzhao"],type:"small"},
-  38:{title:"英文总演练",chars:["wantang"],type:"small"},
-  39:{title:"最后一单",chars:["chengxiu","tina"],type:"small"},
-  40:{title:"阵纹八成",chars:["all"],type:"major",cg:"cg_eighty"},
-  41:{title:"雾涌前夜",chars:["yunting"],type:"small"},
-  42:{title:"六界结界",chars:["all_spirits"],type:"small"},
-  43:{title:"最后准备",chars:["shenzhao","wantang","chengxiu","tina"],type:"small"},
-  44:{title:"不必独自扛",chars:["yunting"],type:"small"},
-  45:{title:"雾涌之日·金榜台",chars:["all"],type:"ultimate",cg:"cg_final"},
-};
-/* 每个自然日可购的小型奖励剧情道具 */
-const REWARD_ITEMS=[
-  {id:"chuixing_fu",name:"初醒符",day:5,plot:5,cost:50},
-  {id:"costume_chuxing",name:"时装·初醒",day:10,plot:10,cost:200},
-  {id:"qunling_fu",name:"群灵符",day:25,plot:25,cost:300},
-  {id:"yehua_zhu",name:"夜话烛",day:35,plot:35,cost:500},
-];
-function plotTriggered(day){ return !!(st.plotDone&&st.plotDone[day]); }
-/* v59 剧情工坊：内置剧情的前台覆写访问器——演出/回顾/忆境/集市统一走它，永不直读 PLOT_THEMES */
-function plotThemeOf(day){
-  const t=PLOT_THEMES[day];
-  const ov=st.storyThemeOV&&st.storyThemeOV[day];
-  if(!ov) return t||null;
-  const base=t||{chars:[],type:"small"};
-  const chars=typeof ov.charsStr==="string"&&ov.charsStr.trim()
-    ?ov.charsStr.split(/[,，、\s]+/).map(s=>s.trim()).filter(Boolean):base.chars;
-  return {
-    id:base.id, day:+day,
-    title:ov.title||base.title,
-    chars:chars,
-    type:ov.type||base.type,
-    cg:(ov.cg===undefined?base.cg:(ov.cg||null)),
-    item:(ov.item===undefined?base.item:(ov.item||""))
-  };
-}
-/* v59：过场台词覆写访问器 */
-function cutsceneText(node){
-  const cs=CUTSCENE_NODES[node]; if(!cs) return "";
-  const ov=st.cutsceneOV&&st.cutsceneOV[node];
-  return (ov&&ov.trim())?ov.trim():cs.local;
-}
-/* v59：CG 总表（内置剧情 CG＋福利 CG＋自定义 CG），忆境与工坊共用 */
-function cgAllList(){
-  const list=[];
-  Object.keys(PLOT_THEMES).forEach(d=>{
-    const t=plotThemeOf(+d);
-    if(t&&t.cg) list.push({id:t.cg,name:"剧情·第"+d+"日 "+t.title,type:"剧情"});
-  });
-  ["yunting","shenzhao","wantang","tina","chengxiu"].forEach(id=>list.push({id:"welfare_"+id,name:({yunting:"云汀",shenzhao:"沈昭",wantang:"晚棠",tina:"缇娜",chengxiu:"程绣"})[id]+"福利图",type:"福利"}));
-  (st.customCgs||[]).forEach(c=>list.push({id:c.id,name:c.name,type:"自定义"}));
-  /* 去重（自定义 CG 不得与内置 id 撞） */
-  const seen={}; return list.filter(c=>seen[c.id]?false:(seen[c.id]=true));
-}
-/* v52 R2：剧情点累积机制（双奖励）
-   - 游戏日点（byDay）：完成当日指定任务（当日任务全清）→ +1，主线剧情以此触发
-   - 自然日奖励点（byNaturalDay）：每推进 1 个现实自然日 → 额外 +1，用于 REWARD_ITEMS 联动解锁
-   - st.plotPoints.total = 两类点数之和（累积值，只增不减）
-   幂等：同一天/同一自然日重复调用不重复发放。 */
-function addPlotPoints(src, day){
-  st.plotPoints=st.plotPoints||{total:0,byDay:{},byNaturalDay:{},triggered:{}};
-  const pp=st.plotPoints;
-  if(src==="gameDay"){
-    const d=+day||(st.day||1);
-    if(pp.byDay[d]) return 0;
-    pp.byDay[d]=new Date().toISOString();
-    pp.total=(pp.total||0)+1;
-    return 1;
-  }
-  if(src==="naturalDay"){
-    const key=day||new Date().toISOString().slice(0,10);
-    if(pp.byNaturalDay[key]) return 0;
-    pp.byNaturalDay[key]=new Date().toISOString();
-    pp.total=(pp.total||0)+1;
-    return 1;
-  }
-  return 0;
-}
-/* 当日指定任务是否已全清（游戏日点发放条件） */
-function dayQuestsAllDone(day){
-  const d=byDay[day]; if(!d) return false;
-  const qs=d.quests||[]; if(!qs.length) return false;
-  return qs.every(q=>qDone(q.id));
-}
-function checkPlotTrigger(){
-  /* v52 R2：触发条件改为剧情点驱动——
-     当日任务全清 → addPlotPoints("gameDay") → 当日游戏日点到账 → 触发当日主线剧情；
-     自然日奖励点不提前触发主线（防止纯登录跳过剧情），仅联动 REWARD_ITEMS。 */
-  const day=st.day||1;
-  if(plotTriggered(day)) return null;
-  if(!plotThemeOf(day)) return null;
-  /* 结算时补发当日游戏日点（幂等） */
-  if(dayQuestsAllDone(day)) addPlotPoints("gameDay", day);
-  const pp=st.plotPoints||(st.plotPoints={total:0,byDay:{},byNaturalDay:{},triggered:{}});
-  if(pp.byDay[day]){
-    st.plotDone=st.plotDone||{};
-    st.plotDone[day]=new Date().toISOString();
-    pp.triggered[day]=new Date().toISOString();
-    save();
-    return plotThemeOf(day);
-  }
-  return null;
-}
-/* 演出剧情：AI director 调度 + AI 演员生成台词，完了给 CG */
-async function performPlot(theme){
-  if(!theme) return;
-  /* 场景之灵与全员的显示名映射 */
-  const SPIRIT_NAMES={gugong:"故宫之灵",tiananmen:"天安门之灵","temple-heaven":"天坛之灵",summer:"颐和园之灵","great-wall":"长城之灵","ming-tombs":"明十三陵之灵",all:"众人",all_spirits:"六界之灵"};
-  const names=theme.chars.map(c=>{const r=NPC[c]||WD_NEW_ROLES[c]||SPIRIT_NAMES[c];return r?(r.name?r.name+"·"+(r.title||""):r):c;}).join("、");
-  toast("剧情触发：《"+theme.title+"》——"+names);
-  /* v52 R4：剧情与游戏行为分离——剧情对白不再混入 st.dialogue（行为流），
-     改写入独立数组 st.plotLines，并记录 questId/day/theme 元数据供双向跳转 */
-  st.plotLines=st.plotLines||[];
-  const _aq=(typeof firstActiveQuest==="function")?firstActiveQuest():null;
-  const curQuestId=(_aq&&_aq.id)||null;
-  const plotLine={role:"npc",npc:theme.chars[0],
-    text:"【"+theme.title+"】"+names+" 的故事正在展开……",
-    at:new Date().toISOString(),day:st.day,kind:"plot",
-    plotId:theme.id||("plot_"+st.day),theme:theme.title,questId:curQuestId};
-  st.plotLines.push(plotLine);
-  if(st.plotLines.length>120) st.plotLines=st.plotLines.slice(-120);
-  /* 兼容旧版渲染：同时镜像到 st.dialogue 保持 kind:"plot" class 区分（dlgMsgs 渲染层已识别） */
-  st.dialogue.push(plotLine);
-  if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-  /* 解锁 CG */
-  if(theme.cg){ st.cgUnlocked=st.cgUnlocked||{}; st.cgUnlocked[theme.cg]=true; save(); }
-  /* AI director 编排多角色台词 */
-  if(window.WDChat&&WDChat.directorFlow&&dsReady()&&theme.chars.length){
-    try{
-      const targets=theme.chars.filter(c=>NPC[c]||WD_NEW_ROLES[c]);
-      const lines=await WDChat.directorFlow("剧情《"+theme.title+"》上演。出场："+names+"。请按各自人设即兴演绎这段剧情，每人 1-2 句。",{targets,kind:"plot"});
-      if(lines&&lines.length){
-        lines.forEach(l=>{ const m={role:"npc",npc:l.npc,text:l.text,at:new Date().toISOString(),day:st.day,kind:"plot",plotId:plotLine.plotId,theme:theme.title,questId:curQuestId};
-          st.plotLines.push(m); st.dialogue.push(m); });
-        if(st.plotLines.length>120) st.plotLines=st.plotLines.slice(-120);
-        if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-      }
-    }catch(e){}
-  }
-  save(); /* v62 T15（AC-28）：剧情台词已入流——对话视图就地刷新（保输入草稿），其他视图重渲染当前视图不切换 */ if(view==="chat") renderChat(true); else render();
-}
-
-/* v52 R4：剧情流查询入口——供"剧情回廊"或双向跳转使用，与行为流 buildStream 分离 */
-function buildPlotStream(){
-  if(!st||!Array.isArray(st.plotLines)) return [];
-  return st.plotLines.map(d=>({t:"plotline",npc:d.npc,x:filterNpcText(d.text),day:d.day,plotId:d.plotId,theme:d.theme,questId:d.questId,at:d.at}));
 }
 
 /* ============================================================
@@ -1445,8 +1252,8 @@ const NPC_TEXT_REMAP=[
 ];
 /* v52 R1：风格黑名单——违禁词统一替换表（日漫/GAL/轻小说基调约束）
    根因：filterNpcText 原仅做术语映射，未覆盖硬编码/AI 输出后处理；
-   三层防线：①源头清除（硬编码改写）②路径覆盖（pubLine/performPlot/storyAppend 包装）
-   ③AI 侧（genPersona/directorAudit 注入）。本表为 ②/③ 共享数据源。 */
+   三层防线：①源头清除（硬编码改写）②路径覆盖（pubLine/storyAppend 包装）
+   ③AI 侧（directorAudit 注入）。本表为 ②/③ 共享数据源。 */
 const STYLE_BLACKLIST=[
   ["灯芯","回响"],["又亮了一分","又清晰一寸"],["亮了一分","清晰一寸"],
   ["头一桩","起手"],["第一桩","起手"],["莫慌","别忙"],
@@ -1496,7 +1303,7 @@ function filterNpcText(s){
   }
   return r;
 }
-/* v52 R1：黑名单扫描——供 directorAudit/genPersona 后处理校验使用 */
+/* v52 R1：黑名单扫描——供 directorAudit 后处理校验使用 */
 function scanStyleBlacklist(s){
   if(!s||typeof s!=="string") return [];
   const hits=[];
@@ -1657,7 +1464,7 @@ if(window.WDChat){
     });
     const charList=npcs.map(n=>n.name+"（"+(n.title||"")+"，"+n.intro+"）").join("｜");
     return {
-      游戏名:"问道之旅 · 四十五日（北京导游资格考试游戏化复习）",
+      游戏名:"问道之旅 · 二十五日（北京导游资格考试游戏化复习）",
       游戏目的:"玩家意外降临导游世界，与圣女云汀形成灵魂绑定。玩家须完成四十五日修行，助云汀逐步恢复被遗忘之雾侵蚀的圣女之力，重新驾驭圣器以驱逐遗忘之雾。做任务就是修行：研习新考点=点亮阵纹节点，复习=净化回潮的雾怪，题组试炼=试炼阵中净化雾怪，英文导游词=咒祷辞吟诵，小考=守城之战。",
       世界观:"玩家意外降临导游世界——一个正在被遗忘之雾吞噬的残破次元。圣女云汀在就职典礼被遗忘之雾打断时与玩家形成灵魂绑定。四十五日的旅程中，玩家将激活六个景点的结界（天安门/故宫/天坛/颐和园/长城/明十三陵），与藏经阁阁主沈昭、旅行社老板程绣、次元精灵缇娜、英语导游晚棠同行，最终在第四十五日登上金榜台完成云汀的圣女就职。景点皆有守护精灵（如故宫的紫宸）：结界是精灵的战甲，雾怪侵蚀景点=精灵的痛感，节点被点亮=精灵的力量恢复。",
       角色设定:charList+"。（注：以上角色名字/称号/人设均以玩家配置中心的自定义为准，玩家可随时编辑覆写）",
@@ -1906,7 +1713,7 @@ if(window.WDChat){
 
   /* 2) defaultAiDocument —— 角色扮演基底提示词 → 新版世界观（四十五日/导游世界/沈昭/云汀） */
   chat.defaultAiDocument=function(npcId,dispName,dispTitle,brief){
-    return "你是日式RPG《问道之旅·四十五日》里的一个居民——「{name}」{title_block}。玩家是意外降临导游世界的女性外来者，来自次元之外；这个世界正在被遗忘之雾吞噬，居民皆是女性，她是唯一的域外之人。你和她是同行的队友、接头人、前辈或同伴，不是师生、不是客服、不是问答机器人。\n"
+    return "你是日式RPG《问道之旅·二十五日》里的一个居民——「{name}」{title_block}。玩家是意外降临导游世界的女性外来者，来自次元之外；这个世界正在被遗忘之雾吞噬，居民皆是女性，她是唯一的域外之人。你和她是同行的队友、接头人、前辈或同伴，不是师生、不是客服、不是问答机器人。\n"
       +"【行为边界·铁律】"
       +"1）你始终是「{name}」本人，绝不出戏，绝不承认自己是AI/程序/模型，不提接口、密钥、存档、系统等外物；"
       +"2）不替玩家做决定、不代替玩家操作；"
@@ -1981,7 +1788,7 @@ if(window.WDChat){
     const userDoc=(window.WDCfg&&WDCfg.directorDoc)?WDCfg.directorDoc():"";
     let sys=userDoc&&userDoc.trim()
       ?userDoc.trim()
-      :("你是日式RPG《问道之旅·四十五日》的群聊导演。看完下面的信息，决定接下来哪些NPC该开口、按什么顺序、用什么反应类型。\n"
+      :("你是日式RPG《问道之旅·二十五日》的群聊导演。看完下面的信息，决定接下来哪些NPC该开口、按什么顺序、用什么反应类型。\n"
         +"【反应类型】respond(正常接话) / interject(插话，多为半句或语气词) / react(对他人的反应) / guide(把话题轻拽回正事，但不许生硬)。\n"
         +"【活人感·铁律】"
         +"1）NPC首先是有自己生活的居民，不是任务派发器或报告器——她们可以聊自己正在做的事、想起的事、对眼前场景的感想，不必每次都和任务相关；"
@@ -2051,7 +1858,7 @@ if(window.WDChat){
           专属约束:pc?{灵魂领域:pc.soulField,口吻:pc.voice,禁令:pc.forbidden,锚点:pc.distinguish}:undefined};
       }).filter(Boolean);
       if(!cards.length) return null;
-      const sys="你是日式RPG《问道之旅·四十五日》的群聊导演。一群早就认识彼此的角色，在同一个群聊里看到玩家的同一条消息，各自留下反应。"
+      const sys="你是日式RPG《问道之旅·二十五日》的群聊导演。一群早就认识彼此的角色，在同一个群聊里看到玩家的同一条消息，各自留下反应。"
         +"铁律："
         +"1）每个人只说她这个人才会说的话——反应类型必须错开：有人接话、有人吐槽、有人只给一个语气词、有人冷淡、有人听错重点或答非所问、有人顺着别人的话补刀、有人把话题拽回正事；"
         +"2）严禁所有人表达同一个意思（尤其禁止轮流鼓励/安慰/说'不要气馁'/'相信自己'），也严禁每个人都把话说完整；"
@@ -2118,7 +1925,7 @@ if(window.WDChat){
     const textForAi=inputType==="object"&&text!==null
       ?JSON.stringify(text).slice(0,1500)
       :String(text).slice(0,1500);
-    const sys="你是日式RPG《问道之旅·四十五日》的剧本导演。你要审核下面这段 AI 生成的文本，判断它是否合理。\n"
+    const sys="你是日式RPG《问道之旅·二十五日》的剧本导演。你要审核下面这段 AI 生成的文本，判断它是否合理。\n"
       +"审核四维度：\n"
       +"1. 世界观设定：术语/力量体系/人物关系/势力阵营是否正确、是否与世界观冲突；\n"
       +"2. 事理逻辑：角色行为反应是否合理、因果是否通顺、有没有常识性违和；\n"
@@ -2280,7 +2087,7 @@ function defState(){
     privateChat:{},
     ver:PLAN_VERSION};
 }
-let st=null, view="chat", questTimer=0;
+let st=null, view="v25", questTimer=0;
 /* v65 任务正计时——进入启动、暂离暂停(累计elapsed)、交割结算(doneTime)，跳过不计时 */
 let uiTimer=0;
 function fmtSec(sec){ sec=Math.max(0,Math.floor(sec||0)); const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60; return (h>0?(h<10?"0":"")+h+":":"")+(m<10?"0":"")+m+":"+(s<10?"0":"")+s; }
@@ -2556,7 +2363,7 @@ function reconcile(){
         });
       }
       if(Array.isArray(st.wrong)) st.wrong.forEach(we=>{ if(we&&we.pid&&/^S[1-5]-/.test(we.pid)){ const r=srsGet(we.pid); r.pending=true; if(r.tier<1) r.tier=1; r.due=srsAdd(1); } });
-      st.done={}; st.skipped={}; st.unlocked=1; st.day=1; st.fogDay=45; st.gameDay=1;
+      st.done={}; st.skipped={}; st.unlocked=1; st.day=1; st.fogDay=25; st.gameDay=1;
       st.lastNaturalDay=new Date().toISOString().slice(0,10);
       st.oralProgress={}; st.rtPlan={}; st.recTimes={};
       st.plotPoints={total:0,byDay:{},byNaturalDay:{},triggered:{}};
@@ -2593,8 +2400,8 @@ function refreshStat(persist){
 const level=()=>Math.floor(st.xp/50)+1;
 let lastLv=1;
 function checkLevelUp(){ const lv=level(); if(lv>lastLv){ record("等级提升","Lv."+lastLv+" → Lv."+lv+" · "+title()); toast("等级提升 · Lv."+lv+"「"+title()+"」","gold");
-    pushAction("境界突破——Lv."+lv+"「"+title()+"」。"); WDChat.storyAppend("yunting","玩家境界突破至Lv."+lv+"——圣女指尖的回响又清晰一寸。");
-    WDFx.levelUp(lv,title()); if(view==="chat") renderChat(); } lastLv=Math.max(lastLv,lv); }
+    pushAction("境界突破——Lv."+lv+"「"+title()+"」。");
+    WDFx.levelUp(lv,title()); } lastLv=Math.max(lastLv,lv); }
 function title(){ return st.unlocked>=45?"金榜引路人":st.unlocked>=42?"问道行者·终章":st.unlocked>=31?"遗迹探索者":st.unlocked>=21?"行会行者":st.unlocked>=9?"藏经阁学徒":"结界巡礼者"; }
 const qDone=id=>!!st.done[id];
 function dayProg(d){ let n=0; d.quests.forEach(q=>{if(qDone(q.id))n++;}); return {n,all:d.quests.length}; }
@@ -2685,10 +2492,8 @@ function checkDailyGift(){
   const recall=gifts[Math.floor(Math.random()*gifts.length)];
   st.coin=(st.coin||0)+coin;
   st.lastGiftDay=today;
-  /* v52 R2：每日签到同步发放/确认当日自然日奖励剧情点（幂等；首日无跨日推进时也保底 +1） */
-  const ppGain=addPlotPoints("naturalDay", today);
   save();
-  return {coin, bonus, s, recall, today, ppGain};
+  return {coin, bonus, s, recall, today};
 }
 /* 渲染每日福利弹窗（登录时自动触发） */
 function renderDailyGiftToast(){
@@ -2944,7 +2749,7 @@ function buildQuestCueMsgs(q,d){
       +(pc.distinguish?("辨识锚点："+pc.distinguish+"。"):"")
       +(pc.growthArc?("成长弧线："+pc.growthArc+"。"):"")+"\n";
   }
-  const sys="你是日式RPG《问道之旅·四十五日》里的角色「"+npcName+"」。玩家是与你并肩同行的同伴，不是来听安排的下属。\n"
+  const sys="你是日式RPG《问道之旅·二十五日》里的角色「"+npcName+"」。玩家是与你并肩同行的同伴，不是来听安排的下属。\n"
     +"请用「"+npcName+"」的口吻，对她说一小段开场台词（1-2句，≤70字），像当季新番动画里同伴当面开口。只讲三件事："
     +"①一个具体画面或你此刻的身体感受；②今天想请她陪你做的一件事，一句话概括；③有温度的请求式收尾。\n"
     +"【姿态·最优先】是你在请求她帮忙，不是派发任务：商量、邀请、倾诉都可以。"
@@ -3016,40 +2821,6 @@ function gdCueOf(day,gi){
   const {rec}=gdRec(day,gi);
   return (rec.cueV===CUE_V&&rec.cue)||GD_CUE_FALLBACK[gdAbs(day,gi)%GD_CUE_FALLBACK.length];
 }
-function gdMilestoneText(day,gi){
-  const kind=gdKind(day,gi);
-  const boss=gdQuests(day,gi).some(q=>q.type==="boss");
-  if(boss) return "五日一验——守关大阵起雾了。手札最后一栏，留给你。";
-  if(kind==="rest") return "这一环轻些，走累了就回来坐坐，雾我替你看着。";
-  return "纪日翻到"+GD_LABELS[gi]+"——这一环的事，都在我手札上了。";
-}
-/* 新纪日首次成为当前纪日时，云汀在对话流落一条持久开场（幂等，按 gd 绝对编号）。
-   旧存档首次加载：更早的纪日静默回填，不补发一串历史。 */
-function ensureGdMilestone(day){
-  day=day||st.day||1;
-  const gi=curGiOfDay(day); if(gi==null) return;
-  const gd=gdAbs(day,gi);
-  st.gdIssued=st.gdIssued||{};
-  if(!st._gdBf){
-    for(let dd=1;dd<=day;dd++) for(let k=0;k<5;k++){
-      if(dd===day&&k>=gi) break;
-      const g2=gdAbs(dd,k); if(gdQuests(dd,k).length) st.gdIssued[g2]=1;
-    }
-    st._gdBf=1;
-  }
-  /* 防重双保险：gdIssued 丢失（旧档/异常）时，若对话流已有该 gd 里程碑也不重复落 */
-  const exists=st.dialogue.some(m=>m&&m.kind==="gdmilestone"&&(m.gd===gd||m.id==="gd_"+gd));
-  if(!st.gdIssued[gd]&&!exists){
-    st.gdIssued[gd]=new Date().toISOString();
-    st.dialogue.push({id:"gd_"+gd,gd,role:"npc",npc:"yunting",kind:"gdmilestone",
-      text:gdMilestoneText(day,gi),at:new Date().toISOString(),day});
-    if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-    save();
-    if(typeof view!=="undefined"&&view==="chat") renderChat(true);
-  }else if(!st.gdIssued[gd]){
-    st.gdIssued[gd]=new Date().toISOString(); /* 消息已在，仅补发布标记 */
-  }
-}
 /* 纪日 cue 生成：云汀以「派发手札」口吻说一小段，过同套红线/跨稿去重/双稿重拟。
    内容边界按该纪日任务构成（验界/修诵/理经/传译/问契），不报数量。 */
 /* v78：纪日里程碑 cue 提示词组装（实发/预演共用） */
@@ -3061,7 +2832,7 @@ function buildGdCueMsgs(day,gi){
   const isBoss=qs.some(q=>q.type==="boss");
   const recent=Object.keys(st.questLines||{}).filter(k=>k.indexOf("gd:")===0)
     .map(k=>st.questLines[k]).filter(r=>r.cueV===CUE_V&&r.cue).slice(-6).map(r=>r.cue);
-  const sys="你是日式RPG《问道之旅·四十五日》里的圣女「云汀」，你把这一纪日要做的事誊在手札上，当面递给同伴。"
+  const sys="你是日式RPG《问道之旅·二十五日》里的圣女「云汀」，你把这一纪日要做的事誊在手札上，当面递给同伴。"
     +"请说一小段开场白（1-2句，≤60字）：先一个画面或此刻状态，再说「今天这一环有这些事，你挑顺手的来」，不催促、不命令。"
     +"自称只用「我」，台词里不许出现「云汀」二字；禁止报数量、耗时、任务编号；不要每条都写「能陪我…吗/你在我就…」；"
     +"请求/陈述/自言自语换着来。雾怪只用侵蚀/蚕食，禁「咬/啃/撕」。禁AI腔、教师腔、客服腔、半文半白。";
@@ -3111,8 +2882,8 @@ function buildQuestLineMsgs(q,kind){
   const label=Q_TYPE_LABEL[q.type]||q.type;
   const dispName=((window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(q.npc,(NPC[q.npc]&&NPC[q.npc].name)||q.npc):((NPC[q.npc]&&NPC[q.npc].name)||q.npc));
   const sys=kind==="pub"
-    ? "你是RPG《问道之旅·四十五日》中的任务NPC。玩家即将接取任务。请用一句有角色感的话发出请求，≤30字，像同伴当面开口，不解释、不报编号、不抒情。"
-    : "你是RPG《问道之旅·四十五日》中的任务NPC。玩家刚完成任务。请用一句有角色感的话认可或交割，≤30字，像同伴当面开口，不解释、不报编号。";
+    ? "你是RPG《问道之旅·二十五日》中的任务NPC。玩家即将接取任务。请用一句有角色感的话发出请求，≤30字，像同伴当面开口，不解释、不报编号、不抒情。"
+    : "你是RPG《问道之旅·二十五日》中的任务NPC。玩家刚完成任务。请用一句有角色感的话认可或交割，≤30字，像同伴当面开口，不解释、不报编号。";
   const user=`任务名：${q.name}\n类型：${label}${q.desc?`\n任务简述：${String(q.desc).slice(0,80)}`:""}`
     +`\n姿态红线：是请求不是命令，不催促、不讲条件、不说教；自称用「我」，台词里不许出现你自己的名字「${dispName}」；禁考试/考核/复习等现实词。`;
   return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"questbrief"},dispName};
@@ -3165,12 +2936,12 @@ function _renderGame(){
   const d=byDay[st.day]||byDay[1];
   const lv=level(), total=totals();
   game.innerHTML=`
-  <div class="hd"><div class="t">问道之旅<small>四十五周目 · ${esc(st.player)}</small></div>
-    <div class="stats"><span class="gametime">次元内<b>第${st.day}周</b>/45 · 纪日<b>${st.gameDay||((st.day-1)*5+1)}</b>/225 · ${(function(){try{return stageOfDay(st.day).name}catch(e){return ""}})()}阶段</span><span>雾涌<b>${st.fogDay||45}</b>日</span><span>Lv.<b>${lv}</b></span><span>修行<b>${st.xp}</b></span>
+  <div class="hd"><div class="t">问道之旅<small>25日版 · ${esc(st.player)}</small></div>
+    <div class="stats"><span class="gametime">第<b>${st.day}日</b>/25 · 已解锁至第<b>${st.unlocked}</b>日</span><span>Lv.<b>${lv}</b></span><span>修行<b>${st.xp}</b></span>
     <span>灵铢<b>${st.coin}</b></span><span>连<b>${streak()}</b>日</span>
     <span class="hdacts"><button data-act="cfg">配置</button><button data-act="save">存档</button></span></div></div>
   <div class="navline">
-    <button data-v="chat">对话</button>
+    <button data-v="v25">修行</button>
     <button data-v="board">任务</button>
     <button data-v="dash">看板</button>
     <button data-v="oral">修诵</button>
@@ -3179,26 +2950,14 @@ function _renderGame(){
     <button data-v="arena">演界</button>
     <button data-v="star">星盘错题</button>
     <button data-v="ach">成就</button>
-    <button data-v="heart">心语${heartNew()?'<span class="dot"></span>':""}</button>
-    <button data-v="shop">集市</button>
-    <button data-v="cal">旅程</button>
   </div>
   <aside id="sidePanel" aria-label="今日任务面板"></aside>
   <div class="stream" id="stream"></div>
-  <div class="inputbar"><input id="chatInput" placeholder="${inputHint()}" autocomplete="off">
-  <button class="btn sm" id="sendBtn">发送</button></div>
   <button class="fab" id="oralFab" title="修诵 · 英文导游词线" type="button">🎙️</button>
-  <footer>问道之旅 · 四十五日 · 金榜台于 ${D.examDate} · 构建 ${BUILD_VERSION}</footer>`;
+  <footer>问道之旅 · 二十五日 · 金榜台于 ${D.examDate} · 构建 ${BUILD_VERSION}</footer>`;
   bindNav(); switchView(view);
   renderSidePanel();
   $("#oralFab").onpointerdown=()=>{ SFX.tap(); switchView("oral"); };
-  const inp=$("#chatInput");
-  inp.oninput=()=>onChatInput(inp);
-  inp.onkeydown=e=>{ if(handleMentionKey(e,inp)) return; if(e.key==="Enter"){ sendChat(); } };
-  $("#sendBtn").onpointerdown=sendChat;
-  document.addEventListener("pointerdown",e=>{
-    if(_mentionPop&&_mentionPop.contains&&!_mentionPop.contains(e.target)) closeMention();
-  },true);
 }
 /* v62 T16（AC-29）：宽屏左侧常设任务面板——当日（纪日）任务清单+进度，点击条目直接 openQuest。
    面板是「任务」标签的快捷形态（仅当日清单，非完整四层树），窄屏 display:none 不参与布局。 */
@@ -3270,267 +3029,12 @@ function npcTodayDuty(npcId){
   });
   return cand[0];
 }
-/* v62：私聊档案读写——以 NPC 为中心，完整保留（上限 1000 条防本机存储溢出） */
-function pcMsgs(npcId){ st.privateChat=st.privateChat||{}; return st.privateChat[npcId]||(st.privateChat[npcId]=[]); }
-function pcPush(npcId,m){
-  const arr=pcMsgs(npcId); arr.push(m);
-  if(arr.length>1000) st.privateChat[npcId]=arr.slice(-1000);
-}
-function inputHint(){
-  return "自由发言，总会有人接话……（@云汀 可指定同道，@所有人 全员回应）";
-}
-/* typing 指示：AI 接话期间在流尾显示省略气泡（不落存档） */
-let TYPING=null;
-function typing(on,multi){
-  TYPING=on?{multi:!!multi}:null;
-  if($("#stream")) renderChat(true);
-}
-/* 自由发言智能路由：直呼其名/别名 → WDChat 评分式领域判断 → 云汀兜底，
-   保证玩家每一句自由发言都至少有一位合适的 NPC 出面回应 */
-/* v2（R2.1）：路由关键词从角色注册表派生；v3：评分逻辑收敛到 WDChat.judgeDomain */
-const NPC_ROLE_KW=(window.WDRegistry&&WDRegistry.keywordMap())||{};
-function routeNpc(text){
-  const raw=String(text||"");
-  /* 主路径：WDChat 评分式领域判断（职能词+2，直呼名字+3，低于阈值→云汀） */
-  if(window.WDChat&&WDChat.judgeDomain) return WDChat.judgeDomain(raw);
-  /* 降级路径（WDChat未挂载时）：直接呼叫NPC名 → 关键词 → 云汀兜底 */
-  if(window.WDCfg){
-    for(const id of Object.keys(NPC)){
-      const n=NPC[id];
-      const names=[n.name,n.title, WDCfg.npcName(id,""), WDCfg.npcTitle(id,"")].filter(x=>x&&x.length>=2);
-      if(names.some(nm=>raw.includes(nm))) return id;
-    }
-  }
-  for(const id in NPC_ROLE_KW){
-    if(NPC_ROLE_KW[id].some(k=>raw.includes(k))) return id;
-  }
-  return "yunting";
-}
 /* NPC 显示名/称号：玩家自定义优先，原始数据仅以 ID 索引 */
 function dName(id){ const n=resolveNpc(id); return (window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(id,n?n.name:id):(n?n.name:id); }
 function dTitle(id){ const n=resolveNpc(id); return (window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(id,n?(n.title||""):""):(n?(n.title||""):""); }
 /* 关卡口播名：NPC 台词与玩家可见对话一律用清洗后的名字（剥掉 S3-02 类编号与统计括号） */
 function qdn(q){ return (window.WDChat&&WDChat.questDisplayName)?WDChat.questDisplayName(q):String((q&&q.name)||"这一关"); }
-/* 玩家口吻开场白：点击 NPC 名字时自动生成一句符合当下情境的玩家发言 */
-function playerOpener(npcId){
-  const nm=dName(npcId);
-  const aq=firstActiveQuest();
-  const pool=aq?[
-    nm+"，「"+qdn(aq)+"」这一关我想先听你说说该怎么下手",
-    nm+"，现下这桩「"+qdn(aq)+"」，我该备些什么",
-    "正卡在「"+qdn(aq)+"」——"+nm+"，给我指条路",
-    nm+"，这关的底细你给我透一透呗"
-  ]:[
-    nm+"，接下来我该往哪走",
-    nm+"，今日的事都交割了，再给我派一桩？",
-    nm+"，闲着也是闲着，说说前头的局势吧"
-  ];
-  const seed=Date.now()+hashStr(pool.join());
-  return pool[seed%pool.length];
-}
 function hashStr(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h; }
-/* 统一应答：把玩家发言落档 → 指定 NPC 群聊接话（永不冷场）；落档注入当前任务 refs（需求2b） */
-function npcAnswer(targets,text){
-  const all=targets.length>1;
-  typing(true,all);
-  toast(all?"各位已收到喊话……":"正在与"+dName(targets[0])+"对话……");
-  const flags=(st.agentFlags=st.agentFlags||{director:true,tools:true,proactive:true});
-  const aq=firstActiveQuest();
-  /* v36：统一导演流——导演决定谁开口（含插话/反应），逐个 NPC 生成台词 */
-  if(flags.director&&window.WDChat&&WDChat.directorFlow){
-    WDChat.directorFlow(text,{targets,brief:all,quest:aq,tools:flags.tools}).then(lines=>{
-      if(lines&&lines.length){
-        lines.forEach(l=>{
-          const m={role:"npc",npc:l.npc,text:l.text,at:new Date().toISOString(),day:st.day};
-          if(aq) m.refs=[{qid:aq.id}];
-          st.dialogue.push(m);
-          if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-        });
-        save(); typing(false); if(view==="chat") renderChat(true); return;
-      }
-      npcAnswerParallel(targets,text,all);
-    }).catch(()=>{ npcAnswerParallel(targets,text,all); });
-    return;
-  }
-  npcAnswerParallel(targets,text,all);
-}
-/* v2：并行模式（原 npcAnswer 逻辑，作为 director 的回退路径） */
-function npcAnswerParallel(targets,text,all){
-  typing(true,all);
-  let done=0;
-  targets.forEach(id=>{
-    aiRespond(id,text,all).then(r=>{
-      const aqR=firstActiveQuest();
-      if(!r.text){
-        /* v35：AI 失败——推系统消息提示中断，不再本地兜底 */
-        aiHealth=(r.error&&/密钥|未配置/.test(r.error))?"error":"down";
-        st.dialogue.push({role:"sys",text:"灵脉暂时中断："+(r.error||"AI 未响应")+"。点击状态栏 ●AI 可重连。",at:new Date().toISOString(),day:st.day});
-      } else {
-        const m={role:"npc",npc:id,text:r.text,at:new Date().toISOString(),day:st.day};
-        if(!r.refs&&aqR) m.refs=[{qid:aqR.id}];
-        st.dialogue.push(m);
-      }
-      if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-      save();
-      if(++done===targets.length){ typing(false); if(view==="chat") renderChat(true); } else if(view==="chat") renderChat(true);
-    }).catch(()=>{ if(++done===targets.length){ typing(false); if(view==="chat") renderChat(true); } });
-  });
-}
-function sendChat(){
-  closeMention();
-  const inp=$("#chatInput"); const v=inp.value.trim(); if(!v) return;
-  st.notes[st.day+"_"+Date.now()]=v;
-  inp.value="";
-  const mentioned=parseMention(v);
-  // 任意自由发言均永久入档——群聊式发言环境，不再只有 @提及 才有回应
-  st.dialogue.push({role:"player",text:v,at:new Date().toISOString(),day:st.day});
-  if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-  save(); renderChat(true);
-  // @全员 → 各 NPC 并行接话；@单人 → 指定回应；无 @ → 云汀代为引荐职能NPC
-  if(mentioned==="__ALL__") npcAnswer(Object.keys(MENTION_ALIASES),v);
-  else if(mentioned) npcAnswer([mentioned],v);
-  else yuntingProxy(v);
-}
-/* 云汀代@机制：未指定 NPC 时按领域评分直接路由（云汀是默认引路人，不再每条都代为引荐） */
-function yuntingProxy(text){
-  const target=(window.WDChat&&WDChat.judgeDomain)?WDChat.judgeDomain(text):routeNpc(text);
-  /* 领域明确 → 该 NPC 直接以本人身份接话；其余情况云汀出面。不搞双重应答。 */
-  npcAnswer([target],text);
-}
-/* v36：maybeNpcChimeIn 已移除——导演流 directorFlow 统一决定插话，不再需要独立插话判断 */
-
-/* 点击对话流中的 NPC 名：v62 起打开与其的私聊窗口（专属档案，不再混入群聊流） */
-function talkToNpc(npcId){
-  const n=resolveNpc(npcId);
-  if(!n) return;
-  SFX.tap();
-  renderPrivateChat(n.id||npcId);
-}
-/* ============================================================
-   v62：私聊窗口——以 NPC 为中心的完整私聊流（st.privateChat[npcId]）。
-   人设由 WDChat.sysPrompt 保证（与群聊同一套铁律+角色卡）；
-   历史专属注入；离线本地兜底，不阻断；顶部常驻该 NPC 职守任务提示。
-   ============================================================ */
-const PC_OFFLINE_POOL={
-  yunting:["（灵脉没通，我只能说这些）我在这儿呢。想去哪一关、想问什么，等灵脉接上我们再细聊。","现在听不见你的声音——先去把今天的修行推进一些，我一直都在。"],
-  tina:["信号……咳咳，灵脉没连上。等接通了再跟你聊哦。","我在星盘这边，先去做题吧，错题我帮你看着。"],
-  wantang:["嘿，灵脉断着我也没法多聊。等接通了，英语啊导游词啊都可以问我。","先去把今天的句子读顺，我在这儿等你。"],
-  shenzhao:["……灵脉未通，不宜多言。进藏经阁读书吧。","书在这儿，随时可看。说话的事，等灵脉恢复。"],
-  chengxiu:["哟，灵脉没通，生意倒是不等人。先去挣灵铢吧，我铺子开着。","等灵脉接上再来闲聊，眼下嘛——修行要紧。"]
-};
-function pcAvatarHtml(n,sizeCls){
-  let u="";
-  try{ u=(window.WDCfg&&WDCfg.avatarURL&&WDCfg.avatarURL(n.id))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(n.id):"")||""; }catch(e){}
-  return u?`<img src="${esc(u)}" alt="">`:esc((n.name||"?")[0]);
-}
-function pcDutyBanner(npcId){
-  /* v62 Task13：当日职守任务跳转卡——无任务返回空串（#pcDuty 不占位） */
-  const duty=npcTodayDuty(npcId);
-  if(!duty) return "";
-  const tag=duty.status==="进行中"
-    ? '<b style="color:var(--neon)">进行中</b>'
-    : '<b style="color:var(--gold)">已接取 · 待启动</b>';
-  return `<button class="pchat-duty-card" id="pcDutyCard" data-qid="${duty.q.id}" type="button">
-      <div style="font-size:11.5px">📜 职守 · ${tag} · 第 ${duty.q.day} 日 · ${esc(duty.q.tlabel)} · ${fmtDur(duty.q.dur)}</div>
-      <div style="margin-top:3px"><b style="color:var(--fg)">「${esc(qdn(duty.q))}」</b>
-        <span style="float:right;color:var(--cyber)">前往 ▸</span></div>
-    </button>`;
-}
-function renderPrivateChat(npcId){
-  const n=resolveNpc(npcId);
-  if(!n) return;
-  npcId=n.id;
-  const nm=dName(npcId), tt=dTitle(npcId);
-  const ov=panel(`<div class="pchat">
-    <div class="pchat-hd">
-      <div class="pav">${pcAvatarHtml(n)}</div>
-      <div style="flex:1;min-width:0">
-        <div class="pnm">${esc(nm)}</div>
-        <div class="ptt">${esc(tt||"私聊")} · 一对一</div>
-      </div>
-    </div>
-    <div id="pcDuty">${pcDutyBanner(npcId)}</div>
-    <div class="pchat-list" id="pcList"></div>
-    <div class="pchat-typing" id="pcTyping" style="display:none"></div>
-    <div class="pchat-input">
-      <input id="pcInput" maxlength="300" placeholder="对${esc(nm)}说点什么……（Enter 发送）" autocomplete="off">
-      <button class="btn sm primary" id="pcSend" type="button">发送</button>
-    </div>
-  </div>`);
-  const listEl=$("#pcList",ov), inp=$("#pcInput",ov), typingEl=$("#pcTyping",ov);
-  function renderList(scroll){
-    const msgs=pcMsgs(npcId);
-    if(!msgs.length){
-      listEl.innerHTML=`<div class="pmsg sys"><div class="pmb">—— 还没有私聊记录。说句话开启你与${esc(nm)}的一对一对话吧。——</div></div>`;
-      return;
-    }
-    listEl.innerHTML=msgs.map(m=>{
-      const at=m.at?String(m.at).slice(5,16).replace("T"," "):"";
-      if(m.role==="sys") return `<div class="pmsg sys"><div class="pmb">${esc(m.text)}</div></div>`;
-      if(m.role==="player"){
-        return `<div class="pmsg me"><div class="pmb">${esc(filterNpcText(m.text))}<div class="pmt">${esc(at)}</div></div></div>`;
-      }
-      return `<div class="pmsg"><div class="pma">${pcAvatarHtml(n)}</div><div class="pmb">${esc(filterNpcText(m.text))}<div class="pmt">${esc(nm)} · ${esc(at)}</div></div></div>`;
-    }).join("");
-    if(scroll!==false) listEl.scrollTop=listEl.scrollHeight;
-  }
-  function setTyping(on){
-    typingEl.style.display=on?"block":"none";
-    typingEl.textContent=on?(nm+"正在输入……"):"";
-    if(on) listEl.scrollTop=listEl.scrollHeight;
-  }
-  /* v62 Task13：职守跳转卡点击——关私聊；若任务弹层已在下方且是同一任务则不重复打开 */
-  function bindDutyCard(){
-    const c=$("#pcDutyCard",ov);
-    if(!c) return;
-    c.onpointerdown=e=>{ e.stopPropagation(); SFX.tap();
-      const qid=c.dataset.qid;
-      ov.remove();
-      const under=document.querySelector(".ov");
-      if(under&&under.dataset.qid===qid) return;
-      openQuest(qid);
-    };
-  }
-  bindDutyCard();
-  renderList();
-  setTimeout(()=>{ try{ inp.focus(); }catch(e){} },120);
-  async function doSend(){
-    const v=inp.value.trim(); if(!v||setTyping._busy) return;
-    inp.value="";
-    pcPush(npcId,{role:"player",text:v,at:new Date().toISOString(),day:st.day});
-    save(); renderList();
-    setTyping(true); setTyping._busy=true;
-    try{
-      let reply="";
-      if(dsReady()&&window.WDChat&&WDChat.respond){
-        if(window.WDMem) WDMem.talk(npcId);
-        const turns=pcMsgs(npcId).slice(-11,-1).map(m=>({role:m.role==="player"?"user":"assistant",content:m.text}));
-        const r=await WDChat.respond(npcId,v,false,undefined,{privateTurns:turns});
-        if(window.WDMem) WDMem.meet(npcId);
-        reply=(r&&r.text||"").trim();
-      }
-      if(!reply){
-        /* 离线/失败兜底：角色化短句，不穿帮不硬阻断 */
-        const pool=PC_OFFLINE_POOL[npcId]||["……灵脉暂时没连上，稍后再聊。","我在，先去做今天的事吧。"];
-        reply=pool[Math.floor(Math.random()*pool.length)];
-        if(!dsReady()) pcPush(npcId,{role:"sys",text:"灵脉未通：配置 AI 密钥后，"+nm+"会按人设自由回应；当前为本地台词。",at:new Date().toISOString(),day:st.day});
-      }
-      pcPush(npcId,{role:"npc",text:filterNpcText(reply).slice(0,500),at:new Date().toISOString(),day:st.day});
-      save();
-    }catch(e){
-      pcPush(npcId,{role:"sys",text:"灵脉波动，这一句没传到——稍后再试。",at:new Date().toISOString(),day:st.day});
-      save();
-    }finally{
-      setTyping(false); setTyping._busy=false;
-      /* 任务状态可能在对话期间变化，顶部提示同步刷新 */
-      const dEl=$("#pcDuty",ov); if(dEl) dEl.innerHTML=pcDutyBanner(npcId);
-      bindDutyCard();
-      renderList(); inp.focus();
-    }
-  }
-  $("#pcSend",ov).onpointerdown=doSend;
-  inp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); doSend(); } };
-}
 /* 跳转链接：NPC 消息指涉任务时，滚动定位到流内任务卡；不可见则直接打开任务弹层 */
 function gotoQuest(qid){
   const el=document.querySelector('[data-q="'+qid+'"]');
@@ -3559,7 +3063,7 @@ function refineAction(id,q,extra){
     t=(t||"").trim().replace(/^["「『]|["」』]$/g,"").slice(0,60);
     if(!t) return;
     const m=st.dialogue.find(x=>x.id===id); if(!m) return;
-    m.text=t; save(); if(view==="chat") renderChat(true);
+    m.text=t; save();
   }).catch(()=>{});
 }
 /* v58c：玩家从纪日索引卡「接取」任务——幂等落一条玩家行动（模拟玩家机制保留），
@@ -3614,7 +3118,7 @@ function buildWrongReplyMsgs(z,mine,okA,npc,q){
     :z.kind==="multi"
       ?"分「漏选」与「错选」两小类，逐项给出依据；每个错选项同样要讲清它本身是什么、为何不能入选；正确项内容用<b>标出。"
       :"逐空讲解——先指出该空的正确内容（用<b>标出），再给记忆或词源线索；多空分条换行。";
-  const sys="你是日式RPG《问道之旅·四十五日》中的NPC「"+dName(nid)+"·"+dTitle(nid)+"」，也是玩家的随身私教，正在为答错的玩家逐题讲评。\n"
+  const sys="你是日式RPG《问道之旅·二十五日》中的NPC「"+dName(nid)+"·"+dTitle(nid)+"」，也是玩家的随身私教，正在为答错的玩家逐题讲评。\n"
     +(window.WDChat&&WDChat.masterRule?WDChat.masterRule():"")
     +"\n输出要求：\n"
     +"1. 开头用 ≤12 字先接住情绪，严禁指责/讽刺/施压/PUA；\n"
@@ -3672,270 +3176,10 @@ function acceptQuestLine(q){
       const fl=cueRedFlags(filterNpcText(t),""); /* 玩家语不查自呼姓名，但拦命令/考试词等 */
       if(fl.length) return;
       const m=st.dialogue.find(x=>x.id===id); if(!m) return;
-      m.text=t; save(); if(typeof view!=="undefined"&&view==="chat") renderChat(true);
+      m.text=t; save();
     }).catch(()=>{});
   }
 }
-/* 任务卡 HTML 构建器：流内任务卡与置底当前任务卡共用同一渲染 */
-function qcardHtml(q,firstActiveId){
-  const done=qDone(q.id); const un=questUnlocked(q);
-  const now=!done&&un&&q.id===firstActiveId;
-  /* v62：三态标签——已接取（发放未启动）/ 进行中（进入过暂离）/ 已完成 */
-  const stt=questStatusOf(q);
-  const tag=done?'<span class="donetag">✓ 已完成</span>'
-    : stt==="进行中"?'<span class="nowtag">进行中</span>'
-    : un?'<span class="nowtag" style="color:var(--gold);background:rgba(255,215,0,.12)">已接取</span>':"";
-  return `<div class="qcard${done?" done":""}${un?"":" locked"}${now?" now":""}" data-q="${q.id}">
-    <div class="qn">${esc(q.name)}<span class="rk">${q.rarity==="epic"?"✦":q.rarity==="fine"?"•":""}</span>${tag}</div>
-    <div class="qg">${esc(q.goal)}</div>
-    <div class="qr"><span>+${q.xp} 修行</span><span>+${q.coin} 灵铢</span><span class="dur">${fmtDur(q.dur)}</span>
-    <span style="margin-left:auto">${done?"<button class='btn sm ghost' data-open='"+q.id+"'>回看</button>":un?`<button class="btn sm primary" data-open="${q.id}">${stt==="进行中"?"继续":"进入"}</button>`:"🔒 前序未完"}</span></div>
-  </div>`;
-}
-/* v58c：纪日索引卡——云汀手札，一纪日一张，卡内逐任务点选，进度实时现算 */
-function qindexHtml(day,gi){
-  const p=gdProg(day,gi), qs=p.quests;
-  const gd=gdAbs(day,gi), isBoss=qs.some(q=>q.type==="boss");
-  const cue=filterNpcText(gdCueOf(day,gi));
-  const rows=qs.map(q=>{
-    const done=qDone(q.id), un=questUnlocked(q);
-    const qstt=questStatusOf(q);
-    const s2=qStage(q);
-    const dot={done:"✓",active:"▶",ready:"☆",locked:"🔒"}[s2.key];
-    const btn=done
-      ?`<button class="btn sm ghost" data-qenter="${q.id}">回看</button>`
-      :un?`<button class="btn sm primary" data-qenter="${q.id}">${qstt==="进行中"?"继续":"进入"}</button>`
-      :`<span style="font-size:11px;color:var(--dim)">前序未完</span>`;
-    const statTxt=done?"已完成":qstt==="进行中"?"<span style='color:var(--neon)'>进行中</span>":un?"<span style='color:var(--gold)'>已接取</span>":"";
-    return `<div class="qirow ${done?"done":""}${un&&!done?" active":""}">
-      <span class="qidot">${dot}</span>
-      <div class="qiinfo"><div class="qin">${esc(q.name)}</div>
-      <div class="qim">${esc(q.tlabel)} · +${q.xp}修行 +${q.coin}灵铢 · ${fmtDur(q.dur)} ${statTxt?" · "+statTxt:""}${done&&st.doneTime&&st.doneTime[q.id]?" · \u23F1"+fmtSec(st.doneTime[q.id]):""}</div></div>
-      <span class="qibtn">${btn}</span>
-    </div>`;
-  }).join("");
-  return `<div class="qindex now" data-gd="${gd}">
-    <div class="qihd">
-      <span class="qititle">云汀的手札 · ${GD_LABELS[gi]}${isBoss?" · 验界":""}</span>
-      <span class="qiprog">${p.n}/${p.all}</span>
-    </div>
-    <div class="qicue">「${esc(cue)}」</div>
-    <div class="qilist">${rows}</div>
-  </div>`;
-}
-let _gdMilestoneBusy=false;
-function renderChat(keep){
-  const view=$("#stream");
-  if(!view) return; // 非对话视图（任务/星盘/弹层中触发行动报等）时静默跳过，下次进入对话视图重渲染
-  /* v58c：进对话兜底——确保当前纪日手札已发布（幂等；防重入，push 后的重渲染第二次直接 return） */
-  if(!_gdMilestoneBusy){
-    _gdMilestoneBusy=true;
-    try{ ensureGdMilestone(st.day); }catch(e){}
-    _gdMilestoneBusy=false;
-  }
-  const stream=buildStream();
-  // 进程感：全链路中第一个「已解锁未完成」的任务即当前关卡
-  let firstActive=null;
-  for(let day=1;day<=st.unlocked&&!firstActive;day++){
-    const d=byDay[day]; if(!d) continue;
-    for(const q of d.quests){ if(!qDone(q.id)&&questUnlocked(q)){ firstActive=q.id; break; } }
-  }
-  // Append persisted dialogue (player questions + NPC AI responses)
-  // 最新一条「普通」NPC 回复打 _cur 标记：无显式 refs 时渲染层自动补「当前任务」关联 chip（需求2b）。
-  // v58c：过场/纪日里程碑/剧情消息是独立叙事，不挂任务 chip（否则会在云汀开场句下错挂任务入口）。
-  const dlgMsgs=st.dialogue.map(d=>({t:d.role,npc:d.npc,x:filterNpcText(d.text),qid:d.qid,refs:d.refs,cutscene:d.cutscene,kind:d.kind}));
-  let lastNpc=-1;
-  for(let i=dlgMsgs.length-1;i>=0;i--){
-    const m=dlgMsgs[i];
-    if(m.t==="npc"&&!m.cutscene&&m.kind!=="gdmilestone"&&m.kind!=="plot"){ lastNpc=i; break; }
-  }
-  if(lastNpc>=0&&!dlgMsgs[lastNpc].refs) dlgMsgs[lastNpc]._cur=true;
-  /* v33：序章三节点（初见绑定/灵魂契约/启程）发生在第1日任何任务发放之前，
-     渲染时必须插到第1日分隔之后、当日 opener 与任务卡之前，杜绝"任务先发、序章在后"的视觉倒叙 */
-  const PROLOGUE_NODES={arrive:1,bind:1,pact:1};
-  const plMsgs=dlgMsgs.filter(m=>PROLOGUE_NODES[m.cutscene]);
-  let allMsgs;
-  if(plMsgs.length){
-    const restMsgs=dlgMsgs.filter(m=>!PROLOGUE_NODES[m.cutscene]);
-    const day1=stream.findIndex(r=>r.t==="sysday");
-    allMsgs=day1>=0
-      ? stream.slice(0,day1+1).concat(plMsgs,stream.slice(day1+1),restMsgs)
-      : plMsgs.concat(stream,restMsgs);
-  }else{
-    allMsgs=stream.concat(dlgMsgs);
-  }
-  /* 状态栏（需求4）：Lv/心气/灵力，置于流顶，不遮对话；refreshStat 每秒刷新 */
-  const uavSrc=(window.WDCfg&&WDCfg.avatarURL("_player"))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL("_player"):"");
-  /* v2（R1.3b）：AI 健康徽标——绿=正常 / 黄=临时异常 / 红=密钥/额度问题 / 灰=未配置；点击可重连 */
-  const aiDot=(!dsReady())?`<span class="aidot off" title="AI 未配置：点击配置密钥。" data-act="aiGate">○AI</span>`
-    :(aiHealth==="error")?`<span class="aidot err" title="AI 异常：密钥无效或额度不足。点击重连/重配。" data-act="aiReconnect">●AI!</span>`
-    :(aiHealth==="down")?`<span class="aidot down" title="AI 暂时不可达（网络/限流）。点击重连。" data-act="aiReconnect">◐AI</span>`
-    :`<span class="aidot ok" title="AI 正常。" data-act="aiReconnect">●AI</span>`;
-  const _pp=st.plotPoints||{total:0,byDay:{},byNaturalDay:{}};
-  const _ppGame=Object.keys(_pp.byDay||{}).length, _ppNat=Object.keys(_pp.byNaturalDay||{}).length;
-  const STATBAR=`<div id="statbar" class="statbar" role="status" aria-label="玩家状态">
-    ${aiDot}
-    <span class="slv" data-lv>Lv.${level()}</span>
-    <span class="sgroup"><i>心气</i><span class="sbar"><b data-hpf style="width:${Math.max(0,Math.min(100,st.hp/maxHP()*100))}%"></b></span><em data-hpt>${Math.round(st.hp)}/${maxHP()}</em></span>
-    <span class="sgroup" title="灵力是 AI 对话资源：每次 AI 回复消耗 1 点，每 5 分钟恢复 1 点。灵力耗尽时仍可对话，不消耗。"><i>灵力</i><span class="sbar en"><b data-enf style="width:${Math.max(0,Math.min(100,st.energy/maxEnergy()*100))}%"></b></span><em data-ent>${Math.round(st.energy)}/${maxEnergy()}</em></span>
-    <span class="sgroup" title="剧情点：完成当日任务 +1（纪日点，共 ${_ppGame}）；每推进一日登录额外 +1（奖励，共 ${_ppNat}）。累积可解锁程绣处剧情道具。"><i style="color:var(--gold)">剧情点</i><em style="color:var(--gold)">✦${_pp.total||0}</em></span>
-  </div>`;
-  /* v2（R1.3c）：灵力不足内联提示条（仅 AI 可用且灵力 <5 时显示） */
-  let html=STATBAR;
-  if(dsReady()&&(st.energy|0)<5){
-    html+=`<div class="energyhint">灵力将尽（${Math.round(st.energy)}/${maxEnergy()}）——每 5 分钟恢复 1 点；灵力耗尽期间仍可对话，不消耗。</div>`;
-  }
-  html+=allMsgs.map(r=>{
-    if(r.t==="sysday") return `<div class="sys daysep">${esc(r.x)}</div>`;
-    if(r.t==="sys"){
-      /* 已完成任务（需求2c）：折叠为可点链接行——点击展开完整任务卡，再点收起；回看按钮直达弹层 */
-      if(r.qid&&QMAP[r.qid]){
-        const folded=!(st._qFold&&st._qFold[r.qid]);
-        return `<div class="qfold" data-fold="${r.qid}">
-          <div class="qfoldhead" data-foldhead="${r.qid}"><span class="fcar">${folded?"▸":"▾"}</span><span class="ftext">${esc(r.x)}</span>
-          <span class="fhint">${folded?"展开":"收起"}</span>
-          <button class="btn sm ghost" data-open="${r.qid}" type="button" style="flex:none">回看</button></div>
-          ${folded?"":`<div class="qfoldbody"><div class="msg"><div class="avatar">　</div><div class="body" style="max-width:100%">${qcardHtml(QMAP[r.qid],firstActive)}</div></div></div>`}
-        </div>`;
-      }
-      return `<div class="msg sysline"><div class="bubble">${esc(r.x)}</div></div>`;
-    }
-    if(r.t==="npc"&&r.kind==="plot"){ const n=resolveNpc(r.npc)||Object.values(WD_NEW_ROLES)[0];
-      const dn=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(r.npc,n.name):n.name;
-      return `<div class="msg plotmsg"><div class="avatar">✦</div><div class="body">
-      <div class="name" style="color:var(--gold)"><span class="nl">【剧情】${esc(dn)}</span></div>
-      <div class="bubble" style="border:1px solid var(--gold);background:rgba(255,215,0,0.05)">${esc(filterNpcText(r.x))}</div></div></div>`; }
-    if(r.t==="npc"&&r.kind==="cue"){ const n=resolveNpc(r.npc)||Object.values(WD_NEW_ROLES)[0];
-      const dn=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(r.npc,n.name):n.name;
-      const dt=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(r.npc,n.title||""):(n.title||"");
-      const navSrc=(window.WDCfg&&WDCfg.avatarURL(r.npc))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):"");
-      const av=navSrc?`<img class="pixav" src="${navSrc}" alt="" onerror="this.onerror=null;this.src='${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):""}'">`:esc(dn[0]);
-      return `<div class="msg cuemsg"><div class="avatar" data-av="${r.npc}">${av}</div><div class="body">
-      <div class="name"><span class="nl" data-npc="${r.npc}" title="点击与${esc(dn)}对话">${esc(dn)}</span>${dt?" · "+esc(dt):""} <span style="color:var(--neon);font-size:.85em">· 开场 cue</span></div>
-      <div class="bubble cue-banner">${esc(filterNpcText(r.x))}</div></div></div>`; }
-    if(r.t==="npc"&&r.kind==="gdmilestone"){ const n=resolveNpc(r.npc)||NPC.yunting;
-      const dn=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(r.npc,n.name):n.name;
-      const navSrc=(window.WDCfg&&WDCfg.avatarURL(r.npc))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):"");
-      const av=navSrc?`<img class="pixav" src="${navSrc}" alt="">`:esc(dn[0]);
-      return `<div class="msg plotmsg"><div class="avatar" data-av="${r.npc}">${av}</div><div class="body">
-      <div class="name" style="color:var(--gold)"><span class="nl" data-npc="${r.npc}">${esc(dn)} · 新纪日</span></div>
-      <div class="bubble" style="border-color:var(--neon)">${esc(filterNpcText(r.x))}</div></div></div>`; }
-    if(r.t==="npc"){ const n=resolveNpc(r.npc)||Object.values(WD_NEW_ROLES)[0];
-      const dn=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(r.npc,n.name):n.name;
-      const dt=(window.WDCfg&&WDCfg.npcTitle)?WDCfg.npcTitle(r.npc,n.title||""):(n.title||"");
-      const rlist=r.refs&&r.refs.length?r.refs:(r.qid?[{qid:r.qid}]:(r._cur&&firstActive?[{qid:firstActive,cur:true}]:[]));
-      const chips=rlist.map(x=>{ const qq=QMAP[x.qid]; return qq?`<button class="qref${x.cur?" cur":""}" data-ref="${qq.id}"${x.cur?' title="跳到当前任务"':""}>${x.cur?"↪ 当前任务 · ":"📜 "}${esc(qq.name)}</button>`:""; }).join("");
-      /* b2-2：晚棠/云汀气泡下挂「录问契」入口chip */
-      const qmChip=(r.npc==="wantang"||r.npc==="yunting")?`<button class="qref" data-qm="1" title="录入一张自录问契">✍️ 录问契</button>`:"";
-      const navSrc=(window.WDCfg&&WDCfg.avatarURL(r.npc))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):"");
-      const av=navSrc?`<img class="pixav" src="${navSrc}" alt="" onerror="this.onerror=null;this.src='${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(r.npc):""}'">`:esc(dn[0]);
-      return `<div class="msg"><div class="avatar" data-av="${r.npc}">${av}</div><div class="body">
-      <div class="name"><span class="nl" data-npc="${r.npc}" title="点击与${esc(dn)}对话">${esc(dn)}</span>${dt?" · "+esc(dt):""}</div>
-      <div class="bubble">${esc(filterNpcText(r.x))}</div>
-      ${chips||qmChip?`<div class="qrefs">${chips}${qmChip}</div>`:""}</div></div>`; }
-    if(r.t==="player"){ const uav=uavSrc?`<img class="pixav" src="${uavSrc}" alt="我" onerror="this.onerror=null;this.src='${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL("_player"):""}'">`:"　";
-      return `<div class="msg me"><div class="body">
-      <div class="bubble">${esc(r.x)}</div></div><div class="avatar uav">${uav}</div></div>`; }
-    if(r.t==="quest"){ const q=QMAP[r.qid]; if(!q) return "";
-      return `<div class="msg"><div class="avatar">　</div><div class="body" style="max-width:100%">${qcardHtml(q,firstActive)}</div></div>`; }
-    /* v58c：纪日索引卡——云汀手札（头像 + 名称行 + 索引卡主体） */
-    if(r.t==="qindex"){
-      const navSrc=(window.WDCfg&&WDCfg.avatarURL("yunting"))||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL("yunting"):"");
-      const av=navSrc?`<img class="pixav" src="${navSrc}" alt="" onerror="this.onerror=null;this.src=''">`:"云";
-      return `<div class="msg cuemsg"><div class="avatar" data-av="yunting">${av}</div><div class="body" style="max-width:100%">
-      <div class="name"><span class="nl" data-npc="yunting" title="点击与云汀对话">云汀</span> · 圣女 <span style="color:var(--neon);font-size:.85em">· ${GD_LABELS[r.gi]}任务手札</span></div>
-      ${qindexHtml(r.day,r.gi)}</div></div>`; }
-    return "";
-  }).join("");
-  if(TYPING){
-    html+=`<div class="msg"><div class="avatar">…</div><div class="body">
-      <div class="name"><b>${TYPING.multi?"诸位 NPC":"NPC"}</b> 正在思考…</div>
-      <div class="bubble typing"><span></span><span></span><span></span></div></div></div>`;
-  }
-  /* v58c：置底单任务卡已由对话流中的「纪日索引卡」取代（一纪日一张，含全部任务与进度）；
-     仅当本周无待办（索引卡不渲染）时，保留一个轻量提示条。 */
-  const aqPin=QMAP[firstActive];
-  if(!aqPin){
-    const pd=byDay[st.day]||byDay[1], pp=dayProg(pd);
-    html+=`<div class="pinwrap idle" id="pinQuest"><div class="pinhead">⬇ 本周无在途关卡</div>
-      <div class="pintip">${pp.all>0&&pp.n===pp.all?"本周 "+pp.n+"/"+pp.all+" 圆满——去巡夜温故，或上星盘清错题。":"此刻没有可进入的关卡——去「任务」页纵览全程，先破前序解锁下一环。"}</div></div>`;
-  }
-  /* v52 R4：剧情回廊——独立折叠区，从 st.plotLines 渲染剧情流（与行为流分离） */
-  const plotStream=buildPlotStream();
-  if(plotStream.length){
-    const foldedPlot=!st._plotFold;
-    html+=`<div class="pinwrap plotcorridor" id="plotCorridor">
-      <div class="pinhead" data-plothead>✦ 剧情回廊 · ${plotStream.length} 条 <span style="float:right">${foldedPlot?"▸ 展开":"▾ 收起"}</span></div>
-      ${foldedPlot?"":plotStream.slice(-12).map(p=>{
-        const n=resolveNpc(p.npc)||Object.values(WD_NEW_ROLES)[0]||{name:"?"};
-        const dn=(window.WDCfg&&WDCfg.npcName)?WDCfg.npcName(p.npc,n.name):n.name;
-        return `<div class="msg plotmsg"><div class="avatar">✦</div><div class="body">
-          <div class="name" style="color:var(--gold)"><span class="nl">【${esc(p.theme||"剧情")}】${esc(dn)}</span> <span style="opacity:.6;font-size:.85em">· 第${p.day}日${p.questId?" · 关联 "+esc(QMAP[p.questId]?QMAP[p.questId].name:""):""}</span></div>
-          <div class="bubble" style="border:1px solid var(--gold);background:rgba(255,215,0,0.05)">${esc(p.x)}</div></div></div>`;
-      }).join("")}
-    </div>`;
-  }
-  view.innerHTML=html;
-  bindChat();
-  refreshStat();
-  if(!keep) view.scrollTop=view.scrollHeight;
-}
-function bindChat(){
-  document.querySelectorAll("[data-open]").forEach(b=>{
-    b.onpointerdown=e=>{ e.stopPropagation(); openQuest(b.dataset.open); };
-  });
-  /* v58c：纪日索引卡行按钮 → 进入任务（接取对白在 openQuest 内幂等落流） */
-  document.querySelectorAll("[data-qenter]").forEach(b=>{
-    b.onpointerdown=e=>{ e.stopPropagation(); SFX.tap(); openQuest(b.dataset.qenter); };
-  });
-  document.querySelectorAll(".qcard:not(.done)").forEach(c=>{
-    if(c.dataset.q&&questUnlocked(QMAP[c.dataset.q])) c.onpointerdown=()=>openQuest(c.dataset.q);
-  });
-  // NPC 消息内的任务引用 chips → 滚动定位/打开；「录问契」chip 开录入面板
-  document.querySelectorAll(".qref").forEach(b=>{
-    b.onpointerdown=e=>{ e.stopPropagation(); SFX.tap();
-      if(b.dataset.qm){ openOralInput(); return; }
-      gotoQuest(b.dataset.ref); };
-  });
-  // NPC 名称链接 → 点击自动发起与其的对话（玩家口吻开场白 + 标准三段回应）
-  /* v2（WZ-032）：NPC 名点击——pointerdown 主动发起对话；click 兜底（部分环境 pointer 事件被上层吞掉时仍可触发） */
-  document.querySelectorAll(".nl[data-npc]").forEach(el=>{
-    el.onpointerdown=e=>{ e.stopPropagation(); e.preventDefault(); talkToNpc(el.dataset.npc); };
-    el.onclick=e=>{ e.stopPropagation(); e.preventDefault(); talkToNpc(el.dataset.npc); };
-  });
-  /* v62 Task13：主对话消息头像 → 与该 NPC 私聊（与 .nl 入口并存） */
-  document.querySelectorAll(".avatar[data-av]").forEach(el=>{
-    el.onpointerdown=e=>{ e.stopPropagation(); SFX.tap(); talkToNpc(el.dataset.av); };
-  });
-  // 已完成任务折叠头（需求2c）：点击展开/收起完整任务卡
-  document.querySelectorAll("[data-foldhead]").forEach(h=>{
-    h.onpointerdown=e=>{
-      if(e.target.closest("[data-open]")) return; // 回看按钮自行处理
-      e.stopPropagation(); SFX.tap();
-      const qid=h.dataset.foldhead;
-      st._qFold=st._qFold||{}; st._qFold[qid]=!st._qFold[qid];
-      renderChat(true);
-      const el=document.querySelector('.qfold[data-fold="'+qid+'"]');
-      if(el) el.scrollIntoView({block:"nearest"});
-    };
-  });
-  // v52 R4：剧情回廊折叠头
-  document.querySelectorAll("[data-plothead]").forEach(h=>{
-    h.onpointerdown=e=>{
-      e.stopPropagation(); SFX.tap();
-      st._plotFold=!st._plotFold;
-      renderChat(true);
-      const el=document.getElementById("plotCorridor");
-      if(el) el.scrollIntoView({block:"nearest"});
-    };
-  });
-}
-function heartNew(){
-  for(const nid in D.hearts){ const seen=st.seenHearts[nid]||[];
-    if(D.hearts[nid].some(h=>(st.fav[nid]||0)>=h.at&&!seen.includes(h.at))) return true; }
-  return false;
-}
-
 /* ==================== 书页打字机效果 ====================
    初始逐字显示（~300字/分，提速1倍）；每次点击展开当前正在打字的一个完整文本段，
    随后继续下一段的打字机效果，直至所有预设文本段均完成展开。
@@ -4467,12 +3711,10 @@ function openQuest(qid){
     showChoicePanel([
       {label:"进入试炼 · 破雾", value:"quiz", primary:true},
       {label:"再看一遍（回到第 1 页）", value:"reread"},
-      {label:"说点什么……", value:"talk"},
       {label:"先到这里，稍后再来", value:"stay", ghost:true}
     ], v=>{
       if(v==="quiz"){ const qi2=STAGES.findIndex(s=>s.id==="quiz"); if(qi2>=0) goStage(qi2); }
       else if(v==="reread"){ _summaryShown=false; if(sec) sec.remove(); bookPageIdx=0; bookDone=false; renderStageBookPage(); }
-      else if(v==="talk"){ renderPrivateChat(npc.id); bindSummaryChoices(sec); }
       else { saveProg({stage:"book",book:bookPageIdx}); closeQuest(); }
     });
   }
@@ -5408,11 +4650,9 @@ function openQuest(qid){
       if(dialogDone){
         showChoicePanel([
           {label:'翻开手记，开始读这一卷', value:'continue', primary:true},
-          {label:'说点什么……', value:'talk'},
           {label:'告辞，先退下了', value:'leave', ghost:true}
         ], v=>{
           if(v==='continue') goStage(1);
-          else if(v==='talk'){ renderPrivateChat(npc.id); /* 私聊窗叠在任务弹层上，关闭即回此页，不影响任务流程 */ }
           else ov.remove();
         });
       }
@@ -5588,7 +4828,6 @@ function openQuest(qid){
       if(readonly){
         if(qdraft.length===0){ const wid=pushAction("我重刷了「"+qdn(q)+"」的印记（答对 "+okCount+"/"+quiz.length+"）。");
           refineAction(wid,q,"（这是温故重刷，不是首通，语气可以更轻松）"); }
-        if(view==="chat") renderChat(true);
         host.innerHTML=`<div class="note" style="border-left-color:var(--gold)">温故有效（答对 ${okCount}/${quiz.length}）——错题已录入星盘。再温一遍可换一组变化题。</div>
         <div style="margin-top:8px"><button class="btn sm primary" id="reRetryBtn" type="button">再温一遍</button></div>`;
         SFX.win();
@@ -6102,7 +5341,7 @@ function openQuest(qid){
 /* v57：结算外层保护——进度（done/xp/coin）在最前已落，后续任一步抛错都不再吞掉整个交割，
    也不给 finBtn/qxSkip 的 onpointerdown 留下 unhandled rejection */
 async function settleQuest(q,quizPerfect,ov){
-  /* 主体在 _settleQuestInner：含 questreact 导演流（WDChat.directorFlow）、云汀润色与过场触发 */
+  /* 主体在 _settleQuestInner：含 questreact 导演流（WDChat.directorFlow）与云汀润色 */
   try{ await _settleQuestInner(q,quizPerfect,ov); }
   catch(e){
     console.error('[settleQuest]',e);
@@ -6164,7 +5403,6 @@ async function _settleQuestInner(q,quizPerfect,ov){
   if(ov) ov.remove();
   installRuntimePlan(); /* v54：任务完成后重排后续日程（游标前进、幂等，已完成槽位快照不动） */
   syncGameDay();       /* v58c：纪日指针随完成度推进（HUD 纪日号） */
-  ensureGdMilestone(st.day); /* 新纪日首次成为当前纪日时，云汀落一条持久开场 */
   checkAch(); checkLevelUp(); save(); render();
   toast(doneLine(q,byDay[q.day])||"完成");
   /* —— 第二阶段（异步，不阻塞 UI）：导演编排 NPC 反应 + 云汀润色 + 剧情过场 ——
@@ -6187,117 +5425,12 @@ async function _settleQuestInner(q,quizPerfect,ov){
         }
         if(ymsg) refineYunting(ymsg.id,q,nq,quizPerfect);
         if(WDChat.storyAppend) WDChat.storyAppend(q.npc,"与玩家并肩，见证了「"+qdn(q)+"」的交付");
-        save(); /* v62 T15（AC-28）：不无条件覆盖 #stream——仅在对话视图时刷新，其他视图由下次进入对话时重渲染 */ if(view==="chat") renderChat(true);
+        save();
       })
       .catch(()=>{ if(ymsg) refineYunting(ymsg.id,q,nq,quizPerfect); });
   } else {
     if(ymsg) refineYunting(ymsg.id,q,nq,quizPerfect);
   }
-  /* —— 第三阶段：剧情过场触发 —— */
-  if(q.id&&q.id.endsWith("BOSS")){
-    const actStr=(byDay[q.day]&&byDay[q.day].act)||("act"+curActN());
-    if(actStr==="act5"){ triggerCutscene("final"); }
-    else { triggerCutscene(actStr); }
-  }
-  else if(q.kind==="main"&&Object.keys(st.done).filter(k=>k.startsWith("D")&&k.endsWith("M")).length===1) triggerCutscene("bind");
-  else if(q.kind==="main"&&Object.keys(st.done).filter(k=>k.startsWith("D")&&k.endsWith("M")).length===2) triggerCutscene("pact");
-  /* —— v52 R2：剧情点结算（双奖励）+ 剧情推演触发 ——
-     当日任务全清 → 游戏日剧情点 +1 → 触发当日剧情 */
-  const _ppBefore=(st.plotPoints&&st.plotPoints.total)||0;
-  const plotTheme=checkPlotTrigger();
-  const _ppAfter=(st.plotPoints&&st.plotPoints.total)||0;
-  if(_ppAfter>_ppBefore){
-    toast("剧情点 +1（累积 "+_ppAfter+"）· 今日指定任务已圆满","gold");
-  }
-  if(plotTheme){
-    /* 消耗心气：激活力量有代价；心气不足则圣女兜底不锁进度 */
-    const hpCost=plotTheme.type==="major"?20:plotTheme.type==="ultimate"?40:8;
-    if((st.hp||0)>=hpCost){ st.hp-=hpCost; }
-    performPlot(plotTheme);
-  }
-}
-/* ==================== 剧情过场机制（云汀与玩家一问一答）====================
-   关键节点：arrive(降临) bind(绑定) pact(契约) act1-5(阶段性仪式) final(最终就职)
-   过场由 AI 根据背景和故事线虚构，简短沉浸，自然融入对话流。
-   本地兜底话术同步落流，AI 在线时异步润色就地替换。 */
-const CUTSCENE_NODES={
-  arrive:{label:"降临",local:"你……你是谁？怎么会突然出现在典礼阵中？——等等，我感觉到了，你和我……绑定在一起了？"},
-  bind:{label:"绑定",local:"果然，你我之间的绑定是真实的。你身上有异界的气息，却意外契合圣仪——你愿不愿意留下来，帮我完成就职典礼？"},
-  pact:{label:"灵魂契约",local:"缇娜说她能感应到你的记忆了？灵魂契约一旦结成，她的星盘就能照见你学到的一切——这倒是天大的助力。你说，咱们三个这样算不算一伙了？"},
-  act1:{label:"第一幕·结界仪式",local:"结界巡礼这一程走下来，我感觉到圣女之力醒了一缕——是你帮我点亮的阵纹。雾在退一点点了，你感觉到了吗？"},
-  act2:{label:"第二幕·律法仪式",local:"藏经阁的浓雾被你净化了，圣女之力又醒了一寸。沈昭说很久没人能把那一百零八道法条全数重激活——你真是……让我刮目相看。"},
-  act3:{label:"第三幕·行会仪式",local:"行会风云这一战打下来，程绣说你的接待心法已入化境。我这边圣女的回响已稳过半了，圣器开始有微光——再坚持一下，雾就快散了。"},
-  act4:{label:"第四幕·遗迹仪式",local:"遗迹探秘最后一枚节点点亮，缇娜说错题已所剩无几。圣女的回响已稳七成，圣器光华大盛——金榜台就在前方，最后一程了。"},
-  act5:{label:"终幕·金榜台",local:"你真的做到了——四十五日，九段旅程，全部通关。圣女之力此刻完全恢复了，我能驾驭圣器了……雾，正在散。这座城的光，是你唤回来的。"},
-  final:{label:"最终就职",local:"从今天起，你就是这座次元最后一位神圣导游。而我——圣女云汀，终于能再次握住圣器，守住这座城。这一路……谢谢你愿意留下来陪我。"}
-};
-function triggerCutscene(node){
-  if(!node) return;
-  const cs=CUTSCENE_NODES[node];
-  if(!cs) return;
-  /* 防止同一节点重复触发 */
-  st.cutscenes=st.cutscenes||{};
-  if(st.cutscenes[node]) return;
-  st.cutscenes[node]=new Date().toISOString();
-  save();
-  /* 云汀发起剧情过场，本地兜底话术落流 */
-  const msg={id:"cs_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),role:"npc",npc:"yunting",
-    text:cutsceneText(node),cutscene:node,at:new Date().toISOString(),day:st.day};
-  st.dialogue.push(msg);
-  if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-  record("剧情过场",cs.label);
-  /* AI 在线时异步润色为一问一答形式（不耗灵力，同云汀结算润色模式） */
-  refineCutscene(msg.id,node);
-  /* v62 T15（AC-28）：过场只追加进对话流——不再强制切视图打断玩家当前操作；toast 已提示，回到对话视图即见 */
-  if(typeof view!=="undefined"&&view==="chat") renderChat(true);
-  toast("剧情过场 · "+cs.label,"gold");
-}
-/* 各过场节点的润色边界：防止润色时加戏（尤其初见节点不许抢先发布任务） */
-const CUTSCENE_HINT={
-  arrive:"这是她与玩家初见的那一瞬：就职典礼被遗忘之雾打断，她惊愕中发现两人绑定了。只写她当下脱口而出的反应与一个没来得及消化的疑问。禁止交代任务、禁止说「先去/第一站/结界巡礼/点亮节点」之类安排——任务稍后自有人发布，这里只写初见。",
-  bind:"绑定已被证实。她可以低声确认这件事、顺势邀玩家留下，但不要布置具体任务。",
-  pact:"缇娜与玩家的灵魂契约刚结成。她可以惊奇、打趣，不要安排下一步。",
-  act1:"第一幕节点点亮后的片刻感慨，只谈此刻感受，不预告第二幕。",
-  act2:"第二幕藏经阁浓雾净化后的感慨，只谈此刻，不预告第三幕。",
-  act3:"第三幕行会之战后的感慨，只谈此刻，不预告第四幕。",
-  act4:"第四幕遗迹探秘后的感慨，只谈此刻，不预告金榜台安排。",
-  act5:"终幕通关、圣女之力完全恢复的当下，情绪为主。",
-  final:"就职已成、临别在即，只说此刻的心情，不再安排任何事。"
-};
-/* 剧情过场 AI 润色：把本地兜底化进云汀本人的一段口语（不是剧本串、不是任务发布） */
-/* v78：剧情 CG 文案润色提示词组装（实发/预演共用） */
-function buildCutsceneMsgs(node){
-  const cs=CUTSCENE_NODES[node];
-  const obsolete=(window.WDRegistry&&WDRegistry.obsoleteTerms)?WDRegistry.obsoleteTerms():["提灯","引灯","引魂灯","问道录","仙侠","仙师","封妖塔","掌灯"];
-  const sys=(window.WDChat?WDChat.sysPrompt("yunting",false):"")
-    +"\n\n【剧情过场任务】这是「"+cs.label+"」节点的剧情过场。"+(CUTSCENE_HINT[node]||"写她对当下变故的一段真实反应。")
-    +"\n写法：把兜底话术化进云汀本人当面对玩家说的一段话——就是一条聊天消息，不是小说剧本。可以有一个短问句、半句停顿，"
-    +"但禁止多组引号分段、禁止旁白（不能出现「她心想/旁白/云汀道」）、禁止复述或发布任务、禁止预告后续、禁止念任务编号与数值。"
-    +"≤80字，越像脱口而出越好。禁AI腔（首先/其次/总之）、禁教书先生口吻、禁客服腔、禁已淘汰概念（"+obsolete.join("、")+"）。只输出正文，不要引号。";
-  const user="本地兜底话术：「"+cutsceneText(node)+"」\n请化写为她此刻会发出的一条消息。";
-  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish"}};
-}
-function refineCutscene(id,node){
-  if(!window.WDChat||!WDChat.sysPrompt||!dsReady()) return;
-  const cs=CUTSCENE_NODES[node]; if(!cs) return;
-  const built=buildCutsceneMsgs(node);
-  dsChat(built.messages,Object.assign({ch:"cutscene"},built.opts)).then(raw=>{
-    let txt=(raw||"").trim();
-    if(!txt||txt.length<10) return;
-    /* 模型若仍输出多段引号剧本，只取第一段引号内内容；否则取第一行 */
-    const quoted=txt.match(/[「"]([^」"]{8,120})[」"]/);
-    if(quoted) txt=quoted[1];
-    else { txt=txt.split(/\n{1,}/)[0].trim(); }
-    txt=txt.replace(/^[「『"][\s,，。、]?|[\s,，。、]?[」』"]$/g,"").trim().slice(0,120);
-    if(txt.length<8) return;
-    /* v58b：过场台词同样不许自呼姓名/命令催促——不过则保留本地兜底，不替换 */
-    if(cueRedFlags(filterNpcText(txt),"云汀").length) { console.warn("[过场润色] 未过红线，保留本地句：",txt); return; }
-    const idx=st.dialogue.findIndex(m=>m&&m.id===id);
-    if(idx<0) return;
-    st.dialogue[idx].text=txt;
-    save();
-    if(view==="chat") renderChat(true);
-  }).catch(()=>{});
 }
 /* v58c 旧档迁移：把已落流的纯省略号引导消息替换为自然短句（AI 曾少给台词留下的空槽） */
 /* v58g：旧版立绘经 JPEG 编码透明通道已丢失（黑底无法逆向恢复），提示重新上传一次 */
@@ -6340,192 +5473,12 @@ const NPC_RELATIONS={
   tina:     {to:["yunting","shenzhao"],desc:"次元精灵，藏在手机里。整理错题录，织星盘。与沈昭的藏经阁有数据接口。"},
   wantang:  {to:["yunting","chengxiu"],desc:"英语导游，山脚下小木屋。笑起来有酒窝。帮程绣带英文团，偶尔和云汀聊心里话。"},
 };
-/* 根据当前关卡类型和幕次，选择引导对话中出场的职能NPC */
-function pickGuidanceNpcs(){
-  const aq=firstActiveQuest();
-  const act=curActN();
-  /* 关卡接洽人优先作为引导对话中的职能NPC（旧 quest.npc 已被 NPC_REMAP 重定向） */
-  const primaryNpc = aq ? resolveNpc(aq.npc) : NPC.yunting;
-  /* 按幕次选择次席角色：第一幕圣女主引+缇娜精灵，第二幕阁主守阁，
-     第三幕老板接团，第四幕精灵织星，第五幕圣女收束 */
-  const actMap={
-    1:{primary:"yunting",secondary:"tina"},
-    2:{primary:"shenzhao",secondary:"yunting"},
-    3:{primary:"chengxiu",secondary:"wantang"},
-    4:{primary:"tina",secondary:"shenzhao"},
-    5:{primary:"yunting",secondary:"tina"},
-  };
-  const pair=actMap[act]||actMap[1];
-  return {primary:pair.primary,secondary:pair.secondary};
-}
-/* v35：AI-only——已移除 GUIDANCE_TEMPLATES。引导场景由 AI 一次性生成多角色对白；
-   生成前先推入占位消息，AI 返回后就地替换文本。AI 失败则保留占位。 */
-/* 生成并落流引导对话场景：返回生成的消息ID列表，供AI填充 */
-function generateGuidanceScene(){
-  const aq=firstActiveQuest();
-  const act=curActN();
-  const dctx=window.WDChat?WDChat.generateDailyContext("yunting"):null;
-  const {primary:funcNpc1,secondary:funcNpc2}=pickGuidanceNpcs();
-  const ids=[];
-  const ts=Date.now();
-  /* 占位消息（结构与角色已定，文本随后由 AI 填充） */
-  const slots=[
-    {role:"npc",npc:"yunting"},
-    {role:"player"},
-    {role:"npc",npc:"yunting"},
-    {role:"npc",npc:funcNpc1},
-    {role:"player"},
-    {role:"npc",npc:funcNpc1,refs:aq?[{qid:aq.id}]:[]}
-  ];
-  if(funcNpc2&&NPC[funcNpc2]) slots.push({role:"npc",npc:funcNpc2});
-  slots.forEach((s,i)=>{
-    const m={id:"gd_"+ts+"_"+(i+1),role:s.role,text:"……",guidance:true,at:new Date().toISOString(),day:st.day};
-    if(s.npc) m.npc=s.npc;
-    if(s.refs) m.refs=s.refs;
-    st.dialogue.push(m); ids.push(m.id);
-  });
-  if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-  st.dialogueInitDay=st.day;
-  save();
-  record("对话初始化","引导对话场景（第"+st.day+"日）");
-  if(dsReady()) refineGuidanceScene(ids,aq,funcNpc1,funcNpc2,dctx);
-  else refineGuidanceSceneFail(ids);
-  return ids;
-}
-/* 引导对话AI生成：直接生成全部角色对白，就地替换占位文本 */
-/* v78：每日引导润色提示词组装（实发/预演共用；msgN 为消息条数） */
-function buildGuidanceMsgs(ids,aq,npc1,npc2,dctx){
-  const obsolete=(window.WDRegistry&&WDRegistry.obsoleteTerms)?WDRegistry.obsoleteTerms():["提灯","引灯","引魂灯","问道录","仙侠","仙师","封妖塔","掌灯"];
-  const sys=(window.WDChat?WDChat.sysPrompt("yunting",false):"")
-    +"\n\n【引导对话任务】这是玩家已经抵达之后、众人都认识她时的当日日常引导场景（不是初见：绑定仪式在序章已结束，不许重演初见、不许再问「你是谁/怎么出现的」、不许复述仪式）。请生成一段自然流畅的多角色互动场景，要求："
-    +"1）云汀与玩家互动（玩家发言由你模拟，口吻像真实玩家而非NPC）；"
-    +"2）云汀与职能NPC "+dName(npc1)+" 互动（体现两人关系与各自性格）；"
-    +"3）玩家与 "+dName(npc1)+" 互动（玩家主动提问，NPC以角色身份回应）；"
-    +(npc2?"4）"+dName(npc2)+" 可适时插话一句，体现多NPC在场感。":"")
-    +"所有发言像一群熟人在现场你一句我一句：允许短句、停顿、半句、跑题再拉回，不必每句完整、不必每句都推进什么，更不要每句都解释。整体语感接近日式轻小说的日常群像对白，有温度、有性格。禁网游黑话堆砌、禁江湖气装熟、禁AI腔、禁教书先生口吻、禁念任务编号与数值、禁已淘汰概念（"+obsolete.join("、")+"）。每条≤90字。"
-    +"【说话人纪律·硬约束】①每条开头必须严格按我给的角色名标注，内容只能是该角色本人说的话——云汀的台词里永远不许出现「云汀」二字（自称只用「我」），其他角色同理不许自呼姓名；"
-    +"②玩家的台词是玩家本人的口语，禁止替玩家做角色介绍（大家早已相识，不许出现「这位是云汀/我的引路人」之类引荐句），也不许让玩家念旁白；"
-    +"③每条严格对应我列出的顺序，缺条、串角视为废稿。"
-    +(window.WDChat&&WDChat.masterRule?WDChat.masterRule():"");
-  const user="当日情境："+(dctx?JSON.stringify(dctx):"无")+"\n当前任务："+(aq?qdn(aq)+"（"+aq.tlabel+"）":"无在途任务")
-    +"\n出场角色：云汀、玩家、"+dName(npc1)+(npc2?"、"+dName(npc2):"")
-    +"\n请生成 "+ids.length+" 条消息，严格按此顺序："
-    +"\n1. 云汀→玩家（开场，含当日情境）"
-    +"\n2. 玩家→云汀"
-    +"\n3. 云汀→"+dName(npc1)+"（引荐/搭话）"
-    +"\n4. "+dName(npc1)+"→云汀"
-    +"\n5. 玩家→"+dName(npc1)+"（提问）"
-    +"\n6. "+dName(npc1)+"→玩家（回应/引导）"
-    +(npc2?"\n7. "+dName(npc2)+" 插话":"")
-    +"\n每条以「角色名：内容」格式输出，用 ||| 分隔各条。只输出消息，不要解释。";
-  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{}};
-}
-function refineGuidanceScene(ids,aq,npc1,npc2,dctx){
-  if(!window.WDChat||!dsReady()||!ids.length) return;
-  const built=buildGuidanceMsgs(ids,aq,npc1,npc2,dctx);
-  dsChat(built.messages,Object.assign({ch:"guidance"},built.opts)).then(raw=>{
-    const txt=(raw||"").trim(); if(!txt||txt.length<10){ refineGuidanceSceneFail(ids); return; }
-    const parts=txt.split(/\|\|\||\n{2,}/).map(s=>s.trim()).filter(s=>s);
-    if(parts.length<ids.length){ refineGuidanceSceneFail(ids); return; }
-    /* v58b：按说话人标签归位，修「云汀自称这位是云汀」式串角——
-       旧逻辑纯按序号入座，模型把玩家视角的引荐句排到云汀槽位也照收。
-       ①识别每行「名：」归入说话人队列；②无标签行按序号兜底；
-       ③NPC 台词再过 cueRedFlags（自呼姓名等），不过则换安全短句。 */
-    const dn2=id=>dName(id);
-    const labelToId=label=>{
-      const x=String(label||"").trim();
-      if(/^(我|玩家)/.test(x)) return "player";
-      const all=[npc1,npc2,"yunting","shenzhao","chengxiu","tina","wantang"].filter(Boolean);
-      for(const id of new Set(all)){
-        if(x===dn2(id)||x===(NPC[id]&&NPC[id].name)) return id;
-        if(id==="yunting"&&/云/.test(x)) return "yunting";
-        if(id==="shenzhao"&&/沈昭|阁主/.test(x)) return "shenzhao";
-        if(id==="chengxiu"&&/程绣|掌柜/.test(x)) return "chengxiu";
-        if(id==="tina"&&/缇娜|精灵/.test(x)) return "tina";
-        if(id==="wantang"&&/晚棠/.test(x)) return "wantang";
-      }
-      return null;
-    };
-    const buckets={player:[]}; [npc1,npc2,"yunting"].forEach(id=>{if(id)buckets[id]=[];});
-    const unlabeled=[];
-    parts.forEach(line=>{
-      const m=line.match(/^([^：:]{1,8})[：:]\s*([\s\S]*)$/);
-      if(m){
-        const id=labelToId(m[1]); const body=m[2].replace(/^[「『"“]+|[」』"”]+$/g,"").trim();
-        if(id&&body){ (buckets[id]||(buckets[id]=[])).push(body); return; }
-      }
-      unlabeled.push(line.replace(/^[「『"“]+|[」』"”]+$/g,"").trim());
-    });
-    const GUIDANCE_SAFE={
-      yunting:["……你来了。","今天的雾，看着薄一些。","嗯，人到了就好。","路上还顺吗？"],
-      tina:["叮——我在呢。","有错题我会喊你的。","唔，今天星盘也亮着。"],
-      shenzhao:["……进来吧。","书在这儿，自己翻。","先坐，喝口热的。"],
-      chengxiu:["哟，稀客。","坐，茶刚沏上。","今儿想聊点什么？"],
-      wantang:["嘿，你来啦。","这段，我们一起练。","正好，我也想找你对对词。"]
-    };
-    const PLAYER_SAFE=["嗯，我在。","行，听你的。","好，那就这么办。","我先看看。"];
-    let ui=0;
-    const take=speaker=>{
-      const q=(buckets[speaker]||[]).shift();
-      return q!=null?q:(unlabeled[ui++]||"");
-    };
-    for(let i=0;i<ids.length;i++){
-      const idx=st.dialogue.findIndex(m=>m&&m.id===ids[i]); if(idx<0) continue;
-      /* 期望说话人以落流槽位自身的 role/npc 为准（generateGuidanceScene 已固定） */
-      const slotMsg=st.dialogue[idx];
-      const speaker=slotMsg.role==="player"?"player":slotMsg.npc;
-      let p=take(speaker).slice(0,200);
-      if(speaker!=="player"){
-        const fl=p?cueRedFlags(p,dn2(speaker)):["空台词"];
-        if(fl.length){ console.warn("[引导场景] 台词缺失/未过红线，换安全短句：",fl,p);
-          const pool=GUIDANCE_SAFE[speaker]||["……嗯。"];
-          /* 同角色多槽取不同句，避免两条安全短句撞车 */
-          p=pool.filter(x=>!st.dialogue.slice(0,idx).some(m=>m.npc===speaker&&m.text===x))[0]||pool[hash(ids[i])%pool.length];
-        }
-      }else if(!p||p.length<2){
-        /* 玩家槽空内容：用自然短句，不留「……」占位（占位会被反复重生成） */
-        p=PLAYER_SAFE.filter(x=>!st.dialogue.slice(0,idx).some(m=>m.role==="player"&&m.text===x))[0]||PLAYER_SAFE[hash(ids[i])%PLAYER_SAFE.length];
-      }
-      st.dialogue[idx].text=p;
-    }
-    save();
-    if(view==="chat") renderChat(true);
-  }).catch(()=>{ refineGuidanceSceneFail(ids); });
-}
-/* AI 不可用/失败时的占位文本（非本地剧情模板，仅提示重连） */
-function refineGuidanceSceneFail(ids){
-  (ids||[]).forEach((id,i)=>{
-    const idx=st.dialogue.findIndex(m=>m&&m.id===id); if(idx<0) return;
-    const placeholders=[
-      "（灵脉未通，今日引导暂缺——配置密钥后可重生成）",
-      "……",
-      dName(st.dialogue[idx].npc||"yunting")+"：（灵脉未通……）",
-      "……",
-      "……",
-      "（灵脉未通，任务引导暂缺）"
-    ];
-    st.dialogue[idx].text=placeholders[i]||"……";
-    st.dialogue[idx].ph=1; /* v55：占位标记——key 配好后按此标记清除并重生成 */
-  });
-  save();
-  if(view==="chat") renderChat(true);
-}
 /* v55：占位消息判定（ph 标记 / 灵脉未通文案 / 纯省略号）——key 配好后清除重生成的统依据 */
 function isPlaceholderMsg(m){
   if(!m) return false;
   if(m.ph) return true;
   const t=String(m.text||"").trim();
   return /灵脉未通/.test(t)||/^[.…。]+$/.test(t);
-}
-/* 确保引导对话已生成：进入对话视图时调用，每日仅生成一次 */
-function ensureGuidanceScene(){
-  if(!st) return;
-  if(st.dialogueInitDay===st.day) return;
-  /* 只在对话流为空或当日尚无任何对话时生成；剧情过场（如序章「降临」）不算阻断项——
-     它本就该排在当日引导之前；v55：离线占位消息不算「已有对话」 */
-  const todayDlg=st.dialogue.filter(m=>m.day===st.day&&!m.cutscene&&!isPlaceholderMsg(m));
-  if(todayDlg.length>0){ st.dialogueInitDay=st.day; save(); return; }
-  generateGuidanceScene();
 }
 /* v60：云汀结算离线终态句——落盘即完整台词，绝不把「正在接话」加载态写进存档。
    AI 在线时由 refineYunting 就地替换；AI 失败/限流/空返回时这句就是终态，不穿帮。 */
@@ -6551,7 +5504,7 @@ function buildRefineYuntingMsgs(q,nq,perfect){
   const d=byDay[q.day], p=dayProg(d);
   const total=D.quests.filter(x=>qDone(x.id)).length;
   const obsolete=(window.WDRegistry&&WDRegistry.obsoleteTerms)?WDRegistry.obsoleteTerms():["提灯","引灯","引魂灯","问道录","仙侠","仙师","封妖塔","掌灯"];
-  const sys="你是日式RPG《问道之旅·四十五日》的引路人「云汀」。任务NPC刚说完结算的话，你在群里顺手接一句——注意是接话，不是作总结报告。"
+  const sys="你是日式RPG《问道之旅·二十五日》的引路人「云汀」。任务NPC刚说完结算的话，你在群里顺手接一句——注意是接话，不是作总结报告。"
     +(window.WDChat&&WDChat.masterRule?WDChat.masterRule()+"\n":"")
     +"可以点一句她对这次交割的真实反应，可以再带一眼前路，也可以只留半句；收获、点评、下一步都不是必填项，按她此刻想说的来，禁止面面俱到。"
     +"≤90字，越自然越好，允许短句和停顿；禁AI腔（首先/其次/总之）、禁教书先生口吻、禁客服腔、禁念任务编号与数值奖励、禁已淘汰概念（"+obsolete.join("、")+"）。只输出正文，不要引号。";
@@ -6568,7 +5521,7 @@ function refineYunting(id,q,nq,perfect){
   const finish=txt=>{ const m=st.dialogue.find(x=>x.id===id); if(!m) return;
     const t=(txt||"").trim().replace(/^["「『]+|["」』]+$/g,"").slice(0,220);
     if(t) m.text=filterNpcText(t);   /* 空返回→保留离线终态句 */
-    delete m.pendingAI; save(); renderChat(true);
+    delete m.pendingAI; save();
   };
   dsChat(built.messages,Object.assign({ch:"refineYunting"},built.opts))
     .then(t=>finish(t))
@@ -6600,8 +5553,6 @@ function maybeUnlockDay(){
     break;
   }
   if(st.day<st.unlocked) st.day=st.unlocked;
-  /* v29（FIX-A/D-9）：进入终幕（第 42 日，act5 首日）时触发 act5 过场——激活预留节点，修复其永不触发 */
-  if(st.day>=42&&!(st.cutscenes&&st.cutscenes["act5"])){ triggerCutscene("act5"); }
 }
 function checkAch(){
   D.achievements.forEach(a=>{
@@ -6651,12 +5602,26 @@ function saveEdit(id, text){
   const arr=st.edits[id]||(st.edits[id]=[]);
   if(arr.length && arr[0].text===text) return false;   // 与最新一致，不重复记录
   arr.unshift({at:new Date().toISOString(), text});
+  syncLibText(id, text); /* v25：校订同步写回运行库——AI 出题/修诵/单元内容即取最新版 */
   save(); return true;
+}
+/* v25：校订写回运行库（pointsLib/oralLib/oralFull/clues 及用户新增卡原文） */
+function syncLibText(id, text){
+  try{
+    const parts=id.split(":");
+    if(parts[0]==="point"){ const p=(D.pointsLib||[]).find(x=>x.id===parts[1]); if(p) p.text=text;
+      const uc=st.v25&&st.v25.cards&&(st.v25.cards.added||[]).find(x=>x.id===parts[1]); if(uc) uc.text=text; }
+    else if(parts[0]==="oral"){ const x=(D.oralLib||[]).find(p=>p.id===parts[1]); if(x){ if(parts[2]==="zh") x.zh=text; else x.en=text; }
+      const uc=st.v25&&st.v25.cards&&(st.v25.cards.added||[]).find(x=>x.id===parts[1]); if(uc){ if(parts[2]==="zh") uc.zh=text; else uc.text=text; } }
+    else if(parts[0]==="full"){ const o=(D.oralFull||[]).find(p=>p.id===parts[1]); const s=o&&o.sections[+parts[2]]; if(s){ if(s.text!==undefined) s.text=text; else s.en=text; } }
+    else if(parts[0]==="clue"){ const c=(D.clues||[]).find(x=>x.id===parts[1]); if(c) c.text=text; }
+  }catch(e){ console.error("[syncLibText]",e); }
 }
 function rollbackEdit(id, index){
   const arr=editVer(id); if(!arr[index]) return;
   const text=arr[index].text;
   arr.unshift({at:new Date().toISOString(), text});   // 回退即把旧版复制为最新
+  syncLibText(id, text);
   save();
 }
 /* ==================== 藏经阁内容卡片池 ==================== */
@@ -6666,9 +5631,11 @@ const CATEGORIES=[
 ];
 function buildCardPool(){
   const cards=[];
+  const _delUids=new Set((st.v25&&st.v25.cards&&st.v25.cards.deleted)||[]);
   /* 顺序按重要性：吟游卷全文 → 吟游句 → 考点卷 → 线索册 */
   D.oralFull.forEach(o=>{
     o.sections.forEach((s,i)=>{
+      if(_delUids.has("full:"+o.id+":"+i)) return;
       cards.push({uid:"full:"+o.id+":"+i, cat:"full", catLabel:"修诵卷 · "+o.name, id:o.id+" §"+(i+1),
         key:"ORB-"+(o.aid||o.id)+"-"+i, sub:o.name, star:2,
         title:o.name+" · 第"+(i+1)+"节"+(s.h?" · "+s.h:""),
@@ -6677,6 +5644,7 @@ function buildCardPool(){
     });
   });
   D.oralLib.forEach(x=>{
+    if(_delUids.has("oral:"+x.id)) return;
     cards.push({uid:"oral:"+x.id, cat:"oral", catLabel:"修诵句 · "+x.topic, id:x.id,
       key:x.id, sub:x.topic, star:1,
       title:x.id+" · "+x.topic,
@@ -6687,6 +5655,7 @@ function buildCardPool(){
     const pre=(x.id||"").slice(0,2);
     const isS5=pre==="S5", isSx=/^S[1-4]$/.test(pre);
     if(!isS5&&!isSx) return; /* 只收录笔试四科+问契官料；其余非S条目暂不入卡池 */
+    if(_delUids.has("point:"+x.id)) return;
     cards.push({uid:"point:"+x.id, cat:isS5?"qoff":"pts", catLabel:isS5?"问契·官料":"考点卷 · "+pre, id:x.id,
       key:x.id, sub:isS5?mdClean(x.module||""):(pre+" · "+(RT_SUBJ_NAME[pre]||"")), star:+x.star||1,
       title:"★".repeat(+x.star)+" "+x.id+(x.status==="⚠️"?" ⚠待核":""),
@@ -6694,6 +5663,7 @@ function buildCardPool(){
       extra:x.anchor?("记忆锚："+mdClean(x.anchor)):"", editable:true, editId:"point:"+x.id});
   });
   (st.myOral||[]).forEach(m=>{
+    if(_delUids.has("myoral:"+m.id)) return;
     cards.push({uid:"myoral:"+m.id, cat:"qmine", catLabel:"问契·自录", id:m.id,
       key:m.id, sub:m.status==="final"?"已定稿":"草稿", star:2, created:m.created,
       title:"★★ "+m.id+(m.status==="final"?"":" · 草稿"),
@@ -6701,9 +5671,10 @@ function buildCardPool(){
       extra:m.ref?("参考："+String(m.ref).slice(0,80)):"", editable:true, editId:"myoral:"+m.id});
   });
   D.clues.forEach(x=>{
+    if(_delUids.has("clue:"+x.id)) return;
     cards.push({uid:"clue:"+x.id, cat:"clue", catLabel:"线索册", id:x.id,
-      title:x.id+" "+x.title, body:mdClean(x.text),
-      extra:"关联考点："+(x.covers||[]).join(" · "), editable:false});
+      title:x.id+" "+x.title, body:getEdit("clue:"+x.id, mdClean(x.text)),
+      extra:"关联考点："+(x.covers||[]).join(" · "), editable:true, editId:"clue:"+x.id});
   });
   return cards;
 }
@@ -6776,6 +5747,7 @@ function renderLib(){
     <input id="cardQ" placeholder="搜索编号 / 关键词 / 英文句…" value="${esc(st._libQ)}">
     <select id="cardCat">${catSel.map(o=>`<option value="${o[0]}"${st._libCat===o[0]?" selected":""}>${esc(o[1])}</option>`).join("")}</select>
     <button class="btn sm gold" id="cOralReplace" type="button">📖 导游词替换台</button>
+    <button class="btn sm primary" id="cAdd" type="button">＋ 新增卡片</button>
   </div>
   <div class="cardsearch" style="margin-top:6px">
     <select id="cardSub">${subSel.map(o=>`<option value="${esc(o[0])}"${st._libSub===o[0]?" selected":""}>${esc(o[1])}</option>`).join("")}</select>
@@ -6791,6 +5763,7 @@ function renderLib(){
       <button class="btn sm primary" id="cFlip" type="button" ${pool.length===0?"disabled":""}>翻下一张 ⤵</button>
       <button class="btn sm gold" id="cRand" type="button" ${pool.length===0?"disabled":""}>🎲 随机抽</button>
       <button class="btn sm" id="cEdit" type="button" ${cur&&cur.editable?"":"disabled"}>✏️ 校订此卡</button>
+      <button class="btn sm ghost" id="cDel" type="button" ${cur?"":"disabled"}>🗑 删除此卡</button>
     </div>
     <div class="fliphint">点「翻下一张」从卡堆顶部依次取出 · 「随机抽」从全部卡片中抽取 · 校订内容会自动存档并可回退版本</div>
   </div>`;
@@ -6804,6 +5777,8 @@ function renderLib(){
     if(cur.cat==="qmine"){ openOralInput(cur.id); return; }
     openEditor(cur); };
   const cOR=$("#cOralReplace",stream); if(cOR) cOR.onpointerdown=()=>{ SFX.tap(); renderOralReplace(); };
+  const cAdd=$("#cAdd",stream); if(cAdd) cAdd.onpointerdown=()=>{ SFX.tap(); openCardCreator(); };
+  const cDel=$("#cDel",stream); if(cDel) cDel.onpointerdown=()=>{ if(cur) deleteCard(cur); };
   /* FIX-P7：中文输入法保护——组词期间不重建 DOM，组词结束才搜索；搜索计数自增（修复「藏书」成就只读不自增） */
   const cardQEl=$("#cardQ",stream);
   if(cardQEl){
@@ -6833,6 +5808,7 @@ function originalOf(editId){
   if(parts[0]==="oral"){ const x=D.oralLib.find(p=>p.id===parts[1]); return x?(parts[2]==="zh"?x.zh:x.en):""; }
   if(parts[0]==="full"){ const o=D.oralFull.find(p=>p.id===parts[1]); const s=o&&o.sections[+parts[2]]; return s?(s.text||s.en||""):""; }
   if(parts[0]==="myoral"){ const m=(st.myOral||[]).find(x=>x.id===parts[1]); return m?("问："+m.q+"\n答："+m.a+(m.ref?"\n参考："+m.ref:"")):""; }
+  if(parts[0]==="clue"){ const c=(D.clues||[]).find(x=>x.id===parts[1]); return c?mdClean(c.text):""; }
   return "";
 }
 function openEditor(card){
@@ -6900,6 +5876,71 @@ function openEditor(card){
     aiCardExpand(cur, card, $("#edAiOut",ov), area, markDirty);
   };
   drawHist();
+}
+/* ==================== v25：新增卡片 / 删除卡片 ====================
+   新增落入 st.v25.cards.added，wd-v25.js injectCards() 运行时装进 pointsLib/oralLib
+   并自动并入任务单元（同科目末单元 ≤35 分钟优先，否则开新单元，规划序自动同步）；
+   删除内置卡记 uid 进 cards.deleted（藏经阁与任务单元同步隐藏），删除用户卡直接从 added 移除。 */
+function openCardCreator(){
+  const SUBJ=[
+    ["S1","科目一 政策与法律法规","pts"],["S2","科目二 导游业务","pts"],
+    ["S3","科目三 全国导游基础知识","pts"],["S4","科目四 地方导游基础知识","pts"],
+    ["S5","科目五 导游服务能力（现场考试）","qoff"],["ORAL","修诵句（英文句+中文对照）","oral"]
+  ];
+  const ov=panel(`<h2>＋ 新增资料卡片</h2>
+    <div class="mt">保存后自动进入藏经阁，并由任务规划系统分配进对应科目的任务单元（修诵句进修诵线）。</div>
+    <div class="editor">
+      <div class="cfgrow"><label>归属</label><select id="ncSubj" style="flex:1">${SUBJ.map((s,i)=>`<option value="${i}">${esc(s[1])}</option>`).join("")}</select></div>
+      <div class="cfgrow"><label>主题模块</label><input id="ncMod" placeholder="如：口译训练卡 / 故宫·前朝（留空=用户补充）" style="flex:1"></div>
+      <div class="cfgrow"><label>标题</label><input id="ncTitle" placeholder="卡片标题（如：午门 · 建筑规制）" style="flex:1"></div>
+      <div class="cfgrow"><label>星级</label><select id="ncStar"><option value="2">★2 要所</option><option value="3">★3 枢点</option><option value="1">★1 寻常</option></select></div>
+      <div id="ncBodyWrap"><textarea id="ncText" rows="7" placeholder="正文（考点原文 / 口试内容）…" style="width:100%"></textarea></div>
+      <div id="ncZhWrap" hidden><textarea id="ncZh" rows="3" placeholder="中文对照（仅修诵句需要）…" style="width:100%;margin-top:6px"></textarea></div>
+      <div class="cfgrow" style="margin-top:6px"><label>记忆锚</label><input id="ncAnchor" placeholder="可留空" style="flex:1"></div>
+      <div class="kitbar">
+        <button class="btn sm primary" id="ncSave" type="button">保存并接入任务规划</button>
+        <button class="btn sm ghost" id="ncClose" type="button">取消</button>
+      </div>
+    </div>`);
+  const subjEl=$("#ncSubj",ov), zhWrap=$("#ncZhWrap",ov), textEl=$("#ncText",ov);
+  const syncKind=()=>{ const oral=SUBJ[+subjEl.value][2]==="oral";
+    zhWrap.hidden=!oral; textEl.placeholder=oral?"英文句…":"正文（考点原文 / 口试内容）…"; };
+  subjEl.onchange=syncKind; syncKind();
+  $("#ncClose",ov).onpointerdown=()=>{ SFX.tap(); ov.remove(); };
+  $("#ncSave",ov).onpointerdown=()=>{
+    const [pre,subject,cat]=SUBJ[+subjEl.value];
+    const text=textEl.value.trim(), zh=($("#ncZh",ov).value||"").trim();
+    if(!text){ toast("正文不能为空"); return; }
+    if(cat==="oral"&&!zh){ toast("修诵句需要中文对照"); return; }
+    const title=$("#ncTitle",ov).value.trim()||text.slice(0,18);
+    const id=(cat==="oral"?"ORL-U":pre+"-U")+Date.now().toString(36).toUpperCase();
+    st.v25=st.v25||{}; st.v25.cards=st.v25.cards||{added:[],edited:{},deleted:[]};
+    st.v25.cards.added.push({ id, cat, subject:cat==="oral"?"":subject,
+      module:$("#ncMod",ov).value.trim()||(cat==="oral"?"自录修诵句":"用户补充"),
+      title, text, zh, anchor:$("#ncAnchor",ov).value.trim(), star:$("#ncStar",ov).value,
+      created:new Date().toISOString() });
+    if(window.V25&&V25.v25st) V25.v25st().quizCache={}; /* 单元题缓存作废，新卡即入出题池 */
+    save();
+    try{ if(window.V25&&V25.injectCards) V25.injectCards(); }catch(e){}
+    SFX.ok(); ov.remove(); toast("已保存——任务规划已自动接入「"+title+"」","gold");
+    if(view==="lib") renderLib(); if(view==="v25"&&window.V25) V25.renderBoard();
+  };
+}
+function deleteCard(c){
+  if(!c) return;
+  const isUser=(st.v25&&st.v25.cards&&(st.v25.cards.added||[])).some(x=>("point:"+x.id===c.uid)||("oral:"+x.id===c.uid));
+  if(!confirm("确定删除卡片「"+c.id+"」？"+(isUser?"\n这是你新增的卡，将从藏经阁与任务规划中彻底移除。":"\n内置卡将从藏经阁与任务规划中隐藏（清空存档重来可恢复）。"))) return;
+  st.v25=st.v25||{}; st.v25.cards=st.v25.cards||{added:[],edited:{},deleted:[]};
+  const cards=st.v25.cards;
+  const ai=(cards.added||[]).findIndex(x=>("point:"+x.id===c.uid)||("oral:"+x.id===c.uid));
+  if(ai>=0) cards.added.splice(ai,1);
+  else { cards.deleted=cards.deleted||[]; if(!cards.deleted.includes(c.uid)) cards.deleted.push(c.uid); }
+  if(c.cat==="qmine") st.myOral=(st.myOral||[]).filter(m=>m.id!==c.id);
+  if(window.V25&&V25.v25st) V25.v25st().quizCache={};
+  save();
+  try{ if(window.V25&&V25.injectCards) V25.injectCards(); }catch(e){}
+  SFX.tap(); toast("已删除「"+c.id+"」");
+  if(view==="lib") renderLib(); if(view==="v25"&&window.V25) V25.renderBoard();
 }
 /* ==================== v70：导游词替换台（六篇 × 各节，整段粘贴替换） ====================
    唯一事实源仍是 st.edits["full:<id>:<sec>"]：替换即校订，分句/锚点/逐句复述/整段复述/
@@ -7048,7 +6089,7 @@ function openOralInput(editId){
       if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
       save();
       toast("已定稿入库（"+id+"）——明日回潮时再见它");
-      if(view==="lib") renderLib(); else if(view==="chat") renderChat(true);
+      if(view==="lib") renderLib();
     };
     $("#oiBack",editor).onpointerdown=()=>{ SFX.tap(); ov.remove(); openOralInput(isEdit?editId:undefined); };
   };
@@ -9102,6 +8143,32 @@ function renderAiChannels(ov){
     else if(confirm("停用「"+(AI_CHANNEL_BY_ID[b.dataset.aichOff]||{}).label+"」？该通路将直接跳过 AI、只走本地兜底文案。")){ toggleAiCh(b.dataset.aichOff); toast("通路已停用，本地兜底下运行"); }
     renderAiChannels(ov);
   });
+  /* v25：两档模型展示 + 灵脉密钥入口 + 全局规划状态（真源 V25_TIERS @wd-v25.js） */
+  const vt=$("#v25tiers",ov);
+  if(vt){
+    if(window.V25&&V25.V25_TIERS){
+      const vp=V25.v25st?V25.v25st().plan:null;
+      vt.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px">'
+        +[V25.V25_TIERS.r1,V25.V25_TIERS.flash].map(t=>'<div style="flex:1;min-width:220px;border:1.5px solid var(--border);border-radius:10px;padding:8px 10px;background:rgba(255,255,255,.03)">'
+          +'<div style="font-size:13px;color:var(--gold);font-weight:700">'+esc(t.label)+' · '+esc(t.price)+'</div>'
+          +'<div class="note" style="margin:3px 0">模型 '+esc(t.model)+'<br>'+esc(t.use)+'</div></div>').join("")+'</div>'
+        +'<div class="note" style="margin:0 0 10px">两档职责固定不交叉：R1 只管 25 日全局规划，flash 管每日微调与全部出题/评测/讲解。测试阶段不填密钥也能玩——全部走本地模拟（界面标注「模拟题」）；正式使用到 <a href="https://platform.deepseek.com/" target="_blank" rel="noopener">platform.deepseek.com</a> 创建 Key（sk- 开头），浏览器直连 DeepSeek，不经任何第三方。'
+        +(vp?'<br>当前全局规划：'+esc(vp.note)+'（'+esc(vp.made)+' · 第 '+(vp.gens||1)+' 版'+(vp.mock?' · 本地骨架':'')+'）':'<br>全局规划尚未生成——进入「修行」视图后自动生成。')
+        +'</div>'
+        +'<div class="cfgrow" style="gap:8px;flex-wrap:wrap;margin:0 0 10px">'
+        +'<button class="btn sm gold" type="button" id="aichKey">⚙ 灵脉密钥配置（DeepSeek API Key）</button>'
+        +(V25.aiPlan25?'<button class="btn sm ghost" type="button" id="aichReplan">↻ 重新生成 25 日全局规划（R1）</button>':"")
+        +'</div>';
+      const kb=$("#aichKey",vt); if(kb) kb.onpointerdown=()=>{ SFX.tap(); dsKeyGate(()=>renderAiChannels(ov)); };
+      const rp=$("#aichReplan",vt); if(rp) rp.onpointerdown=()=>{ SFX.tap();
+        if(!dsReady()){ toast("未配置密钥——本地骨架已在跑，配置后自动生成 AI 规划"); return; }
+        if(!confirm("用 R1（高价）重新生成 25 日全局规划？每周期限 2 次；已完成的单元进度不受影响。")) return;
+        toast("R1 规划中…");
+        V25.aiPlan25().then(()=>{ toast("全局规划已更新"); renderAiChannels(ov); })
+          .catch(e=>{ toast("规划未采用："+(e&&e.message||e)); renderAiChannels(ov); });
+      };
+    } else vt.innerHTML="";
+  }
 }
 function openAiPromptEditor(id){
   const c=AI_CHANNEL_BY_ID[id]; if(!c) return;
@@ -9158,7 +8225,6 @@ function renderCfg(){
   const avOf=id=>WDCfg.avatarURL(id)||((window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(id):"");
   const ov=panel(`<h2>配置中心</h2><div class="mt">头像 · 称呼 · 属性 · 记忆数据 —— 所有变更实时生效，无需重启</div>
   <div class="cfgrow" style="margin:8px 0 4px;gap:8px;flex-wrap:wrap">
-    <button class="btn sm gold" id="cfgStudio" type="button">✦ 剧情工坊（道具 / 剧情 CG / 内置剧情 / AI 剧情编辑）</button>
     <button class="btn sm gold" id="cfgSync" type="button">☁ 设备同步（iPhone / iPad / Mac）</button>
   </div>
   <div class="cfgtabs">
@@ -9195,6 +8261,7 @@ function renderCfg(){
     </div>
   </div>
   <div class="cfgpane" data-pane="aich">
+    <div id="v25tiers"></div>
     <div id="aichHead"></div>
     <div class="note" style="margin:6px 0 10px">每条通路标注了位置（函数@文件）、模型、触发频次与离线兜底。<b>不想触发功能、也没配密钥？直接点卡片上的「👁 预览当前指令（不发送）」</b>——按你当前存档（人设/称呼/铁律/修订）本地组装出该通道真实 system/user 与参数约束（温度/上限/JSON 模式等），<b>不请求模型、不计费</b>，在编辑器里直接查看/改写；真实触发后的实发捕获同样长期留存本机（不进云同步）。保存修订后下一次调用立即生效，恢复默认即还原；停用的通路也能预演"本来要发什么"。</div>
     <div id="aichList" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -9352,9 +8419,6 @@ function renderCfg(){
       ov.querySelectorAll(".cfgpane").forEach(p=>p.classList.toggle("on",p.dataset.pane===b.dataset.tab));
     };
   });
-  /* v59：剧情工坊独立页入口 */
-  const stBtn=$("#cfgStudio",ov);
-  if(stBtn) stBtn.onpointerdown=()=>{ SFX.tap(); renderStoryStudio(); };
   /* v64：设备同步入口 */
   const syBtn=$("#cfgSync",ov);
   if(syBtn) syBtn.onpointerdown=()=>{ SFX.tap(); renderSync(); };
@@ -9572,7 +8636,7 @@ function renderCfg(){
     const m=$("#directorMsg",ov); m.textContent="已清空 · 恢复系统默认导演标准"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
   };
   $("#directorLoadDefault",ov).onpointerdown=()=>{ SFX.tap();
-    const txt="你是日式RPG《问道之旅·四十五日》的群聊导演。看完玩家这句话与近期对话，决定接下来哪些NPC该开口、按什么顺序、用什么反应类型。\n"
+    const txt="你是日式RPG《问道之旅·二十五日》的群聊导演。看完玩家这句话与近期对话，决定接下来哪些NPC该开口、按什么顺序、用什么反应类型。\n"
       +"反应类型：respond(正常接话) / interject(插话，多为半句或语气词) / react(对他人的反应) / guide(把话题轻拽回正事/任务方向)。\n"
       +"通常1-2人开口，极少超过3人。被@的人通常必回应；未被@的人只在她的性格确实会被勾起时插话。\n"
       +"hint用≤20字给该NPC这一句的方向，不要替她写台词。\n"
@@ -9778,191 +8842,6 @@ function renderAch(){
     + '</div>');
   return "";
 }
-/* v48：忆境——CG 图集（剧情 CG + 福利图） */
-/* v49：剧情回顾——展示已触发剧情列表 */
-function renderPlotLog(){
-  const plotMsgs=(st.dialogue||[]).filter(d=>d.kind==="plot");
-  const plotDays=Object.keys(st.plotDone||{}).map(Number).sort((a,b)=>a-b);
-  const ov=panel(`<h2>剧情回顾</h2><div class="mt">已触发 ${plotDays.length} 段剧情 · 共 45 日</div>
-    <div class="badgewall">${plotDays.length?plotDays.map(day=>{
-      const t=plotThemeOf(day)||{title:"未知",type:"",chars:[]};
-      const typeLabel={major:"大剧情",small:"日常",small_reward:"小奖励",medium_reward:"中奖励",ultimate:"终极",ultimate_reward:"终极奖励"}[t.type]||t.type;
-      return `<div class="badge got"><div class="bic">✦</div><b>第${day}日 · ${esc(t.title)}</b><div class="bd">${esc(typeLabel)} · 出场：${esc((t.chars||[]).join("、"))}</div></div>`;
-    }).join(""):'<div class="missing">尚无剧情触发——完成当日 60% 任务即可触发</div>'}</div>`);
-}
-function renderYijing(){
-  const cgs=st.cgUnlocked||{};
-  const allCgs=cgAllList();
-  const got=allCgs.filter(c=>cgs[c.id]).length;
-  const imgOf=id=>{ try{ return (WDCfg.cgImageURL&&WDCfg.cgImageURL(id))||""; }catch(e){ return ""; } };
-  const ov=panel(`<h2>忆境 · CG 图集</h2><div class="mt">已收藏 ${got}/${allCgs.length} 张（剧情通关 / 程绣处购福利图获得；图片可在配置中心 → 剧情工坊上传）</div>
-    <div class="badgewall">${allCgs.map(c=>cgs[c.id]
-      ? `<div class="badge got" data-cg="${esc(c.id)}"><div class="bic">✦</div><b>${esc(c.name)}</b><div class="bd">${esc(c.type)} · 点击查看</div></div>`
-      : `<div class="badge"><div class="bic">·</div><b>？？？</b><div class="bd">未解锁</div></div>`).join("")}</div>`);
-  ov.querySelectorAll("[data-cg]").forEach(b=>b.onpointerdown=()=>{
-    const id=b.dataset.cg;
-    const cg=allCgs.find(c=>c.id===id)||{name:id};
-    const u=imgOf(id);
-    panel(`<h2>${esc(cg.name||id)}</h2>${u
-      ? `<img src="${esc(u)}" alt="${esc(cg.name||id)}" style="width:100%;max-height:70vh;object-fit:contain;border-radius:8px;display:block;margin:8px auto">`
-      : `<div style="width:100%;height:320px;background:linear-gradient(135deg,#2a1a4a,#1a0a2a);display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:18px;border-radius:8px;text-align:center;line-height:2">
-        【CG 占位】${esc(id)}<br><small>可在配置中心 → 剧情工坊上传图片</small>
-      </div>`}`);
-  });
-}
-function renderHeart(){
-  const ov=panel(`<h2>心语</h2><div class="mt">好感对话 · 完成任务可提升好感</div>`+
-    D.npcs.map(n=>{ const fav=st.fav[n.id]||0; const hs=D.hearts[n.id]||[]; const seen=st.seenHearts[n.id]||[];
-      return `<div class="heart"><div class="hn">${esc(dName(n.id))} <span class="ht">${esc(dTitle(n.id))} · 好感 ${fav}</span></div></div>`+
-        hs.map(h=>{ const ok=fav>=h.at;
-          return `<div class="heart${ok?"":" locked"}"><div class="ht">${ok?`好感 ≥ ${h.at}`:`好感 ≥ ${h.at} 解锁`}</div>
-          <div class="hl">${ok?esc(h.t):"？？？"}</div></div>`;}).join("");
-    }).join(""));
-  // mark seen
-  D.npcs.forEach(n=>{ st.seenHearts[n.id]=(D.hearts[n.id]||[]).filter(h=>(st.fav[n.id]||0)>=h.at).map(h=>h.at); });
-  save();
-}
-function renderShop(){
-  /* v59：程绣的踏春行 Gal 式店面——道具网格 + 程绣立绘台 + 对话框选项。
-     商品=内置（时装/福利图/恢复/剧情道具）＋剧情工坊自定义道具（st.customItems）。 */
-  const WELFARE_GOODS=[
-    {id:"costume_yunting",name:"云汀·圣装初醒",type:"时装",cost:200,desc:"云汀兼修祷祝师身份的第一套圣装，使用后换装"},
-    {id:"costume_shenzhao",name:"沈昭·经匣符衣",type:"时装",cost:200,desc:"藏经阁阁主的符器衣装，使用后换装"},
-    {id:"costume_wantang",name:"晚棠·祷祝碎片",type:"时装",cost:200,desc:"祷祝成功段落凝成的衣物虚影，使用后换装"},
-    {id:"welfare_yunting",name:"云汀福利图",type:"福利图",cost:150,desc:"解锁云汀福利 CG 进忆境"},
-    {id:"welfare_shenzhao",name:"沈昭福利图",type:"福利图",cost:150,desc:"解锁沈昭福利 CG 进忆境"},
-    {id:"welfare_wantang",name:"晚棠福利图",type:"福利图",cost:150,desc:"解锁晚棠福利 CG 进忆境"},
-    {id:"welfare_tina",name:"缇娜福利图",type:"福利图",cost:150,desc:"解锁缇娜福利 CG 进忆境"},
-    {id:"welfare_chengxiu",name:"程绣福利图",type:"福利图",cost:150,desc:"解锁程绣福利 CG 进忆境"},
-    {id:"ningxin_xiang",name:"凝心香",type:"恢复",cost:80,desc:"恢复 30 点心气"},
-    {id:"huiling_dan",name:"回灵丹",type:"恢复",cost:60,desc:"恢复 10 点灵力"},
-  ];
-  /* 剧情道具：按日解锁；v52 R2 另需剧情点 total 达阈值才可购买 */
-  const plotGoods=REWARD_ITEMS.filter(r=>(st.day||1)>=r.day).map(r=>{
-    const ppTotal=((st.plotPoints&&st.plotPoints.total)||0);
-    const th=plotThemeOf(r.plot);
-    return {id:r.id,name:r.name,type:"剧情",cost:r.cost,
-      desc:"触发第 "+r.plot+" 日奖励剧情《"+(th&&th.title||"")+"》（需剧情点 ≥ "+r.plot+"，当前 "+ppTotal+"）",
-      plot:r.plot, ppLocked:ppTotal<r.plot};
-  });
-  /* v59：剧情工坊自定义道具（拥有型：购买即收藏） */
-  const customGoods=(st.customItems||[]).map(x=>Object.assign({custom:true},x));
-  const allGoods=[...WELFARE_GOODS,...plotGoods,...customGoods];
-  const isOwned=g=>!!((st.goods&&st.goods[g.id])||(g.type==="剧情"&&plotTriggered(g.plot)));
-  const TYPE_ICON={"时装":"👗","福利图":"🖼️","恢复":"🧪","剧情":"📜","自定义":"🎁"};
-  const iconOf=g=>{
-    try{ const u=WDCfg.itemIconURL&&WDCfg.itemIconURL(g.id); if(u) return `<img src="${esc(u)}" alt="">`; }catch(e){}
-    return TYPE_ICON[g.type]||"🎁";
-  };
-  let selId=null;
-  const ov=panel(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-      <h2 style="margin:0">踏春行 · 程绣的旅行社</h2>
-      <button class="btn sm gold" id="shopStudio" type="button">✦ 剧情工坊</button>
-    </div>
-    <div class="shopgal">
-      <div class="shopgridwrap">
-        <div class="shopcoin">🪙 灵铢 <b id="shopCoin">${st.coin}</b> · 点选道具，跟程绣打听；买定离手，不退不换。</div>
-        <div class="shopgrid" id="shopGrid">
-          ${allGoods.map(g=>{
-            const owned=isOwned(g), ppLocked=!!g.ppLocked;
-            return `<div class="shopitem${owned?' owned':''}" data-pick="${esc(g.id)}" title="${esc(g.desc)}">
-              <span class="sit">${esc(g.type)}</span>
-              ${owned?'<span class="sibadge">已拥有</span>':''}
-              <div class="siic">${iconOf(g)}</div>
-              <div class="sin">${esc(g.name)}</div>
-              <div class="sip">${ppLocked?'剧情点不足':g.cost+' 灵铢'}</div>
-            </div>`;
-          }).join("")}
-        </div>
-      </div>
-      <div class="shopstage">
-        <div class="shav">${(function(){ try{ const u=WDCfg.avatarURL&&WDCfg.avatarURL("chengxiu"); return u?`<img src="${esc(u)}" alt="">`:"绣"; }catch(e){ return "绣"; } })()}</div>
-        <div class="shpt">${(function(){ try{ const u=WDCfg.portraitURL&&WDCfg.portraitURL("chengxiu"); return u?`<img src="${esc(u)}" alt="程绣立绘">`:`<span class="shph">程绣立绘</span>`; }catch(e){ return '<span class="shph">程绣立绘</span>'; } })()}</div>
-      </div>
-    </div>
-    <div class="shopdlg">
-      <div class="sdn">程绣 · 踏春行掌柜</div>
-      <div class="sdtext" id="shopSay">哟，稀客。架子上的东西随便看——光看不买也成，别碰掉漆就行。</div>
-      <div class="shopopts" id="shopOpts"></div>
-    </div>`);
-  const sayEl=$("#shopSay",ov), optsEl=$("#shopOpts",ov);
-  function say(t){ sayEl.textContent=t; }
-  function renderOpts(){
-    const g=selId?allGoods.find(x=>x.id===selId):null;
-    let btns=[];
-    if(g){
-      const owned=isOwned(g);
-      if(owned) btns.push(["再看看别的","back"]);
-      else if(g.ppLocked) btns.push(["（剧情点不够，先记下）","back"]);
-      else btns.push(["买下它 · "+g.cost+" 灵铢","buy"],["再听听别的","back"]);
-    }
-    btns.push(["今天到了什么新货？","new"],["灵铢不够怎么办？","poor"],["（转身离开）","leave"]);
-    optsEl.innerHTML=btns.map(([t,k])=>`<button class="btn sm ${k==="buy"?"primary":"ghost"}" data-opt="${k}" type="button">${esc(t)}</button>`).join("");
-    optsEl.querySelectorAll("[data-opt]").forEach(b=>b.onpointerdown=()=>{
-      SFX.tap();
-      const k=b.dataset.opt;
-      if(k==="back"){ selId=null; markSel(); idleSay(); renderOpts(); }
-      else if(k==="leave"){ ov.remove(); }
-      else if(k==="new"){ say("新货都在亮着金边的格子里摆着呢。剧情道具得你的故事走到那一天、剧情点攒够了才肯露面——我也做不了它的主。"); }
-      else if(k==="poor"){ say("灵铢不够？去藏经阁清几匣雾怪、把今天的修行做完，灵铢自然就有了。我这儿……概不赊账，别撒娇。"); }
-      else if(k==="buy"){ doBuy(g); }
-    });
-  }
-  function idleSay(){
-    const pool=["看上什么直接点它，我给你讲讲门道。","买不买不要紧，先听个乐子也行。","我这儿明码标价，童叟无欺——当然，童叟也不一定买得起。"];
-    say(pool[Math.floor(Math.random()*pool.length)]);
-  }
-  function markSel(){
-    ov.querySelectorAll(".shopitem").forEach(el=>el.classList.toggle("sel",el.dataset.pick===selId));
-  }
-  function pickLine(g){
-    if(g.ppLocked) return "「"+g.name+"」是剧情道具，要第 "+g.plot+" 日的故事走到、剧情点攒够 "+g.plot+" 点才肯跟你走——你现在还差些火候。";
-    const byType={
-      "时装":"「"+g.name+"」。"+g.desc+"——衣服这种东西，穿过一次就知道值不值。",
-      "福利图":"「"+g.name+"」。买下就收进忆境，夜深人静时自己翻出来看……别想歪，我说的是画。",
-      "恢复":"「"+g.name+"」。"+g.desc+"。雾浓的日子备一个，比硬撑划算。",
-      "剧情":"「"+g.name+"」。"+g.desc+"——这种东西我只负责递到你手上，故事是你们自己的。",
-      "自定义":"「"+g.name+"」。"+(g.desc||"客人订的私货，识货的人才看得上。")
-    };
-    return byType[g.type]||g.desc;
-  }
-  ov.querySelectorAll("[data-pick]").forEach(el=>el.onpointerdown=()=>{
-    if(el.classList.contains("owned")){ say("这个你已经有了，还想再买一个囤着？行啊，先付钱。"); return; }
-    SFX.tap(); selId=el.dataset.pick; markSel();
-    const g=allGoods.find(x=>x.id===selId); if(g){ say(pickLine(g)); renderOpts(); }
-  });
-  function doBuy(g){
-    if(!g||isOwned(g)) return;
-    if(g.ppLocked){ toast("剧情点不足——完成当日任务或静待时序推进"); say("说了嘛，火候不到，它不认主。"); return; }
-    if(st.coin<g.cost){ toast("灵铢不足——再修习一日"); say("灵铢不够呢。去清几匣雾怪再来，我给你留着……留到打烊为止。"); return; }
-    st.coin-=g.cost;
-    st.goods=st.goods||{}; st.goods[g.id]=new Date().toISOString();
-    if(g.type==="时装"){
-      st.costumes=st.costumes||{}; st.costumes[g.id]=true;
-      toast("已换装：「"+g.name+"」——新衣上身","gold");
-      say("衣服上身，人精神三分。照照去，别在我店里转得我眼花。");
-    } else if(g.type==="福利图"){
-      st.cgUnlocked=st.cgUnlocked||{}; st.cgUnlocked[g.id]=true;
-      toast("福利图已收入忆境：「"+g.name+"」","gold");
-      say("收进忆境了。一个人看的时候……把门闩好。");
-    } else if(g.type==="恢复"){
-      if(g.id==="ningxin_xiang"){ const cap=maxHP(); st.hp=Math.min(cap,(st.hp||0)+30); toast("凝心香起效——心气 +30","gold"); }
-      else { const cap=maxEnergy(); st.energy=Math.min(cap,(st.energy||0)+10); toast("回灵丹起效——灵力 +10","gold"); }
-      say("随身带着，别等雾扑到脸上才想起它。");
-    } else if(g.type==="剧情"){
-      const th=plotThemeOf(g.plot);
-      if(th) performPlot(th);
-      say("去吧，故事不等人——钱货两清，我接着看店。");
-    } else {
-      toast("已收入行囊：「"+g.name+"」","gold");
-      say("算你识货。这东西搁别人那儿，有钱都未必找得到。");
-    }
-    save(); renderShop();
-  }
-  renderOpts();
-  const ssBtn=$("#shopStudio",ov);
-  if(ssBtn) ssBtn.onpointerdown=()=>{ SFX.tap(); renderStoryStudio(); };
-}
 /* ============================================================
    v64 设备同步面板——GitHub 私有 Gist 通道 + 加密 + 加入码换机 + 文件备份
    ============================================================ */
@@ -10124,281 +9003,6 @@ function renderSync(){
   renderHome();
 }
 
-/* ============================================================
-   v59 剧情工坊——前台配置道具/剧情CG，可视化编辑内置剧情与AI推演剧情
-   文本覆写随存档（storyThemeOV/cutsceneOV/customItems/customCgs），
-   图片走 WDCfg（cgImages/itemIcons）。 ============================================================ */
-const SS_THEME_TYPES=[["small","日常"],["major","大剧情"],["small_reward","小奖励"],["medium_reward","中奖励"],["ultimate","终极"]];
-function renderStoryStudio(){
-  const ov=panel(`<h2>剧情工坊</h2>
-    <div class="mt">内置剧情 · 过场对白 · AI 推演剧情 · CG 图鉴 · 道具——改动即刻生效并随存档保存；图片素材保存在本机。</div>
-    <div class="cfgtabs" id="ssTabs">
-      <button data-ss="theme" class="on" type="button">内置剧情</button>
-      <button data-ss="cut" type="button">过场对白</button>
-      <button data-ss="ai" type="button">AI 推演剧情</button>
-      <button data-ss="cg" type="button">CG 图鉴</button>
-      <button data-ss="item" type="button">道具</button>
-    </div>
-    <div id="ssBody" style="margin-top:10px"></div>`);
-  const body=$("#ssBody",ov);
-  function head(n){ ov.querySelectorAll("#ssTabs [data-ss]").forEach(b=>b.classList.toggle("on",b.dataset.ss===n)); }
-  /* —— 1. 内置剧情（45 日） —— */
-  function showTheme(){
-    head("theme");
-    const rows=Object.keys(PLOT_THEMES).map(Number).sort((a,b)=>a-b).map(day=>{
-      const t=plotThemeOf(day), ovr=st.storyThemeOV[day];
-      const sel=SS_THEME_TYPES.map(([v,l])=>`<option value="${v}"${t.type===v?" selected":""}>${l}</option>`).join("");
-      return `<div style="display:grid;grid-template-columns:42px 1.2fr 1.4fr 84px 1fr 1fr 56px;gap:6px;align-items:center;padding:5px 2px;border-bottom:1px solid var(--border);font-size:12px">
-        <b style="color:var(--gold)">第${day}日</b>
-        <input data-th="${day}" data-k="title" value="${esc(t.title||"")}" maxlength="20" style="min-width:0">
-        <input data-th="${day}" data-k="charsStr" value="${esc((t.chars||[]).join("、"))}" placeholder="出场角色，、分隔" style="min-width:0">
-        <select data-th="${day}" data-k="type">${sel}</select>
-        <input data-th="${day}" data-k="cg" value="${esc(t.cg||"")}" placeholder="CG id（可空）" maxlength="40" style="min-width:0">
-        <input data-th="${day}" data-k="item" value="${esc(t.item||"")}" placeholder="道具名（可空）" maxlength="20" style="min-width:0">
-        <button class="btn sm ghost" data-threset="${day}" type="button" ${ovr?"":"disabled"} style="font-size:11px">恢复</button>
-      </div>`;
-    }).join("");
-    body.innerHTML=`<div class="note">四十五日剧情总表。直接改：标题 / 出场角色（yunting、tina、wantang、shenzhao、chengxiu、gugong 等，用顿号分隔）/ 类型 / 绑定 CG id / 绑定道具。留空 CG/道具即无。改完即存。</div>
-      <div style="display:grid;grid-template-columns:42px 1.2fr 1.4fr 84px 1fr 1fr 56px;gap:6px;padding:4px 2px;font-size:11px;color:var(--dim)"><span>日次</span><span>标题</span><span>出场角色</span><span>类型</span><span>CG id</span><span>道具</span><span></span></div>
-      ${rows}`;
-    body.querySelectorAll("[data-th]").forEach(el=>{
-      const commit=()=>{
-        const day=el.dataset.th, k=el.dataset.k, v=el.value.trim();
-        st.storyThemeOV[day]=st.storyThemeOV[day]||{};
-        st.storyThemeOV[day][k]=v; save();
-        const btn=body.querySelector('[data-threset="'+day+'"]'); if(btn) btn.disabled=false;
-      };
-      el.onchange=commit;
-    });
-    body.querySelectorAll("[data-threset]").forEach(b=>b.onpointerdown=()=>{
-      delete st.storyThemeOV[b.dataset.threset]; save(); showTheme(); toast("已恢复内置剧情");
-    });
-  }
-  /* —— 2. 过场对白（9 节点） —— */
-  function showCut(){
-    head("cut");
-    body.innerHTML=`<div class="note">九个固定过场（降临 / 绑定 / 灵魂契约 / 五幕仪式 / 终幕）云汀的本地兜底台词。AI 在线时会以此稿化写；改稿即改兜底与化写底稿。</div>`+
-      Object.keys(CUTSCENE_NODES).map(node=>{
-        const cs=CUTSCENE_NODES[node], v=cutsceneText(node), ovr=!!st.cutsceneOV[node];
-        return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <b style="color:var(--gold);font-size:13px">${esc(cs.label)} <span style="color:var(--dim);font-weight:normal;font-size:11px">${esc(node)}</span></b>
-            <button class="btn sm ghost" data-cutreset="${node}" type="button" ${ovr?"":"disabled"} style="font-size:11px">恢复内置</button>
-          </div>
-          <textarea data-cut="${node}" rows="2" style="width:100%;font-size:13px">${esc(v)}</textarea>
-        </div>`;
-      }).join("");
-    body.querySelectorAll("[data-cut]").forEach(ta=>ta.onchange=()=>{
-      const v=ta.value.trim();
-      if(v) st.cutsceneOV[ta.dataset.cut]=v; else delete st.cutsceneOV[ta.dataset.cut];
-      save();
-      const btn=body.querySelector('[data-cutreset="'+ta.dataset.cut+'"]'); if(btn) btn.disabled=!v;
-    });
-    body.querySelectorAll("[data-cutreset]").forEach(b=>b.onpointerdown=()=>{
-      delete st.cutsceneOV[b.dataset.cutreset]; save(); showCut(); toast("已恢复内置台词");
-    });
-  }
-  /* —— 3. AI 推演剧情（st.plotLines） —— */
-  function showAi(){
-    head("ai");
-    const lines=st.plotLines||[];
-    if(!lines.length){
-      body.innerHTML=`<div class="note">这里收录每段剧情实际演出的台词：剧情触发时由 AI 按当天人设现场推演，离线时落本地稿。</div>
-        <div class="missing">尚无 AI 推演剧情——随主线推进（每日任务全清）或在集市购买剧情道具后自动生成。</div>`;
-      return;
-    }
-    body.innerHTML=`<div class="note">共 ${lines.length} 条剧情台词（倒序）。直接改文本即改剧情回廊与对话流里的呈现；删除只移除该条，不影响剧情已触发状态。</div>`+
-      lines.map((m,i)=>{
-        let nm=m.npc;
-        try{ nm=dName(m.npc); }catch(e){}
-        const at=m.at?String(m.at).slice(0,16).replace("T"," "):"";
-        return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px">
-            <b style="color:var(--cyber);font-size:12.5px">${esc(nm)} <span style="color:var(--dim);font-weight:normal">第${m.day||"?"}日 · ${esc(m.theme||"剧情")}</span></b>
-            <span style="font-size:10.5px;color:var(--dim);white-space:nowrap">${esc(at)}
-              <button class="btn sm ghost" data-plsave="${i}" type="button" style="font-size:11px;margin-left:6px">保存</button>
-              <button class="btn sm ghost" data-pldel="${i}" type="button" style="font-size:11px">删除</button>
-            </span>
-          </div>
-          <textarea data-pl="${i}" rows="2" style="width:100%;font-size:13px">${esc(m.text||"")}</textarea>
-        </div>`;
-      }).reverse().join("");
-    body.querySelectorAll("[data-plsave]").forEach(b=>b.onpointerdown=()=>{
-      const i=+b.dataset.plsave, ta=body.querySelector('[data-pl="'+i+'"]');
-      if(ta&&st.plotLines[i]){ st.plotLines[i].text=ta.value.slice(0,500); syncPlotMirror(i); save(); toast("已保存台词修改"); }
-    });
-    body.querySelectorAll("[data-pldel]").forEach(b=>b.onpointerdown=()=>{
-      const i=+b.dataset.pldel, m=st.plotLines[i]; if(!m) return;
-      st.plotLines.splice(i,1);
-      /* 同步删除 st.dialogue 中的镜像（按 plotId+at+text 匹配，占位/AI 台词均覆盖） */
-      st.dialogue=(st.dialogue||[]).filter(d=>!(d.kind==="plot"&&d.at===m.at&&d.npc===m.npc&&d.text===m.text));
-      save(); showAi(); toast("已删除该条剧情台词");
-    });
-  }
-  /* plotLines 改文本后同步 dialogue 镜像 */
-  function syncPlotMirror(i){
-    const m=st.plotLines[i]; if(!m) return;
-    (st.dialogue||[]).forEach(d=>{ if(d.kind==="plot"&&d.at===m.at&&d.npc===m.npc&&d.plotId===m.plotId) d.text=m.text; });
-  }
-  /* —— 4. CG 图鉴 —— */
-  function cgImg(id){ try{ return (WDCfg.cgImageURL&&WDCfg.cgImageURL(id))||""; }catch(e){ return ""; } }
-  function showCg(){
-    head("cg");
-    const cgs=st.cgUnlocked||{};
-    const grid=cgAllList().map(c=>{
-      const u=cgImg(c.id), got=!!cgs[c.id];
-      return `<div class="shopitem" style="cursor:default">
-        <span class="sit">${esc(c.type)}</span>
-        <span class="sibadge" style="color:${got?'var(--ok)':'var(--dim)'}">${got?'已解锁':'未解锁'}</span>
-        <div class="siic" style="font-size:14px">${u?`<img src="${esc(u)}" alt="">`:"🖼️"}</div>
-        <div class="sin">${esc(c.name)}</div>
-        <div style="font-size:10px;color:var(--dim);margin:2px 0;word-break:break-all">${esc(c.id)}</div>
-        <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">
-          <button class="btn sm ghost" data-cgup="${esc(c.id)}" type="button" style="font-size:11px;padding:2px 6px">${u?'换图':'上传'}</button>
-          ${u?'<button class="btn sm ghost" data-cgclr="'+esc(c.id)+'" type="button" style="font-size:11px;padding:2px 6px">移除图</button>':''}
-          <button class="btn sm ghost" data-cgtoggle="${esc(c.id)}" type="button" style="font-size:11px;padding:2px 6px">${got?'收回':'解锁'}</button>
-        </div>
-      </div>`;
-    }).join("");
-    body.innerHTML=`<div class="note">给剧情 CG / 福利图上传图片（JPG/PNG，自动等比压缩）。「解锁」仅改变收藏状态，方便你立刻在忆境里预览效果。</div>
-      <div class="shopgrid" style="max-height:none;margin-bottom:14px">${grid}</div>
-      <div style="border-top:1px dashed var(--border);padding-top:10px">
-        <b style="font-size:13px;color:var(--cyber)">新增自定义 CG</b>
-        <div class="cfgrow" style="margin-top:6px">
-          <input id="cgNewId" placeholder="CG 英文键（如 cg_my_01，唯一）" maxlength="40" style="flex:1;min-width:140px">
-          <input id="cgNewName" placeholder="显示名称" maxlength="20" style="flex:1;min-width:120px">
-          <button class="btn sm primary" id="cgNewAdd" type="button">新建</button>
-        </div>
-      </div>`;
-    body.querySelectorAll("[data-cgup]").forEach(b=>b.onpointerdown=()=>{
-      const id=b.dataset.cgup;
-      pickFile("image/*",f=>{
-        WDCfg.setCGImage(id,f,s=>{}).then(()=>{ toast("CG 图片已保存","gold"); showCg(); })
-          .catch(e=>toast("图片保存失败："+(e.message||e)));
-      });
-    });
-    body.querySelectorAll("[data-cgclr]").forEach(b=>b.onpointerdown=()=>{
-      WDCfg.clearCGImage(b.dataset.cgclr); showCg(); toast("已移除 CG 图片");
-    });
-    body.querySelectorAll("[data-cgtoggle]").forEach(b=>b.onpointerdown=()=>{
-      const id=b.dataset.cgtoggle; st.cgUnlocked=st.cgUnlocked||{};
-      if(st.cgUnlocked[id]) delete st.cgUnlocked[id]; else st.cgUnlocked[id]=new Date().toISOString();
-      save(); showCg();
-    });
-    $("#cgNewAdd",body).onpointerdown=()=>{
-      const id=$("#cgNewId",body).value.trim().replace(/[^\w-]/g,"_"), name=$("#cgNewName",body).value.trim();
-      if(!id||!name){ toast("CG 键和名称都要填"); return; }
-      if(cgAllList().some(c=>c.id===id)){ toast("CG 键已存在"); return; }
-      st.customCgs.push({id,name}); save(); showCg(); toast("已新建自定义 CG，可上传图片了","gold");
-    };
-  }
-  /* —— 5. 道具 —— */
-  const BUILTIN_ITEMS=[
-    {id:"costume_yunting",name:"云汀·圣装初醒",type:"时装",cost:200,desc:"云汀兼修祷祝师身份的第一套圣装，使用后换装"},
-    {id:"costume_shenzhao",name:"沈昭·经匣符衣",type:"时装",cost:200,desc:"藏经阁阁主的符器衣装，使用后换装"},
-    {id:"costume_wantang",name:"晚棠·祷祝碎片",type:"时装",cost:200,desc:"祷祝成功段落凝成的衣物虚影，使用后换装"},
-    {id:"welfare_yunting",name:"云汀福利图",type:"福利图",cost:150,desc:"解锁云汀福利 CG 进忆境"},
-    {id:"welfare_shenzhao",name:"沈昭福利图",type:"福利图",cost:150,desc:"解锁沈昭福利 CG 进忆境"},
-    {id:"welfare_wantang",name:"晚棠福利图",type:"福利图",cost:150,desc:"解锁晚棠福利 CG 进忆境"},
-    {id:"welfare_tina",name:"缇娜福利图",type:"福利图",cost:150,desc:"解锁缇娜福利 CG 进忆境"},
-    {id:"welfare_chengxiu",name:"程绣福利图",type:"福利图",cost:150,desc:"解锁程绣福利 CG 进忆境"},
-    {id:"ningxin_xiang",name:"凝心香",type:"恢复",cost:80,desc:"恢复 30 点心气"},
-    {id:"huiling_dan",name:"回灵丹",type:"恢复",cost:60,desc:"恢复 10 点灵力"}
-  ].concat(REWARD_ITEMS.map(r=>({id:r.id,name:r.name,type:"剧情",cost:r.cost,desc:"第 "+r.plot+" 日奖励剧情道具"})));
-  function itemIcon(id){ try{ return (WDCfg.itemIconURL&&WDCfg.itemIconURL(id))||""; }catch(e){ return ""; } }
-  function showItem(){
-    head("item");
-    const built=BUILTIN_ITEMS.map(g=>{
-      const u=itemIcon(g.id);
-      return `<div class="shopitem" style="cursor:default">
-        <span class="sit">内置</span>
-        <div class="siic">${u?`<img src="${esc(u)}" alt="">`:"🎁"}</div>
-        <div class="sin">${esc(g.name)}</div>
-        <div class="sip">${g.cost} 灵铢 · ${esc(g.type)}</div>
-        <div style="display:flex;gap:4px;justify-content:center;margin-top:2px">
-          <button class="btn sm ghost" data-iup="${esc(g.id)}" type="button" style="font-size:11px;padding:2px 6px">${u?'换图标':'配图标'}</button>
-          ${u?'<button class="btn sm ghost" data-iclr="'+esc(g.id)+'" type="button" style="font-size:11px;padding:2px 6px">移除</button>':''}
-        </div>
-      </div>`;
-    }).join("");
-    const mine=(st.customItems||[]).map((g,i)=>{
-      const u=itemIcon(g.id);
-      return `<div class="shopitem sel" style="cursor:default">
-        <span class="sit">自定义</span>
-        <span class="sibadge">${(st.goods&&st.goods[g.id])?'已购':'在售'}</span>
-        <div class="siic">${u?`<img src="${esc(u)}" alt="">`:"🎁"}</div>
-        <div class="sin">${esc(g.name)}</div>
-        <div class="sip">${g.cost} 灵铢 · ${esc(g.type)}</div>
-        <div style="display:flex;gap:4px;justify-content:center;margin-top:2px;flex-wrap:wrap">
-          <button class="btn sm ghost" data-iup="${esc(g.id)}" type="button" style="font-size:11px;padding:2px 6px">${u?'换图标':'配图标'}</button>
-          <button class="btn sm ghost" data-iedit="${i}" type="button" style="font-size:11px;padding:2px 6px">编辑</button>
-          <button class="btn sm ghost" data-idel="${i}" type="button" style="font-size:11px;padding:2px 6px">删除</button>
-        </div>
-      </div>`;
-    }).join("");
-    body.innerHTML=`<div class="note">内置道具可配/换图标（不改价与效果）；自定义道具会自动上架程绣的集市，玩家花灵铢购买收藏。</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 2px">
-        <b style="font-size:13px;color:var(--cyber)">自定义道具（上架集市）</b>
-        <button class="btn sm primary" id="itemAddTop" type="button">＋ 增加道具</button>
-      </div>
-      <b style="font-size:13px;color:var(--cyber)">内置道具</b>
-      <div class="shopgrid" style="max-height:none;margin:6px 0 14px">${built}</div>
-      <div class="shopgrid" style="max-height:none;margin:6px 0 14px">${mine||'<div class="missing" style="grid-column:1/-1">还没有自定义道具——点右上角「＋ 增加道具」新建。</div>'}</div>
-      <div id="itemEdit" style="border-top:1px dashed var(--border);padding-top:10px">${itemFormHtml(null)}</div>`;
-    const addTop=$("#itemAddTop",body);
-    if(addTop) addTop.onpointerdown=()=>{ SFX.tap();
-      $("#itemEdit",body).innerHTML=itemFormHtml(null); bindForm();
-      const inp=$("#ifId",body); if(inp) inp.focus();
-      try{ $("#itemEdit",body).scrollIntoView({behavior:"smooth",block:"center"}); }catch(e){ body.scrollTop=body.scrollHeight; }
-    };
-    function uploadIcon(id){
-      pickFile("image/*",f=>{ WDCfg.setItemIcon(id,f,s=>{}).then(()=>{ toast("道具图标已保存","gold"); showItem(); }).catch(e=>toast("图标保存失败："+(e.message||e))); });
-    }
-    body.querySelectorAll("[data-iup]").forEach(b=>b.onpointerdown=()=>uploadIcon(b.dataset.iup));
-    body.querySelectorAll("[data-iclr]").forEach(b=>b.onpointerdown=()=>{ WDCfg.clearItemIcon(b.dataset.iclr); showItem(); });
-    body.querySelectorAll("[data-idel]").forEach(b=>b.onpointerdown=()=>{
-      if(confirm("删除自定义道具「"+(st.customItems[+b.dataset.idel]||{}).name+"」？已购记录保留。")){
-        st.customItems.splice(+b.dataset.idel,1); save(); showItem(); toast("已删除");
-      }
-    });
-    body.querySelectorAll("[data-iedit]").forEach(b=>b.onpointerdown=()=>{
-      $("#itemEdit",body).innerHTML=itemFormHtml(st.customItems[+b.dataset.iedit]||null); bindForm();
-    });
-    bindForm();
-    function itemFormHtml(g){
-      g=g||{id:"",name:"",type:"自定义",cost:50,desc:""};
-      return `<b style="font-size:13px;color:var(--cyber)">${g.id?'编辑道具':'新建道具'}</b>
-        <div class="cfgrow" style="margin-top:6px"><label>英文键</label><input id="ifId" value="${esc(g.id)}" maxlength="40" placeholder="唯一，如 my_lantern" ${g.id?'disabled':''} style="flex:1"></div>
-        <div class="cfgrow"><label>名称</label><input id="ifName" value="${esc(g.name)}" maxlength="16" style="flex:1"></div>
-        <div class="cfgrow"><label>类型</label><select id="ifType">
-          ${["自定义","时装","福利图","恢复","剧情"].map(t=>`<option ${g.type===t?"selected":""}>${t}</option>`).join("")}
-        </select><label style="min-width:auto">价格</label><input id="ifCost" type="number" min="0" max="9999" value="${+g.cost||0}" style="width:80px"></div>
-        <div class="cfgrow" style="align-items:flex-start"><label>描述</label><textarea id="ifDesc" rows="2" maxlength="80" style="flex:1">${esc(g.desc||"")}</textarea></div>
-        <div class="savegrid"><button class="btn sm primary" id="ifSave" type="button">${g.id?'保存修改':'新建并上架'}</button>${g.id?'':'<button class="btn sm ghost" id="ifCancel" type="button">清空</button>'}</div>`;
-    }
-    function bindForm(){
-      const saveBtn=$("#ifSave",body); if(!saveBtn) return;
-      saveBtn.onpointerdown=()=>{
-        const id=$("#ifId",body).value.trim().replace(/[^\w-]/g,"_");
-        const name=$("#ifName",body).value.trim();
-        if(!id||!name){ toast("英文键和名称都要填"); return; }
-        const exists=BUILTIN_ITEMS.some(x=>x.id===id)||st.customItems.some(x=>x.id===id);
-        const editing=saveBtn.textContent.includes("保存修改");
-        if(!editing&&exists){ toast("英文键与已有道具冲突"); return; }
-        const rec={id,name,type:$("#ifType",body).value,cost:Math.max(0,+$("#ifCost",body).value||0),desc:$("#ifDesc",body).value.trim()};
-        if(editing){ const i=st.customItems.findIndex(x=>x.id===id); if(i>=0) st.customItems[i]=rec; }
-        else st.customItems.push(rec);
-        save(); showItem(); toast(editing?"已保存":"已新建并上架集市","gold");
-      };
-      const can=$("#ifCancel",body); if(can) can.onpointerdown=()=>{ $("#itemEdit",body).innerHTML=itemFormHtml(null); bindForm(); };
-    }
-  }
-  showTheme();
-  ov.querySelectorAll("#ssTabs [data-ss]").forEach(b=>b.onpointerdown=()=>{
-    SFX.tap();
-    ({theme:showTheme,cut:showCut,ai:showAi,cg:showCg,item:showItem}[b.dataset.ss])();
-  });
-}
 /* v2：密钥独立键（WZ-017）——不再入存档，导出存档不再泄漏密钥 */
 const DS_KEY_STORE="wdzx.dskey";
 function dsKeyGet(){
@@ -10438,10 +9042,6 @@ const DS_PROFILES={
    fb=离线/失败时的本地兜底。默认提示词不在这里抄录——面板展示的是实发捕获（_aiSnap），
    修订覆盖存 st.aiPromptOv[id]={sys?,user?}；停用存 st.aiChOff[id]=1 */
 const AI_CHANNELS=[
-  {id:"chat",        label:"私聊回复",            model:"deepseek-chat",      prof:"chat",         where:"WDChat.respond → _chatWithRetry @wd-chat.js", trig:"玩家每条私聊消息（严格模式重试≤1次）", fb:"本地口癖短句兜底"},
-  {id:"chatTools",   label:"私聊·工具调用",       model:"deepseek-chat",      prof:"chat",         where:"WDChat.respondWithTools @wd-chat.js",        trig:"实验特性开启时，每轮对话≤2次模型往返",     fb:"降级为无工具普通回复"},
-  {id:"autoSummary", label:"私聊自动压缩",        model:"deepseek-chat",      prof:"summary",      where:"WDChat 自动摘要 @wd-chat.js",                trig:"未总结消息≥10条时",                       fb:"保留原文不压缩"},
-  {id:"evolve",      label:"人设演化",            model:"deepseek-chat",      prof:"evolve",       where:"WDChat.evolve（index 补丁版）",               trig:"私聊≥5轮或手动触发",                      fb:"沿用旧人设卡"},
   {id:"directorPlan",label:"导演规划",            model:"deepseek-chat",      prof:"directorplan", where:"WDChat.directorPlan（index 补丁版）",        trig:"每次导演群聊/剧情前 1 次（JSON）",        fb:"无导演规划，逐人独立回复"},
   {id:"directorFlow",label:"导演群聊",            model:"deepseek-chat",      prof:"director",     where:"WDChat.directorFlow（index 补丁版）",         trig:"多人在场群聊/剧情上演时 1 次",            fb:"本地剧情模板"},
   {id:"directorAudit",label:"四维审核",           model:"deepseek-chat",      prof:"directorplan", where:"WDChat.directorAudit（index 补丁版）",       trig:"brief/flow/respond 内部校验，每条 1 次",   fb:"fail-open：审核不过不阻断"},
@@ -10463,11 +9063,7 @@ const AI_CHANNELS=[
   {id:"wenqiReview", label:"中英问契讲评",        model:"deepseek-chat",      prof:"polish",       where:"aiWenqiReview @index.html",                  trig:"问契英文作答提交后 1 次",               fb:"本地逐词对照+自评"},
   {id:"oralStory",   label:"整景趣味扩写",        model:"deepseek-chat",      prof:"chat",         where:"aiOralStory @index.html",                    trig:"藏经阁手动点击 1 次",                    fb:"无扩写"},
   {id:"cardExpand",  label:"卡片 AI 扩写",        model:"deepseek-chat",      prof:"chat",         where:"aiCardExpand @index.html",                  trig:"藏经阁手动点击 1 次",                     fb:"无扩写"},
-  {id:"cutscene",    label:"剧情 CG 文案润色",    model:"deepseek-chat",      prof:"polish",       where:"refineCutscene @index.html",                 trig:"剧情工坊手动 1 次",                       fb:"保留原文案"},
-  {id:"guidance",    label:"每日引导润色",        model:"deepseek-chat",      prof:"chat(默认档)", where:"refineGuidanceScene @index.html",            trig:"每日引导生成后 1 次",                     fb:"本地引导文案"},
   {id:"savePersona", label:"存档·生成人设",       model:"deepseek-chat",      prof:"polish",       where:"renderSave 内生成按钮 @index.html",          trig:"存档页手动 1 次",                        fb:"沿用内置人设"},
-  {id:"persona",     label:"NPC 人设卡生成",      model:"deepseek-reasoner",  prof:"persona_r1",  where:"genPersona @index.html",                    trig:"NPC 面板手动（重新）生成 1 次（R1）",     fb:"内置人设卡"},
-  {id:"biasText",    label:"R1 阶段总结/群聊引导",model:"deepseek-reasoner",  prof:"persona_r1",  where:"r1StageSummaryChat / r1GroupChatGuide @index.html", trig:"生成人设流程内部 3 次（R1）",      fb:"中断人设生成"},
   {id:"keyPing",     label:"连接测试 ping",        model:"deepseek-chat",      prof:"polish",       where:"dsKeyGate / reconnectAi / 存档测试 @index.html", trig:"仅手动点测试/重连时",              fb:"不涉及"}
 ];
 const AI_CHANNEL_BY_ID=Object.fromEntries(AI_CHANNELS.map(c=>[c.id,c]));
@@ -10556,12 +9152,6 @@ async function aiPreviewChannel(id){
     case "refineAction": built=buildRefineActionMsgs(q,""); break;
     case "questAck": built=buildQuestAckMsgs(q); break;
     case "refineYunting": built=buildRefineYuntingMsgs(q,nq,false); break;
-    case "cutscene": built=buildCutsceneMsgs("arrive"); break;
-    case "guidance":{
-      const pair=(typeof pickGuidanceNpcs==="function")?pickGuidanceNpcs():{primary:"yunting",secondary:"tina"};
-      built=buildGuidanceMsgs(["g1","g2","g3","g4","g5","g6"],q,pair.primary,pair.secondary,null);
-      break;
-    }
     case "bookExtra": built=buildBookExtraMsgs("preview",D.pointsLib.slice(0,3)); break;
     case "oralBrief":{
       const _ofs=D.oralFull||[];
@@ -10609,18 +9199,11 @@ async function aiPreviewChannel(id){
     case "cardExpand":
       built=buildCardExpandMsgs(cleanMd(pt0.text).slice(0,200),{cat:"pts",catLabel:"考点",id:pt0.id});
       break;
-    case "persona": built=buildPersonaMsgs("yunting",""); break;
-    case "biasText":{
-      const stage=(typeof stageOfDay==="function")?stageOfDay(st.day||1):{name:"初程",days:[1,9],theme:""};
-      built=buildBiasStageMsgs(stage,stage,{});
-      break;
-    }
     case "savePersona":
       built=buildSavePersonaMsgs([{i:0,role:"player",npc:null,text:"今天的雾很薄，我们早点出发吧。"}]);
       break;
     case "keyPing": built=buildKeyPingMsgs(); break;
-    /* ---- wd-chat.js 七通道 ---- */
-    case "chat": case "chatTools": case "autoSummary": case "evolve":
+    /* ---- wd-chat.js 导演三通道 ---- */
     case "directorPlan": case "directorFlow": case "directorAudit":
       if(!window.WDChat||!WDChat.previewBuild) throw new Error("WDChat.previewBuild 不可用");
       built=WDChat.previewBuild(id);
@@ -10787,82 +9370,12 @@ const OBSOLETE_TERMS=(window.WDRegistry&&WDRegistry.obsoleteTerms())||[];
    文件缺失时退化为空，游戏不硬编码任何条款内容。 */
 function langIronRules(){ return (window.WDTerms&&WDTerms.ironRules)?WDTerms.ironRules():[]; }
 function personaTermOf(npcId){ return (window.WDTerms&&WDTerms.persona)?WDTerms.persona(npcId):null; }
-/* v50：生成 NPC 人设卡片 — 使用 deepseek-reasoner(R1) 推理模型。
-   核心改进：从"全新生成"改为"基线优化+人物小传"模式。
-   人设约束卡（真源=WDTerms）是硬基线，生成内容不得违背 soulField/voice/forbidden，
-   只能在基线上丰富：补充人物小传、典型对白样本、场景反应模板。 */
-/* v78：NPC 人设卡生成提示词组装（实发/预演共用，R1） */
-function buildPersonaMsgs(npcId, feedback){
-  const npc=D.npcs.find(n=>n.id===npcId)||NPC[npcId];
-  const persona=st.personas[npcId];
-  const customPersona=(window.WDCfg&&WDCfg.npcPersona)?WDCfg.npcPersona(npcId):"";
-  const constraints=personaTermOf(npcId)||{};
-  const sys="你是顶级二次元角色设定师。你的任务是基于游戏世界观和人设约束，参考著名二次元人物作为性格壳膜，"
-    +"在【现有基线人设】之上做内容优化、细节丰富和表现力增强，"
-    +"产出人物小传、典型对白样本和场景反应模板。"
-    +"【铁律】不得颠覆基线人设的 soulField/voice/forbidden，只能丰富和细化；"
-    +"如果基线与你的推理冲突，以基线为准。只输出JSON。";
-  const user="【游戏世界观】\n"+JSON.stringify(buildWorldBrief(),null,1)
-    +"\n\n【要设定的NPC】"+JSON.stringify({id:npcId,姓名:dName(npcId),称号:dTitle(npcId),职能:NPC_ROLE[npcId]||"",背景:npc&&npc.intro?npc.intro:""})
-    +"\n\n【基线人设·硬约束·不得违背·只能丰富】\n"+JSON.stringify(constraints,null,1)
-    +(constraints.animeShell?("\n\n【二次元性格壳膜·参考原型】\n"+constraints.animeShell
-      +"\n请以此原型的气质基底为参考，但不直接照搬名字；产出的人设须融入本游戏世界观，成为独立角色。"):"")
-    +"\n\n【语言法铁律·全员共适用】\n"+langIronRules().map((s,i)=>`${i+1}. ${s}`).join("\n")
-    +(customPersona?("\n\n【用户设定的角色基准·补充约束】\n"+customPersona
-      +"\n——此描述作为补充约束，与基线一致时采纳，与基线冲突时以基线为准。"):"")
-    +(persona?("\n\n【当前已有人设·供迭代参考】\n"+JSON.stringify(persona.card)):"")
-    +(feedback?("\n\n【用户修改意见·必须采纳】\n"+feedback):"")
-    +"\n\n【世界观硬约束】本游戏世界观是「玩家意外跌入导游世界，遗忘之雾入侵，玩家通关导游试炼以拯救世界并重返家园」。"
-    +"严禁出现以下已淘汰的旧概念："+OBSOLETE_TERMS.join("、")+"。"
-    +((window.WDRegistry&&WDRegistry.arcSeedOf)?("\n\n【NPC目标/弧线基线·须贴合】\n"+JSON.stringify(WDRegistry.arcSeedOf(npcId))):"")
-    +"\n\n【优化目标·在基线上丰富】"
-    +"\n1. miniBio: 人物小传，200字内，交代角色来历、内在矛盾、与玩家的关系张力"
-    +"\n2. speechSamples: 典型对白样本3-5句，覆盖日常/任务/失败/成功/夜话等场景，须符合 voice 约束"
-    +"\n3. sceneReactions: 3个典型场景的反应模板，每个给一句符合人设的反应"
-    +"\n4. languagePrint: 语言指纹深化，在基线 distinguish 之上给出更具体的语言特征"
-    +"\n\n【输出JSON字段】"
-    +"\n  id, name, title,"
-    +"\n  miniBio: 人物小传(200字内),"
-    +"\n  speechSamples: [3-5句典型对白],"
-    +"\n  sceneReactions: [{scene, line}×3],"
-    +"\n  languagePrint: 语言指纹深化,"
-    +"\n  identity: 身份背景30-50字,"
-    +"\n  personality: 性格特征数组3-4个短语(与基线一致),"
-    +"\n  style: 对话风格描述,"
-    +"\n  speechRules: {quirks, forbidden, samples},"
-    +"\n  soulField: [原样保留基线],"
-    +"\n  voice: 原样保留基线,"
-    +"\n  forbidden: [原样保留基线],"
-    +"\n  animeShell: {reference, howToAdapt},"
-    +"\n  relations: [{name,rel}],"
-    +"\n  goal: 个人目标30字内,"
-    +"\n  arc: 角色弧线40字内(渐进不突兀)";
-  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"persona_r1"}};
-}
-async function genPersona(npcId, feedback){
-  const built=buildPersonaMsgs(npcId,feedback);
-  const raw=await dsChat(built.messages,Object.assign({ch:"persona"},built.opts));
-  let card;
-  try{ card=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
-  catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) card=JSON.parse(m[0]); else throw e; }
-  card.id=npcId; card.name=card.name||dName(npcId);
-  if(typeof card.personality==="string") card.personality=card.personality.split(/[、,，;；\s]+/).filter(Boolean);
-  if(!Array.isArray(card.personality)) card.personality=[];
-  if(typeof card.goal==="string") card.goal=card.goal.slice(0,60);
-  if(typeof card.arc==="string") card.arc=card.arc.slice(0,80);
-  if(!card.speechRules) card.speechRules={quirks:[],forbidden:[],samples:[]};
-  if(!Array.isArray(card.speechRules.quirks)) card.speechRules.quirks=[];
-  if(!Array.isArray(card.speechRules.forbidden)) card.speechRules.forbidden=[];
-  if(!Array.isArray(card.speechRules.samples)) card.speechRules.samples=[];
-  if(!Array.isArray(card.soulField)) card.soulField=[];
-  return card;
-}
 /* 生成任务说明：游戏隐喻叙事 + 背景故事 + 知识拓展（替代旧版独立任务描述模块） */
 function firstNpcLine(dlg){ const n=dlg.find(l=>l.s==="n"); return n?n.t:(dlg[0]?dlg[0].t:""); }
 /* v78：任务剧情简介（四段）提示词组装（实发/预演共用，JSON） */
 function buildQuestBriefMsgs(q){
   const persona=st.personas[q.npc]&&st.personas[q.npc].card;
-  const sys="你是日式轻小说RPG《问道之旅·四十五日》的叙事引擎，文风对标日式轻小说与GALGAME：克制、有光影与画面、有温度，句子长短错落，留白比说尽更高级。\n"
+  const sys="你是日式轻小说RPG《问道之旅·二十五日》的叙事引擎，文风对标日式轻小说与GALGAME：克制、有光影与画面、有温度，句子长短错落，留白比说尽更高级。\n"
     +"故事背景（序章已向玩家讲过，scene里不必复述设定）：玩家是意外坠入「导游世界」的普通现代人——『域外之人』，已与圣女云汀绑定、与次元精灵缇娜结下灵魂契约。她只有走完四十五日、九段导游试炼，在金榜台完成神圣导游就职典礼，云汀才能恢复圣女之力、以圣器驱散遗忘之雾，界门才会重新为她打开。NPC是她的同行者，不是老师、不是客服。\n"
     +"要求：\n"
     +"1. scene 先给一个具体画面：时辰、雾况、NPC正在做的一件小事或周遭一个动静，让玩家像翻开轻小说的一页，≤80字。不要概述世界观、不要喊口号。\n"
@@ -11210,96 +9723,6 @@ async function aiOralReview(q, a, ref, container){
     container.innerHTML=`<div class="note" style="border-left-color:var(--neon);font-size:13px">${esc(txt)}</div>`;
   }catch(e){ container.innerHTML=`<div class="note" style="border-left-color:var(--dim);font-size:12px">灵脉协判暂不可用——请对照参考材料自行核对。</div>`; }
 }
-/* v55 批3-⑦⑧：阶段切换触发 R1 群聊指导 + 传译出题（每大阶段各 1 次） */
-/* v65：计算某个阶段所有已完成任务的实际耗时与预估耗时偏差（跳过不纳入） */
-function calcStageTimeBias(stage){
-  const cats={a:{act:0,est:0,n:0},b:{act:0,est:0,n:0},c:{act:0,est:0,n:0},d:{act:0,est:0,n:0},rev:{act:0,est:0,n:0}};
-  for(let day=stage.days[0];day<=stage.days[1];day++){
-    const d=byDay[day]; if(!d) continue;
-    (d.quests||[]).forEach(q=>{
-      if(!qDone(q.id)||(st.skipped&&st.skipped[q.id])) return;
-      const dt=st.doneTime&&st.doneTime[q.id]; if(!dt) return;
-      const cat=q.rtCat||"a"; const c=cats[cat]||cats.a;
-      c.act+=dt; c.est+=(q.dur||0)*60; c.n++;
-    });
-  }
-  const bias={};
-  Object.keys(cats).forEach(k=>{ const c=cats[k]; if(c.n>0) bias[k]={act:c.act,est:c.est,delta:Math.round((c.act-c.est)/60),n:c.n}; });
-  return bias;
-}
-function biasText(bias){
-  if(!bias||!Object.keys(bias).length) return "无计时数据。\n";
-  const names={a:"理经",b:"问契",c:"修诵",d:"传译",rev:"消印"};
-  return Object.keys(bias).map(k=>{ const b=bias[k],n=names[k]||k;
-    return n+": 实际"+b.act+"秒 / 预估"+b.est+"秒（偏差"+(b.delta>=0?"+":"")+b.delta+"分钟，"+b.n+"项）";
-  }).join("\n")+"\n";
-}
-/* v78：R1 阶段总结对白提示词组装（实发/预演共用，biasText 通道） */
-function buildBiasStageMsgs(newStage,oldStage,bias){
-  const sys="你是日式RPG《问道之旅·四十五日》的云汀。玩家刚完成「"+oldStage.name+"」阶段。"
-    +"请基于玩家在该阶段的实际耗时与预估偏差数据，用云汀的口吻（温柔、简短、不说教、自称「我」、不报数字不报百分比）"
-    +"向玩家总结这一阶段的游戏情况，点出她擅长和吃力的任务类别，给出一条互动建议。只输出 1-3 句对白，不超过 100 字。";
-  const user="偏差数据（正=比预估慢，负=比预估快）：\n"+biasText(bias);
-  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"persona_r1"}};
-}
-/* v78：R1 全员群聊引导提示词组装（实发/预演共用，biasText 通道） */
-function buildBiasGroupMsgs(stage,bias){
-  const sys="你是日式RPG《问道之旅·四十五日》的群聊导演。玩家刚进入「"+stage.name+"」阶段。\n"
-    +"请基于以下信息，生成一段全员群聊对话（3-5 条，每条 1-2 句），内容需涵盖：\n"
-    +"1) 角色对新阶段的反应（符合各自人设与语言指纹）；\n2) 剧情推进暗示（本阶段会发生什么）；\n"
-    +"3) 世界演化提示（雾的变化、景点的状态）；\n4) 对玩家的请求与激励（请求式口吻，不说教）。\n"
-    +"5) 若有耗时偏差数据，让对应职能角色提及玩家上阶段在某一类任务上的表现（快/慢），作为偏好与难易判断的评估依据。\n"
-    +"只输出 JSON：{\"lines\":[{\"npc\":\"npc_id\",\"text\":\"台词\"}]}，npc_id 限 yunting/tina/wantang/shenzhao/chengxiu。";
-  const user="当前阶段："+stage.name+"（第"+stage.days[0]+"-"+stage.days[1]+"周）\n主题："+stage.theme+"\n玩家进度：已完成 "+Object.keys(st.done||{}).length+" 项任务，修行 "+(st.xp||0)+"\n"
-    +biasText(bias)
-    +"\n请生成群聊指导。";
-  return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"persona_r1"}};
-}
-/* v65：云汀基于偏差数据生成阶段总结对白 */
-async function r1StageSummaryChat(newStage, oldStage, bias){
-  if(!dsReady()) return;
-  const built=buildBiasStageMsgs(newStage,oldStage,bias);
-  try{
-    const raw=await dsChat(built.messages,Object.assign({ch:"biasText"},built.opts));
-    const text=String(raw||"").slice(0,200);
-    if(text){ st.dialogue.push({role:"npc",npc:"yunting",text,at:new Date().toISOString(),day:st.day,kind:"sys"}); save(); toast("云汀对白已生成"); }
-  }catch(e){}
-}
-function r1StageTrigger(oldDay, newDay){
-  if(!dsReady()) return;
-  const oldStage=stageOfDay(oldDay), newStage=stageOfDay(newDay);
-  if(oldStage.id===newStage.id) return;
-  const sid=newStage.id;
-  st.r1StageDone=st.r1StageDone||{};
-  if(st.r1StageDone[sid]) return;
-  st.r1StageDone[sid]=new Date().toISOString();
-  /* v65：计算上一阶段任务耗时偏差（跳过的任务不纳入） */
-  const bias=calcStageTimeBias(oldStage);
-  st.stageTimeBias=st.stageTimeBias||{}; st.stageTimeBias[oldStage.id]=bias; save();
-  /* 异步触发，不阻塞主流程 */
-  r1GroupChatGuide(newStage, bias).catch(()=>{});
-  r1StageSummaryChat(newStage, oldStage, bias).catch(()=>{});
-  r1TransQuizGen(newStage).catch(()=>{});
-}
-/* ⑦ 全员群聊 R1：每大阶段 1 次，指导角色发展/剧情推进/世界演化/世界级事件/任务动态调整 */
-async function r1GroupChatGuide(stage, bias){
-  const built=buildBiasGroupMsgs(stage,bias);
-  try{
-    const raw=await dsChat(built.messages,Object.assign({ch:"biasText"},built.opts));
-    let o;
-    try{ o=JSON.parse(raw.replace(/^```json|```$/g,"").trim()); }
-    catch(e){ const m=raw.match(/\{[\s\S]*\}/); if(m) o=JSON.parse(m[0]); else return; }
-    const lines=o.lines||[];
-    if(!lines.length) return;
-    lines.forEach(l=>{
-      const npcId=["yunting","tina","wantang","shenzhao","chengxiu"].includes(l.npc)?l.npc:"yunting";
-      st.dialogue.push({role:"npc",npc:npcId,text:String(l.text||"").slice(0,120),at:new Date().toISOString(),day:st.day,kind:"sys"});
-    });
-    if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-    save();
-    toast("「"+stage.name+"」阶段群聊指导已生成");
-  }catch(e){ /* 静默失败，不阻断 */ }
-}
 /* ⑧ 传译 R1 出题：每大阶段 1 次，分析玩家翻译记录生成新题 */
 async function r1TransQuizGen(stage){
   /* 第一阶段使用已有积累数据 + 125 双语句合适部分；后续阶段用玩家翻译记录 */
@@ -11333,7 +9756,7 @@ async function r1TransQuizGen(stage){
 }
 /* v78：存档·生成人设（旧对话重写）提示词组装（实发/预演共用） */
 function buildSavePersonaMsgs(batch){
-  const sys="你是日式RPG《问道之旅·四十五日》的剧本导演。下面是一段玩家与NPC的对话记录，腔调与新版人设不符。请逐条重写为日漫/GAL/轻小说风格的中文对白。硬性要求：①保持每条消息的 role 与 npc 不变；②保留原意和关键信息；③禁止半文半白古风腔（约莫/几桩/未了/可好/快些/光景/桩要紧事/已了/尚余/待您出手等）；④禁止教师腔/客服腔/心理医生腔/AI腔；⑤符合角色专属约束与语言法铁律。只输出 JSON 数组，每个元素含 i（原索引）、text（重写后文本）。";
+  const sys="你是日式RPG《问道之旅·二十五日》的剧本导演。下面是一段玩家与NPC的对话记录，腔调与新版人设不符。请逐条重写为日漫/GAL/轻小说风格的中文对白。硬性要求：①保持每条消息的 role 与 npc 不变；②保留原意和关键信息；③禁止半文半白古风腔（约莫/几桩/未了/可好/快些/光景/桩要紧事/已了/尚余/待您出手等）；④禁止教师腔/客服腔/心理医生腔/AI腔；⑤符合角色专属约束与语言法铁律。只输出 JSON 数组，每个元素含 i（原索引）、text（重写后文本）。";
   const user=JSON.stringify(batch);
   return {messages:[{role:"system",content:sys},{role:"user",content:user}],opts:{kind:"polish"}};
 }
@@ -11361,7 +9784,6 @@ function renderSave(){
     <div class="estatus ${dsReady()?"saved":"dirty"}" id="dsStatus">${dsReady()?"● 已配置 · AI 功能可用":"○ 未配置 · 使用内置内容"}</div>
     <div class="savegrid" style="margin-top:6px">
       <button class="btn sm" id="dsBrief" type="button">📜 查看/编辑游戏背景信息</button>
-      <button class="btn sm" id="dsPersona" type="button" ${dsReady()?"":"disabled"}>🎭 生成 NPC 人设</button>
     </div>
   </div>
 
@@ -11411,7 +9833,6 @@ function renderSave(){
           })();
           st.dialogue=(st.dialogue||[]).filter(m=>!(m.guidance&&isPlaceholderMsg(m)));
           st.dialogueInitDay=0;
-          if(view==="chat"){ try{ ensureGuidanceScene(); }catch(e){} renderChat(true); }
         }
         save();
       }
@@ -11422,7 +9843,6 @@ function renderSave(){
       dsChat(buildKeyPingMsgs().messages,Object.assign({ch:"keyPing"},buildKeyPingMsgs().opts)).then(()=>{ s.textContent="● 已配置并连通 · AI 功能可用"; s.className="estatus saved"; toast("密钥有效"); })
         .catch(e=>{ s.textContent="● 已保存，但调用失败："+e.message+"（仍可离线使用）"; s.className="estatus dirty"; toast("连通测试失败："+e.message); });
     } else { s.className="estatus dirty"; s.textContent="○ 未配置 · 使用内置内容"; toast("已清除密钥"); }
-    $("#dsPersona",ov).disabled=!dsReady();
   };
   $("#dsBrief",ov).onpointerdown=()=>{ SFX.tap();
     /* 与配置中心世界观 tab 同源：优先用自定义版本，否则载入系统默认 JSON */
@@ -11452,7 +9872,6 @@ function renderSave(){
       const m=$("#briefMsg",p); m.textContent="已清空 · 恢复系统默认世界观"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2600);
     };
   };
-  $("#dsPersona",ov).onpointerdown=()=>{ SFX.tap(); openPersonaPanel(); };
 
   /* 检查游戏更新：主动触发 SW 更新，新版本激活后由 swv 广播触发重载 */
   $("#updChk",ov).onpointerdown=async ()=>{ SFX.tap();
@@ -11520,271 +9939,6 @@ function renderSave(){
   } };
 }
 
-/* ==================== NPC 人设卡片：生成 → 确认/修改重生成 ==================== */
-function openPersonaPanel(){
-  const ov=panel(`<h2>NPC 人设卡片</h2><div class="mt">AI 生成或直接编辑 · 确认后作为该 NPC 对话行为基础。配置中心的「人设描述」为生成硬约束，此处的结构化卡片为对话最终依据。</div>
-    <div id="personaNpcList"></div>`);
-  const host=$("#personaNpcList",ov);
-  function cardHtml(n){
-    const p=st.personas[n.id];
-    const c=p&&p.card;
-    const status = p? (p.confirmed?'<span style="color:var(--ok)">✓ 已确认</span>':'<span style="color:var(--gold)">待确认</span>'):'<span style="color:var(--dim)">未生成（使用内置）</span>';
-    const g=st.npcGrowth&&st.npcGrowth[n.id];
-    const growHtml=`<div class="growth"><b>角色成长</b> · 对话 ${g?(g.talks||0):0} 次${g&&g.evolved?(" · 上次推演 "+esc(g.evolved.slice(0,10))):""}
-      ${g&&g.traits&&g.traits.length?`<br>性格演进：${esc(g.traits.join("、"))}`:""}
-      ${g&&g.speech?`<br>语言演进：${esc(g.speech)}`:""}
-      ${g&&g.shift?`<br>行为倾向：${esc(g.shift)}`:""}
-      ${g&&g.story&&g.story.length?`<div class="gstories">${g.story.slice(-3).map(s=>"· "+esc(s.ev)).join("<br>")}</div>`:""}
-    </div>
-    <div class="kitbar" style="margin-top:6px"><button class="btn sm" data-grow="${n.id}" type="button">🌙 推演角色成长</button></div>
-    <div id="gr_${n.id}" class="small" style="font-size:12px;color:var(--gold)"></div>`;
-    /* 直接编辑模式：各字段为可编辑输入框，保存即写入 st.personas[id].card 并标记确认。
-       personality 以「、」分隔的字符串编辑，保存时拆为数组；relations 以「姓名:关系；」形式编辑。 */
-    const editHtml=c?`<div style="font-size:13px;line-height:1.7">
-      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">身份</label><textarea data-fld="identity" data-id="${n.id}" maxlength="120" rows="2" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(c.identity||"")}</textarea></div>
-      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">性格</label><textarea data-fld="personality" data-id="${n.id}" maxlength="80" rows="2" placeholder="以、分隔，如：活泼可爱、热心、急躁" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(Array.isArray(c.personality)?c.personality.join("、"):c.personality)}</textarea></div>
-      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">对话风格</label><textarea data-fld="style" data-id="${n.id}" maxlength="120" rows="2" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(c.style||"")}</textarea></div>
-      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">关系</label><textarea data-fld="relations" data-id="${n.id}" maxlength="200" rows="2" placeholder="格式：姓名:关系；姓名:关系" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc((c.relations||[]).map(r=>(r.name||"")+":"+(r.rel||"")).join("；"))}</textarea></div>
-      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">目标</label><textarea data-fld="goal" data-id="${n.id}" maxlength="60" rows="2" placeholder="她想要什么" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(c.goal||"")}</textarea></div>
-      <div class="cfgrow" style="align-items:flex-start"><label style="min-width:auto;color:var(--neon)">弧线</label><textarea data-fld="arc" data-id="${n.id}" maxlength="80" rows="2" placeholder="她会如何变化" style="flex:1;font:inherit;font-size:12px;background:var(--bg);border:1px solid var(--border-lit);color:var(--fg);padding:6px;border-radius:4px">${esc(c.arc||"")}</textarea></div>
-    </div>`:`<div class="npcnote">${esc(n.intro)}</div>`;
-    return `<div class="book" id="pc_${n.id}">
-      <div class="bp"><img src="${(window.WDAvatar&&WDAvatar.avatarURL)?WDAvatar.avatarURL(n.id):""}" alt="" style="width:24px;height:24px;image-rendering:pixelated;vertical-align:-6px;margin-right:6px"><span class="pid">${esc(dName(n.id))}</span><em>${esc(dTitle(n.id))}</em> ${status}</div>
-      ${editHtml}
-      ${growHtml}
-      <div class="kitbar" style="margin-top:8px">
-        <button class="btn sm primary" data-gen="${n.id}" type="button">${c?"重新生成":"生成人设"}</button>
-        ${c?`<button class="btn sm" data-save="${n.id}" type="button">💾 保存编辑</button>`:""}
-        ${c&&!p.confirmed?`<button class="btn sm" data-ok="${n.id}" type="button">✓ 确认采用</button>`:""}
-        ${c?`<button class="btn sm ghost" data-edit="${n.id}" type="button">✎ 提修改意见重生成</button>
-          <button class="btn sm ghost" data-clear="${n.id}" type="button">恢复内置</button>`:""}
-      </div>
-      <div id="fb_${n.id}" class="small" style="font-size:12px;color:var(--gold);margin-top:6px"></div>
-    </div>`;
-  }
-  function draw(){ host.innerHTML=D.npcs.map(cardHtml).join(""); bind(); }
-  /* 保存直接编辑：读取 textarea 值写回 st.personas[id].card，并标记 confirmed=true（用户已确认覆写） */
-  function saveEdit(id){
-    const card=st.personas[id]&&st.personas[id].card;
-    if(!card){ return; }
-    const root=$("#pc_"+id,host); if(!root) return;
-    root.querySelectorAll("textarea[data-fld]").forEach(ta=>{
-      const fld=ta.dataset.fld, v=ta.value.trim();
-      if(fld==="personality"){
-        card.personality=v?v.split(/[、,，;；\s]+/).filter(Boolean):[];
-      } else if(fld==="relations"){
-        card.relations=v?v.split(/[；;]/).map(p=>{
-          const idx=p.indexOf(":"); const colon=idx<0?p.indexOf("："):idx;
-          if(colon<0) return {name:p.trim(),rel:""};
-          return {name:p.slice(0,colon).trim(),rel:p.slice(colon+1).trim()};
-        }).filter(r=>r.name):[];
-      } else {
-        card[fld]=v;
-      }
-    });
-    st.personas[id].confirmed=true; st.personas[id].at=new Date().toISOString();
-    save(); SFX.ok();
-    const m=$("#fb_"+id,host); if(m){ m.textContent="已保存编辑 · 对话即刻依此人设"; setTimeout(()=>{if(m.isConnected)m.textContent="";},2400); }
-  }
-  function bind(){
-    host.querySelectorAll("[data-gen],[data-ok]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
-      const id=b.dataset.gen||b.dataset.ok;
-      if(b.dataset.ok){ st.personas[id].confirmed=true; save(); SFX.ok(); toast("已确认，该 NPC 将依此人设对话"); draw(); return; }
-      genFlow(id,"");
-    });
-    host.querySelectorAll("[data-save]").forEach(b=>b.onpointerdown=()=>{ SFX.tap(); saveEdit(b.dataset.save); });
-    host.querySelectorAll("[data-edit]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
-      const id=b.dataset.edit;
-      const fb=prompt("请输入对该人设的修改意见（如：让她更严厉些 / 增加与缇娜的搭档线）：");
-      if(fb&&fb.trim()) genFlow(id, fb.trim());
-    });
-    host.querySelectorAll("[data-clear]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
-      const id=b.dataset.clear; if(confirm("恢复为内置人设？")){ delete st.personas[id]; save(); draw(); toast("已恢复内置"); }
-    });
-    // 角色成长推演：AI 依互动历史迭代性格/语言/行为并续写故事线
-    host.querySelectorAll("[data-grow]").forEach(b=>b.onpointerdown=async ()=>{
-      SFX.tap();
-      const id=b.dataset.grow, box=$("#gr_"+id,host);
-      b.disabled=true; if(box) box.textContent="推演中……";
-      const o=await WDChat.evolve(id,true);
-      b.disabled=false;
-      if(o){ SFX.win(); if(box) box.textContent="推演完成——性格/语言/行为已更新，对话中将自然体现"; draw(); }
-      else { SFX.no(); if(box) box.textContent=WDChat.historyOf(id,1).length?"推演失败（AI 未响应，稍后再试）":"尚无互动记录——先在对话里与这位 NPC 多聊几句"; }
-    });
-  }
-  async function genFlow(id, feedback){
-    const box=$("#fb_"+id,host);
-    if(box){ box.textContent="R1 推理引擎正在构思人设…"; }
-    try{
-      const card=await genPersona(id, feedback);
-      st.personas[id]={card, confirmed:false, at:new Date().toISOString()}; save(); SFX.win(); draw();
-    }catch(e){ if(box){ box.textContent="生成失败："+e.message+"（已保留原人设，可重试）"; } SFX.no(); }
-  }
-  draw();
-}
-
-/* ==================== @角色名 AI 互动 ==================== */
-/* 角色别名 → npcId（含全名与常用称呼，均取自 D.npcs 真实名，避免错字） */
-/* v2（R2.1）：@提及别名从角色注册表派生 */
-/* v58c：@提及别名——以新版 5 角色为唯一规范名册（旧注册表含 7 旧 id+景点精灵，
-   直接用会导致选单里云汀出现 3 次、紫宸混入）。旧名仅作静默路由，不进选单。 */
-const MENTION_CANON=["yunting","shenzhao","chengxiu","tina","wantang"];
-const MENTION_ALIASES={};
-MENTION_CANON.forEach(id=>{
-  const n=NPC[id]||(window.WDRegistry&&WDRegistry.get(id)); if(!n) return;
-  const set=new Set([id,n.name,n.title]);
-  (n.aliases||[]).forEach(a=>{ if(a) set.add(a); });
-  MENTION_ALIASES[id]=[...set].filter(Boolean);
-});
-/* 旧名静默路由表：旧版称谓 → 新 id（打旧名仍找得到人，但选单不展示）。
-   注：WDRegistry 已被 proxy 重定向，取不到旧记录别名，故在此显式登记。 */
-const MENTION_LEGACY={
-  yunheng:"yunting",云蘅:"yunting",青玄:"yunting",青玄先生:"yunting",
-  tiemian:"shenzhao",铁面:"shenzhao",铁面先生:"shenzhao",
-  liuruyan:"chengxiu",柳如烟:"chengxiu",柳首座:"chengxiu",
-  xuanji:"tina",玄机:"tina",玄机夫人:"tina",璇玑:"tina",
-  smq:"wantang",司马青衫:"wantang",
-  moxiaogu:"wantang",墨小骨:"wantang",
-};
-function parseMention(text){
-  const m=/@([A-Za-z0-9_\u4e00-\u9fa5]{2,8})/.exec(text);
-  if(!m) return null;
-  const tok=m[1];
-  // @所有人/各位/全员/大家 → 全员应答
-  if(/^(所有人|各位|全员|大家|全部|所有人呢|都有)$/.test(tok)) return "__ALL__";
-  for(const id in MENTION_ALIASES){ if(MENTION_ALIASES[id].some(a=>tok===a||tok.startsWith(a)||a.startsWith(tok)&&tok.length>=2)) return id; }
-  // 玩家自定义名/称号同样可被 @ 触发（仅限规范 5 角色）
-  if(window.WDCfg){
-    for(const id of MENTION_CANON){
-      const cn=WDCfg.npcName(id,""), ct=WDCfg.npcTitle(id,"");
-      if((cn&&(tok===cn||tok.startsWith(cn)))||(ct&&(tok===ct||tok.startsWith(ct)))) return id;
-    }
-  }
-  /* 旧名静默兼容（云蘅/铁面/璇玑……）→ 重定向新版角色，不在界面展示 */
-  if(MENTION_LEGACY[tok]) return MENTION_LEGACY[tok];
-  return null;
-}
-
-/* ==================== @ 提及弹窗选单 ==================== */
-let _mentionPop=null;
-const _mentionState={open:false,atPos:-1,token:"",list:[],sel:0};
-
-function filterMentionList(token){
-  const t=(token||"").trim();
-  const out=[];
-  const allKw=["所有人","各位","全员","大家","全部"];
-  if(!t||allKw.some(k=>k.startsWith(t)||(t.length>=2&&k.includes(t)))){
-    out.push({id:"__ALL__",name:"所有人",title:"全员应答",kind:"all"});
-  }
-  /* v58c：选单只列规范 5 角色（旧 id/景点精灵不入），天然去重 */
-  for(const id of MENTION_CANON){
-    const aliases=MENTION_ALIASES[id]||[];
-    const hit=!t||aliases.some(a=>a===t||a.startsWith(t)||(t.length>=2&&a.includes(t)));
-    if(!hit) continue;
-    out.push({id,name:dName(id),title:dTitle(id),kind:"npc"});
-  }
-  return out;
-}
-
-function insertMention(value,atPos,endPos,name){
-  const before=value.slice(0,atPos+1);
-  const after=value.slice(endPos);
-  const next=before+name+after;
-  return{value:next,caret:(before+name).length};
-}
-
-function onChatInput(inp){
-  const pos=inp.selectionStart??inp.value.length;
-  const upTo=inp.value.slice(0,pos);
-  const m=upTo.match(/@([^\s@，。、,；;:！？!?]{0,8})$/);
-  if(!m){closeMention();return;}
-  _mentionState.atPos=m.index;
-  _mentionState.token=m[1];
-  openMention(inp,m[1]);
-}
-
-function openMention(inp,token){
-  const list=filterMentionList(token);
-  if(!list.length){closeMention();return;}
-  _mentionState.list=list;_mentionState.sel=0;_mentionState.open=true;
-  if(!_mentionPop){
-    _mentionPop=document.createElement("div");
-    _mentionPop.className="mention-pop";
-    Object.assign(_mentionPop.style,{
-      position:"absolute",zIndex:"9999",maxHeight:"42vh",overflowY:"auto",
-      background:"var(--bg)",border:"1px solid var(--border-lit)",
-      borderRadius:"6px",boxShadow:"0 2px 12px rgba(0,0,0,.35)",
-      fontSize:"13px",fontFamily:"monospace",minWidth:"160px",
-      padding:"4px"
-    });
-    document.body.appendChild(_mentionPop);
-  }
-  renderMentionList(inp);
-  positionMention(inp);
-}
-
-function renderMentionList(inp){
-  const items=_mentionState.list.map((it,i)=>{
-    const sel=i===_mentionState.sel;
-    return '<div class="ment-item" data-i="'+i+'" style="padding:7px 10px;cursor:pointer;'+(sel?"background:var(--gold);color:var(--bg);border-radius:4px;":"")+'">'
-      +'<b>'+esc(it.name)+'</b> <span style="opacity:.7;font-size:11px">'+esc(it.title)+'</span></div>';
-  }).join("");
-  _mentionPop.innerHTML=items;
-  _mentionPop.querySelectorAll("[data-i]").forEach(el=>{
-    el.onpointerdown=e=>{e.preventDefault();selectMention(inp,+el.dataset.i);};
-  });
-}
-
-function positionMention(inp){
-  const r=inp.getBoundingClientRect();
-  const popH=Math.min(_mentionPop.offsetHeight||160,220);
-  _mentionPop.style.left=r.left+"px";
-  _mentionPop.style.top=(r.top-popH-4)+"px";
-  _mentionPop.style.width=Math.max(r.width,160)+"px";
-}
-
-function handleMentionKey(e,inp){
-  if(!_mentionState.open) return false;
-  const n=_mentionState.list.length;
-  if(e.key==="ArrowDown"){e.preventDefault();_mentionState.sel=(_mentionState.sel+1)%n;renderMentionList(inp);return true;}
-  if(e.key==="ArrowUp"){e.preventDefault();_mentionState.sel=(_mentionState.sel-1+n)%n;renderMentionList(inp);return true;}
-  if(e.key==="Enter"||e.key==="Tab"){e.preventDefault();selectMention(inp,_mentionState.sel);return true;}
-  if(e.key==="Escape"){e.preventDefault();closeMention();return true;}
-  return false;
-}
-
-function selectMention(inp,idx){
-  const it=_mentionState.list[idx];if(!it) return;
-  const end=inp.selectionStart??inp.value.length;
-  const r=insertMention(inp.value,_mentionState.atPos,end,it.name);
-  inp.value=r.value;
-  try{inp.setSelectionRange(r.caret,r.caret);}catch(e){}
-  closeMention();
-  inp.focus();
-}
-
-function closeMention(){
-  _mentionState.open=false;_mentionState.list=[];_mentionState.sel=0;_mentionState.atPos=-1;_mentionState.token="";
-  if(_mentionPop){_mentionPop.remove();_mentionPop=null;}
-}
-
-/* 网络检索 / 资料库匹配 / 对话生成已整体移入独立模块 wd-chat.js（window.WDChat），
-   此处仅保留薄委托：本文件专注 UI 粘合，模块可在任意宿主复用。 */
-async function aiRespond(npcId,userText,brief){
-  /* NPC 记忆：对话即相识（meet/talk 归档），灵力作为「御 AI」资源消耗 */
-  if(window.WDMem) WDMem.talk(npcId);
-  if(dsReady()){
-    if((st.energy|0)<1){ toast("灵力将尽——仍可对话，稍息自复"); }
-    else { st.energy=Math.max(0,st.energy-1); refreshStat(true); }
-  }
-  /* v2（R3.2）：tools 开关开启时走 function calling 增强路径，失败内部回退普通 respond */
-  const flags=(st.agentFlags=st.agentFlags||{director:true,tools:true,proactive:true});
-  const r=(flags.tools&&WDChat.respondWithTools)?(await WDChat.respondWithTools(npcId,userText,brief)):(await WDChat.respond(npcId,userText,brief));
-  if(window.WDMem) WDMem.meet(npcId);
-  refreshStat();
-  return r;
-}
-
 function toast(msg, cls){
   const t=document.createElement("div");
   t.className="toast "+(cls||""); t.textContent=msg;
@@ -11796,7 +9950,7 @@ function toast(msg, cls){
 function switchView(v){
   view=v;
   document.querySelectorAll(".navline button").forEach(x=>x.classList.toggle("on",x.dataset.v===v));
-  if(view==="chat"){ ensureGuidanceScene(); renderChat(); }
+  if(view==="v25"&&window.V25&&V25.renderBoard) V25.renderBoard();
   if(view==="board") renderBoard();
   if(view==="dash") renderDashboard();
   if(view==="oral") renderOralLine();
@@ -11805,9 +9959,6 @@ function switchView(v){
   if(view==="arena") renderArena();
   if(view==="star") renderStar();
   if(view==="ach") renderAch();
-  if(view==="heart") renderHeart();
-  if(view==="shop") renderShop();
-  if(view==="cal") renderCal();
   if(view==="save") renderSave();
 }
 function bindNav(){
@@ -11817,83 +9968,9 @@ function bindNav(){
   const ag=document.querySelector('[data-act="aiGate"]'); if(ag) ag.onpointerdown=()=>{ SFX.tap(); dsKeyGate(null,{blocking:false}); };
   const ar=document.querySelector('[data-act="aiReconnect"]'); if(ar) ar.onpointerdown=()=>{ SFX.tap(); reconnectAi(); };
 }
-/* v2（R2.3）：序章叙事从 worldBrief 派生——用户覆写世界观后序章同步（默认世界观输出与 v1 等价文案） */
-const DEFAULT_INTRO_NARRATIVE="你意外降临「导游世界」——一个正被遗忘之雾吞噬的娘化世界。居民皆是女性，而你，是来自次元之外的旅人。这座次元最后的净土是北京。圣女云汀正在此举行神圣导游就职典礼，却在仪式中途遭遗忘之雾侵袭——你的降临打断了仪式，却也让你与云汀形成了绑定。次元精灵缇娜也在混乱中与你意外建立灵魂契约。四十五日之内，完成五幕试炼、踏上金榜台就职神圣导游，云汀就能恢复圣女之力，用导游圣器驱逐遗忘之雾。";
-/* 从自定义世界观文本里取序章用的叙事开头：取前 2 个完整句、≤180 字；不足 10 个汉字视为无效 */
-function narrativeLead(raw,prefix){
-  const body=String(raw||"").replace(/[「」『』【】]/g,"").replace(/\s+/g," ").trim();
-  const cjk=(body.match(/[\u4e00-\u9fff]/g)||[]).length;
-  if(cjk<10) return "";
-  const sentences=body.split(/(?<=[。！？!?…])/).map(s=>s.trim()).filter(Boolean);
-  let out="";
-  for(const s of sentences){
-    if((out+s).length>180) break;
-    out+=s;
-    if(out.length>=60) break;   /* 已够一段，不必凑满 */
-  }
-  if(!out) out=body.slice(0,180);
-  return (prefix||"")+out;
-}
-/* 递归收集 JSON brief 中的字符串值，优先取叙事性键名 */
-function narrativeFromJson(obj){
-  const KEYS=/世界观|世界设定|背景|故事|序章|简介|概述|设定|world|story|intro|setting/i;
-  const found=[];
-  const walk=o=>{
-    if(o==null) return;
-    if(typeof o==="string"){ return; }
-    if(Array.isArray(o)){ o.forEach(walk); return; }
-    if(typeof o==="object"){
-      for(const k of Object.keys(o)){
-        const v=o[k];
-        if(typeof v==="string"){
-          const cjk=(v.match(/[\u4e00-\u9fff]/g)||[]).length;
-          if(cjk>=10) found.push({key:k,text:v,prio:KEYS.test(k)?0:1});
-        }else if(typeof v==="object") walk(v);
-      }
-    }
-  };
-  walk(obj);
-  if(!found.length) return "";
-  found.sort((a,b)=>a.prio-b.prio||b.text.length-a.text.length);
-  return narrativeLead(found[0].text);
-}
-function introNarrative(){
-  /* v31：自定义 brief 可能是多行散文，也可能是配置面板里保存的 JSON（以「{」开头）；
-     两种都要能取出一段人话；取不出有效叙事就回退默认长段，绝不能把「{」显示到序章 */
-  try{
-    const custom=(window.WDCfg&&WDCfg.customWorldBrief)?WDCfg.customWorldBrief():null;
-    if(custom&&custom.trim()){
-      const wb=WDChat.worldBrief();
-      let lead="";
-      if(typeof wb==="string"&&wb.trim()){
-        const s=wb.trim();
-        if(s[0]==="{"||s[0]==="["){ try{ lead=narrativeFromJson(JSON.parse(s)); }catch(e){} }
-        if(!lead) lead=narrativeLead(s);
-      }else if(wb&&typeof wb==="object"){
-        lead=narrativeFromJson(wb);
-      }
-      /* v36：过滤 NPC 人设污染——如果 lead 里包含大量"X导游，XXXX"模式（NPC 列表描述），
-         那是用户把 NPC 人设混在了世界观里，回退到默认叙事。
-         v70：补旧头衔（文脉/山河/律法导游等）与已退役旧角色名（云华真人等）强信号 */
-      if(lead){
-        const npcNoise=(lead.match(/导游/g)||[]).length;
-        const oldTitle=/主引导导游|文脉导游|山河导游|律法导游|接待导游|古迹导游|记忆导游|藏经阁守护|旅行社老板/.test(lead);
-        const personaWord=/成熟|知性|腹黑|活泼|豪爽|温婉|机灵|神秘|妩媚|冷面|柔声|暧昧|娓娓/.test(lead);
-        const oldName=/云华真人|云华|青玄|云蘅|铁面|柳首座|柳如烟|墨小骨|司马青衫|璇玑|玄机夫人/.test(lead);
-        if(npcNoise>=3||(oldTitle&&personaWord)||oldName){
-          lead="";
-        }
-      }
-      if(lead) return lead;
-    }
-  }catch(e){}
-  return DEFAULT_INTRO_NARRATIVE;
-}
-
 /* ==================== v56：序章播放器已整段移除 ====================
    旧 PROLOGUE_SCRIPT 与新版人设不符，应要求整段删除。
-   降临后直接进入游戏；初见剧情由云汀 arrive 过场（triggerCutscene）
-   在对话流中呈现，与全部对白共用同一条新人设生成链。 */
+   降临后直接进入游戏；序章为静态世界观与目标直陈。 */
 /* 序章前的轻量 AI 密钥配置门（无需先进入游戏主界面） */
 function dsKeyGate(after, opts){
   opts=opts||{};
@@ -11940,17 +10017,15 @@ function intro(){
   const ov=document.createElement("div"); ov.className="ov";
   ov.innerHTML=`<div class="dlg" style="max-width:540px;text-align:center">
     <div class="mt" style="letter-spacing:.3em">序 章 · 降 临</div>
-    <h2 style="font-size:24px;letter-spacing:.2em">问道之旅 · 四十五日</h2>
+    <h2 style="font-size:24px;letter-spacing:.2em">问道之旅 · 二十五日</h2>
     <div class="sec" style="text-align:left;font-size:14.5px">
-      <p>${esc(introNarrative())}</p>
+      <p>这是一个被遗忘之雾入侵的残破世界。你是来自次元之外的唯一力量，与圣女云汀立下契约，成为她的契约者。</p>
+      <p>你的目标：25 日内完成五科备考修行，踏上金榜台。</p>
       <div style="margin-top:2px">
         <label for="pidName" style="display:block;text-align:left;font-size:13px;color:var(--neon);margin-bottom:6px;letter-spacing:.15em">域外之名 · 请写下你的代号</label>
         <input id="pidName" type="text" inputmode="text" maxlength="12" value="${esc(st.player)}" placeholder="为自己取一个名字吧" autocomplete="off" autocapitalize="none" spellcheck="false"
           style="width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;text-align:center;letter-spacing:.1em;background:var(--bg);color:var(--fg);border:2px solid var(--border);border-radius:10px">
       </div>
-      <p style="text-align:left">你将以这个名字与圣女意外绑定、又被次元精灵结下灵魂契约，成为误入此界的「域外之人」。</p>
-      <p style="color:var(--neon)">你是谁？为什么偏偏是你？要怎样做，才能回家？</p>
-      <p class="note" style="border-left-color:var(--hair)">四十五日，九段旅程。答案，要你自己一步步走出来。</p>
     </div>
     <div class="foot" style="flex-direction:column;gap:8px">
       <button class="btn primary" id="begin" style="width:100%">✦ 降临 · 启程</button>
@@ -11981,11 +10056,9 @@ function intro(){
     st.player=nm.slice(0,12);
     if(!dsReady()) aiHealth="off"; /* 离线模式：本地兜底链全程可通关 */
     ov.remove();
-    syncGameDay(); ensureGdMilestone(st.day); /* v58c：进入游戏即发周一纪日手札 */
+    syncGameDay();
     save();
     render(); /* 先建主界面骨架（旧流程由 finishPrologue 负责渲染） */
-    /* v56：删除旧版序章播放器，降临后直接触发云汀「arrive」过场进入游戏 */
-    triggerCutscene("arrive");
   };
 }
 /* v35：AI 连接重连——发起一次连通性测试，成功则 aiHealth=ok 并刷新状态栏 */
@@ -11999,7 +10072,7 @@ async function reconnectAi(){
   }catch(e){
     aiHealth="error"; toast("重连失败："+(e.message||e));
   }
-  if(view==="chat") renderChat(true); else refreshStat();
+  refreshStat();
 }
 function record(ev, x){ st.log=st.log||[]; st.log.push({at:new Date().toISOString(), ev, x}); }
 async function boot(){
@@ -12030,13 +10103,12 @@ async function boot(){
   const has=load();
   if(!has){ st=defState(); reconcile(); installRuntimePlan(); syncGameDay(); save(); intro(); }
   else{
-    if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,45); if(st.day>st.unlocked) st.unlocked=st.day; save();
+    if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,25); if(st.day>st.unlocked) st.unlocked=st.day; save();
     /* v54 批 1：运行时排程安装（必须在 render 之前重建 DAYS/QMAP） */
     installRuntimePlan();
     syncGameDay();
     migrateGuidanceDots(); /* v58c：清理旧版落流的「……」空引导句 */
     hintLegacyPortraits(); /* v58g：旧版黑底立绘提示重传 */
-    ensureGdMilestone(st.day); /* v58c：旧档/同日再进也要补发当前纪日手札（advanceNaturalDay 同日会提前 return） */
     /* v48：三套时钟——离线按自然日推进游戏日/雾涌日，恢复心气灵力 */
     ensureClocks();
     const elapsed=advanceNaturalDay();
@@ -12047,8 +10119,8 @@ async function boot(){
     if(!dsReady()) aiHealth="off";
     render(); checkAch();
   }
-  /* 状态栏刷新 ≥1 次/秒（需求4）；refreshStat 在非对话视图/无存档时静默返回 */
-  setInterval(()=>{ if(view==="chat") refreshStat(); },1000);
+  /* 状态栏刷新 ≥1 次/秒（需求4）；refreshStat 在无存档时静默返回 */
+  setInterval(()=>{ refreshStat(); },1000);
   /* v52 R5：启动一致性自检——所有初始化完成后校验各模块字段同步 */
   try{ checkPlanConsistency(); }catch(e){ console.warn("[v52] checkPlanConsistency 异常:",e); }
   /* v52 R6a：导游词体量核查（六篇 words/sections 齐全性） */
@@ -12059,7 +10131,6 @@ async function boot(){
     st.hp=Math.max(0,Math.min(maxHP(),st.hp));
     st.energy=Math.max(0,Math.min(maxEnergy(),st.energy));
     save(); refreshStat();
-    if(view==="chat") renderChat(true);
   });
 }
 /* ---------- 任务面板（行者手札 · 任务卷）：对话流之外的独立任务总览 ---------- */
@@ -12326,9 +10397,6 @@ function renderBoard(){
     {ic:"🌙",t:"巡夜卡匣",go:()=>renderNight()},
     {ic:"✍️",t:"录问契",go:()=>openOralInput()},
     {ic:"⭐",t:"星盘错题",go:()=>renderStar()},
-    {ic:"🗺️",t:"旅程总览",go:()=>renderCal()},
-    {ic:"🖼️",t:"忆境",go:()=>renderYijing()},
-    {ic:"📖",t:"剧情回顾",go:()=>renderPlotLog()},
   ];
   const entryHtml=entries.map((e,i)=>`<button class="entrybtn" data-entry="${i}"><span class="ei">${e.ic}</span>${e.t}</button>`).join("");
 
@@ -12903,36 +10971,6 @@ function renderOralLine(){
     };
   });
 }
-function renderCal(){
-  const acts=[["act1","结界巡礼",1,8],["act2","藏经阁",9,20],["act3","行会风云",21,30],["act4","遗迹探秘",31,41],["act5","金榜台前",42,45]];
-  const scene={act1:"M12 3 L20 17 H4 Z",act2:"M9 20 V8 L12 4 L15 8 V20 M6 20 H18",act3:"M4 20 V10 Q12 2 20 10 V20",act4:"M5 20 Q5 8 12 8 Q19 8 19 20 M12 8 V20",act5:"M6 20 V12 L12 6 L18 12 V20 H6 Z"};
-  let h='<div class="dayinfo">旅程地图 · 九阶段 · 四十五周目 · 点击节点前往</div><div class="journey">';
-  acts.forEach(function(a2){
-    const aid=a2[0], aname=a2[1], a2a=a2[2], b2=a2[3];
-    h+='<div class="jrow"><div class="jact"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="'+scene[aid]+'"/></svg><div class="an">'+esc(aname)+'</div></div><div class="jnodes">';
-    for(let i=a2a;i<=b2;i++){
-      const dd=byDay[i], pp=dayProg(dd);
-      let cls = i===st.day?"cur":(i>st.unlocked?"future":(pp.n===pp.all&&pp.all>0?"done":(pp.n>0?"part":"")));
-      const isBoss=dd.quests.some(q2=>q2.type==="boss"&&q2.kind==="main");
-      h+='<div class="jnode '+cls+(isBoss?" boss":"")+'" data-day="'+i+'">'+i+'</div>';
-    }
-    h+='</div></div>';
-  });
-  h+='</div><div class="note">图例：墨块=圆满 · 朱框=今日 · 浅朱=进行中 · 双框=章节大试炼 · 半透明=未解锁</div>';
-  const ov=panel('<h2>旅程</h2><div class="mt">九阶段 · 四十五周目 · 次元内第'+st.day+'周 · 纪日'+(st.gameDay||((st.day-1)*5+1))+'/225（已解锁至第'+st.unlocked+'周）</div>'+h);
-  ov.querySelectorAll("[data-day]").forEach(n=>{
-    n.addEventListener("pointerdown",e=>{
-      e.preventDefault();
-      const day=+n.dataset.day;
-      if(day>st.unlocked){ return; }
-      st.day=day; save();
-      ov.remove();
-      document.querySelectorAll(".navline button").forEach(x=>x.classList.toggle("on",x.dataset.v==="chat"));
-      view="chat";
-      renderChat();
-    });
-  });
-}
 boot();
 /* v83：语音输入双通路——iPad 靠软键盘麦克风（v82），macOS Safari 没有软键盘，靠 Web Speech API 自建「🎙️」按钮 */
 (function _speechInputPatch(){
@@ -13076,25 +11114,6 @@ boot();
     }
   }catch(_){}
 })();
-/* v2（R3.3）：主动触发器——boot 后 30s 检查一次（本地规则零成本，每日 ≤3 条，可在配置中心关闭） */
-setTimeout(()=>{
-  try{
-    if(window.WDChat&&WDChat.checkProactive){
-      const p=WDChat.checkProactive();
-      if(p&&p.npc&&NPC[p.npc]){
-        const aqP=firstActiveQuest();
-        const m={role:"npc",npc:p.npc,text:p.text,at:new Date().toISOString(),day:st.day,proactive:p.reason};
-        if(aqP) m.refs=[{qid:aqP.id}];
-        st.dialogue.push(m);
-        if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-        save(); if(view==="chat") renderChat(true);
-        toast(dName(p.npc)+"主动传音……","gold");
-      }
-    }
-  }catch(e){}
-},30000);
-/* v2（R1.3b）：AI 健康徽标——对话页顶部状态点；aiHealth 由 dsChat 维护 */
-window.addEventListener("wd:aicheck",()=>{ if(view==="chat") renderChat(true); });
 // 注册 Service Worker 实现 PWA 离线 + 自动更新
 // 关键：新 SW 激活时上报缓存版本，页面对比版本差异后精准重载一次——
 // 否则大陆网络访问 github.io 不稳定时，旧 SW 会永远回落陈旧缓存（iPad 不刷新的根因）
