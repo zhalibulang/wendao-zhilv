@@ -793,9 +793,10 @@ const NPC = new Proxy(NPC_ORIG, {
     return prop in target || WD_NEW_ROLES[prop];
   },
 });
-/* ---------- 恢复被误删的 DAYS/QMAP 声明（必须在 NPC 注入之前） ---------- */
-const DAYS = D.days, byDay = Object.fromEntries(DAYS.map(d=>[d.day,d]));
-const QMAP = Object.fromEntries(D.quests.map(q=>[q.id,q]));
+/* ---------- v25：旧 45 日任务数据已下线，空集合兜底保证旧函数引用不炸（死代码 s13 后清） ---------- */
+const DAYS = D.days||[], byDay = Object.fromEntries(DAYS.map(d=>[d.day,d]));
+const QMAP = Object.fromEntries((D.quests||[]).map(q=>[q.id,q]));
+D.lectures=D.lectures||{}; D.dialogue=D.dialogue||{};
 /* ============================================================
    【新版角色体系注入】扩展 npc-registry.js 的 WDRegistry
    策略：npc-registry.js 已定义完整 WDRegistry（含 keywordMap/aliasMap/
@@ -1068,9 +1069,9 @@ if(window.WDRegistry){
 const NPC_MATRIX=(window.WDRegistry&&window.WDRegistry.actMatrix())||{};
 function curActN(){ let n=1; DAYS.forEach(d=>{ if(st&&st.day>=d.day&&d.act){ const v=+d.act.slice(3); if(v>n) n=v; } }); return Math.min(5,Math.max(1,n)); }
 function npcActTopic(id){ const m=NPC_MATRIX[id]; return m&&m["act"+curActN()]; }
-/* v2：任务以 day 字段关联，装载时挂回 day 对象（主线优先排序） */
+/* v2：任务以 day 字段关联，装载时挂回 day 对象（主线优先排序）。旧任务数据下线后空转 */
 DAYS.forEach(d=>{ d.quests=[]; });
-D.quests.forEach(q=>{ const d=byDay[q.day]; if(d) d.quests.push(q); });
+(D.quests||[]).forEach(q=>{ const d=byDay[q.day]; if(d) d.quests.push(q); });
 DAYS.forEach(d=>{ d.quests.sort((a,b)=>(a.kind==="main"?0:1)-(b.kind==="main"?0:1)||a.id.localeCompare(b.id)); });
 /* v45：新版世界观 act 标题运行时覆盖（不改 game-data.js 3MB 数据） */
 if(D.acts){
@@ -1202,11 +1203,7 @@ function advanceNaturalDay(){
   const oldDay=st.day||1;
   st.day=Math.min(25, oldDay+natAdv);            /* v25：上限 25 自然日 */
   st.fogDay=Math.max(1, 26-st.day);              /* v25：由自然日派生，不再独立倒计时 */
-  /* v58c：跨自然日后按完成度对齐当前纪日，不再恒置周一 */
-  syncGameDay();
-  /* v53 修复：离线推进自然日时，同步推进任务解锁自然日——现实时间已流逝，
-     玩家不能再被"未做前置任务"锁死在昨天，任务链应解锁到当前自然日 */
-  if((st.unlocked||1) < st.day) st.unlocked=st.day;
+  /* v25：纪日/解锁机制已废——自然日只随现实日期推进，任务放号由 V25.sheet 自管 */
   /* 离线恢复：心气+30%、灵力全额恢复 */
   const hpCap=maxHP(); st.hp=Math.min(hpCap,(st.hp||0)+Math.round(hpCap*0.3*elapsed));
   const enCap=maxEnergy(); st.energy=enCap;
@@ -1938,7 +1935,7 @@ if(window.WDChat){
       +"- 轻小说风格要求不要改成说明书或 AI 腔；\n"
       +"- "+this.masterRule()+"\n"
       +"- 只输出 JSON。";
-    let user="当前进度：第"+(st.day||1)+"周 · 第"+(stageOfDay(st.day||1).name)+"阶段 · 圣女恢复约 "+Math.min(100,Math.floor(((st.day||1)/45)*100)+5)+"%";
+    let user="当前进度：第"+(st.day||1)+"日/共25日 · 圣女恢复约 "+Math.min(100,Math.floor(((st.day||1)/25)*100)+5)+"%";
     if(context.quest) user+="\n当前任务："+(context.quest.name||"")+"（"+(context.quest.tlabel||"")+"）";
     if(npcCards.length) user+="\n涉及NPC："+npcCards.map(c=>JSON.stringify(c)).join("\n");
     if(worldBrief) user+="\n世界观参考（供对照，不要复述）："+(typeof worldBrief==="string"?worldBrief.slice(0,400):JSON.stringify(worldBrief).slice(0,400));
@@ -2055,8 +2052,49 @@ function migrateLegacySaves(){
 }
 
 /* ---------- state ---------- */
+/* v25 大版本迁移：旧 45 日/974 任务存档 → 25 日单轨（幂等）。
+   保资产：灵铢/修行等级/SRS 记忆/错题/误译册/用户增删改卡/六篇修诵节/演界战绩/人设工坊/商店。
+   废旧进度：974 任务完成表、解锁日、纪日指针、剧情对话与排程运行态、按旧口径解锁的成就。
+   今天重开为第 1 日。 */
+function migrateV25(){
+  if(st._mig25) return false;
+  const today25=new Date().toISOString().slice(0,10); /* 与 wd-v25 todayStr 同口径（UTC 日串） */
+  /* 1) 六篇修诵：旧版有节完成挂在任务链 qDone 兜底上，先固化进 oralProgress 再清任务表 */
+  try{
+    st.oralProgress=st.oralProgress||{};
+    (D.oralFull||[]).forEach(o=>{
+      const p=oralProg(o.aid);
+      for(let i=0;i<(o.sections||[]).length;i++){
+        if(oralSecDone(o.aid,i)&&!p.sectionDone.includes(i)) p.sectionDone.push(i);
+      }
+    });
+  }catch(e){ console.warn("[mig25] 修诵节固化失败",e); }
+  /* 2) v25 引擎状态：进度归零，资产保留 */
+  const o25=(st.v25&&typeof st.v25==="object")?st.v25:null;
+  st.v25={ startDate:today25, plan:null, dailyOv:{}, sheets:{}, done:{},
+    introduced:0, nextUnitN:null,
+    interpBank:(o25&&o25.interpBank)||[],
+    quizCache:(o25&&o25.quizCache)||{},
+    cards:(o25&&o25.cards)||{added:[],edited:{},deleted:[],completed:[]},
+    settings:(o25&&o25.settings)||{tier:"auto"} };
+  /* 3) 清旧任务/纪日/剧情运行态（其余字段原样保留） */
+  st.done={}; st.skipped={};
+  st.unlocked=1; st.day=1; st.fogDay=25; st.gameDay=1;
+  st.lastNaturalDay=today25;
+  st.ach={};
+  st.questLines={}; st.dialogue=[]; st.privateChat={}; st.npcGrowth={};
+  st.plotPoints={total:0,byDay:{},byNaturalDay:{},triggered:{}};
+  st.cueFlows={}; st.plotLines=[]; st.rtPlan={};
+  st.questProg={}; st.questTime={}; st.doneTime={}; st.stageTimeBias={};
+  st.cutscenes={}; st.dailyCtx={}; st.clauseLog=[]; st.dialogueInitDay=0;
+  st.aiBrief={}; st.bookBrief={}; st.oralBrief={};
+  st._treeExp={}; st._mig25=true;
+  save();
+  console.log("[mig25] 旧45日任务进度已封存，25日单轨启程（资产保留）");
+  return true;
+}
 function defState(){
-  return {player:D.player, day:1, unlocked:1, xp:0, coin:0,
+  return {player:D.player, _mig25:true, day:1, unlocked:1, xp:0, coin:0,
     done:{}, skipped:{}, fav:Object.fromEntries(D.npcs.map(n=>[n.id,0])),
     ach:{}, notes:{}, wrong:[], cards:{}, seenHearts:{}, shop:[...D.shop],
     edits:{}, _treeExp:{},
@@ -2402,7 +2440,16 @@ let lastLv=1;
 function checkLevelUp(){ const lv=level(); if(lv>lastLv){ record("等级提升","Lv."+lastLv+" → Lv."+lv+" · "+title()); toast("等级提升 · Lv."+lv+"「"+title()+"」","gold");
     pushAction("境界突破——Lv."+lv+"「"+title()+"」。");
     WDFx.levelUp(lv,title()); } lastLv=Math.max(lastLv,lv); }
-function title(){ return st.unlocked>=45?"金榜引路人":st.unlocked>=42?"问道行者·终章":st.unlocked>=31?"遗迹探索者":st.unlocked>=21?"行会行者":st.unlocked>=9?"藏经阁学徒":"结界巡礼者"; }
+function title(){
+  /* v25：称号按 25 日单元完成数册封（旧 unlocked 纪日口径已废） */
+  let n=0, all=41;
+  try{ if(window.V25){ const U=V25.allUnits(), done=(V25.v25st().done||{}); all=U.length; n=U.filter(u=>done[u.n]).length; } }catch(e){}
+  if(n>=all) return "金榜引路人";
+  if(n>=31) return "遗迹探索者";
+  if(n>=21) return "行会行者";
+  if(n>=9)  return "藏经阁学徒";
+  return "结界巡礼者";
+}
 const qDone=id=>!!st.done[id];
 function dayProg(d){ let n=0; d.quests.forEach(q=>{if(qDone(q.id))n++;}); return {n,all:d.quests.length}; }
 /* ==================== v58c：纪日（游戏日）工具层 ====================
@@ -2474,7 +2521,12 @@ function buildDailyPlan(day){
   return plan;
 }
 function streak(){
-  const ds=[...new Set(Object.values(st.done).map(v=>String(v).slice(0,10)))].sort(); let s=0;
+  /* v25：连续修行天数按单元完成/复习的实际日期（st.v25.done[*].at）统计 */
+  let ds=[];
+  try{ const dn=(st.v25&&st.v25.done)||{};
+    ds=[...new Set(Object.values(dn).map(r=>String((r&&r.at)||"").slice(0,10)).filter(Boolean))];
+  }catch(e){}
+  ds.sort(); let s=0;
   for(let i=ds.length-1;i>=0;i--){ if(i===ds.length-1||Math.round((new Date(ds[i+1])-new Date(ds[i]))/864e5)===1) s++; else break; }
   return s;
 }
@@ -2915,7 +2967,6 @@ function hash(s){ let h=0; for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>
 const game=$("#game");
 /* v57：主渲染外层保护——任一子 render 抛错时不再白屏，落「雾气迷眼」兜底面板，可一键重聚 */
 function render(){
-  try{ syncGameDay(false); }catch(e){} /* v58c：HUD 纪日号随完成度对齐（不落盘，写路径另有 save） */
   try{ _renderGame(); }
   catch(e){
     console.error('[render]',e);
@@ -2937,13 +2988,11 @@ function _renderGame(){
   const lv=level(), total=totals();
   game.innerHTML=`
   <div class="hd"><div class="t">问道之旅<small>25日版 · ${esc(st.player)}</small></div>
-    <div class="stats"><span class="gametime">第<b>${st.day}日</b>/25 · 已解锁至第<b>${st.unlocked}</b>日</span><span>Lv.<b>${lv}</b></span><span>修行<b>${st.xp}</b></span>
+    <div class="stats"><span class="gametime">第<b>${st.day}日</b>/25</span><span>Lv.<b>${lv}</b></span><span>修行<b>${st.xp}</b></span>
     <span>灵铢<b>${st.coin}</b></span><span>连<b>${streak()}</b>日</span>
     <span class="hdacts"><button data-act="cfg">配置</button><button data-act="save">存档</button></span></div></div>
   <div class="navline">
     <button data-v="v25">修行</button>
-    <button data-v="board">任务</button>
-    <button data-v="dash">看板</button>
     <button data-v="oral">修诵</button>
     <button data-v="lib">藏经阁</button>
     <button data-v="night">巡夜</button>
@@ -2959,43 +3008,44 @@ function _renderGame(){
   renderSidePanel();
   $("#oralFab").onpointerdown=()=>{ SFX.tap(); switchView("oral"); };
 }
-/* v62 T16（AC-29）：宽屏左侧常设任务面板——当日（纪日）任务清单+进度，点击条目直接 openQuest。
-   面板是「任务」标签的快捷形态（仅当日清单，非完整四层树），窄屏 display:none 不参与布局。 */
+/* v25：宽屏左侧常设面板——今日 25 日单元任务单（唯一任务源 V25.sheet），
+   点击条目直接进入单元执行流 V25.runUnit。窄屏 display:none 不参与布局。 */
 function renderSidePanel(){
   const el=document.getElementById("sidePanel"); if(!el) return;
-  const d=byDay[st.day]||null;
-  if(!d||!(d.quests||[]).length){
-    el.innerHTML=`<div class="sphd">📜 今日职守</div><div class="spempty">今日无任务——雾里稍作休整。</div>`;
+  if(!window.V25||!V25.sheet){ el.innerHTML=`<div class="sphd">📜 今日修行</div><div class="spempty">任务引擎加载中…</div>`; return; }
+  const day=Math.min(25,st.day||1);
+  const sh=V25.sheet(day);
+  const items=sh.items||[];
+  if(!items.length){
+    el.innerHTML=`<div class="sphd">📜 今日修行 · 第 ${day} 日/25</div>
+      <div class="spempty">${day>=25?"收尾日——去演界全真演练，清一遍星盘到期卡。":"今日无任务——雾里稍作休整。"}</div>`;
     return;
   }
-  const qs=d.quests;
-  const dn=qs.filter(q=>qDone(q.id)).length, all=qs.length;
+  const dn=items.filter(it=>sh.done&&sh.done[it.u]).length, all=items.length;
   const pct=all?Math.round(dn/all*100):0;
-  const rows=qs.map(q=>{
-    const s2=qStage(q);
-    const dot={done:"✓",active:"▶",ready:"☆",locked:"🔒"}[s2.key];
-    const cls={done:"done",active:"now",ready:"ready",locked:"locked"}[s2.key];
-    return `<div class="sprow ${cls}" data-spq="${q.id}" role="button">
+  const rows=items.map(it=>{
+    const u=V25.unitByN(it.u); if(!u) return "";
+    const isDone=!!(sh.done&&sh.done[it.u]);
+    const dot=isDone?"✓":(it.kind==="new"?"▶":"☆");
+    const cls=isDone?"done":"now";
+    const subj=String(u.subj||"").replace(/^科目([一二三四五]).*/,"科$1").replace(/（.*$/,"");
+    return `<div class="sprow ${cls}" data-spu="${u.n}" role="button">
       <span class="spdot">${dot}</span>
-      <span class="spname">${esc(q.name)}</span>
-      <span class="spmeta">${esc(q.tlabel||"")}·${q.dur}分${(s2.key==="done"&&st.doneTime&&st.doneTime[q.id])?" · \u23F1"+fmtSec(st.doneTime[q.id]):""}</span>
+      <span class="spname">#${u.n} ${esc(subj)} · ${esc((u.mods||[])[0]||"")}</span>
+      <span class="spmeta">${it.kind==="new"?"新学":"复习"} · ${u.mins}分</span>
     </div>`;
   }).join("");
-  el.innerHTML=`<div class="sphd">📜 今日职守 · 纪日 <b>${st.gameDay||st.day}</b></div>
+  el.innerHTML=`<div class="sphd">📜 今日修行 · 第 <b>${day}</b> 日/25</div>
     <div class="spprog"><span>进度 ${dn}/${all}</span><span>${pct}%</span></div>
     <div class="spbar"><i style="width:${pct}%"></i></div>
     <div class="splist">${rows}</div>`;
-  el.querySelectorAll("[data-spq]").forEach(r=>{
-    r.onpointerdown=()=>{ SFX.tap(); openQuest(r.dataset.spq); };
+  el.querySelectorAll("[data-spu]").forEach(r=>{
+    r.onpointerdown=()=>{ SFX.tap(); V25.runUnit(+r.dataset.spu); };
   });
 }
 /* 全链路中第一个「已解锁未完成」的关卡（群聊 NPC 接话/任务发布的事实源） */
 function firstActiveQuest(){
-  if(!st) return null;
-  for(let day=1;day<=st.unlocked;day++){
-    const d=byDay[day]; if(!d) continue;
-    for(const q of d.quests){ if(!qDone(q.id)&&questUnlocked(q)) return q; }
-  }
+  /* v25：旧任务链已废，NPC 对话不再注入当前任务；保留函数空壳兼容 WDChat.init 入参 */
   return null;
 }
 /* v62：任务三态——已接取（已发放解锁，未进入）／进行中（进入过且暂离，未完成）／已完成。
@@ -5542,36 +5592,35 @@ function migrateSettlePlaceholders(){
   if(changed) save();
 }
 function maybeUnlockDay(){
-  /* 批5修：当日全清后逐日放行——空排程日（p.all===0 或无排程）直接跳过不再锁死后续。
-     守卫 guard 防异常数据死循环；有任务的日仍要求全清才推进，主线门不变。 */
-  let guard=0;
-  while(st.unlocked<45&&guard++<50){
-    const d=byDay[st.unlocked];
-    if(!d){ st.unlocked++; continue; }
-    const p=dayProg(d);
-    if(p.n===p.all){ st.unlocked++; continue; }  /* p.all===0（空日）亦放行 */
-    break;
-  }
-  if(st.day<st.unlocked) st.day=st.unlocked;
+  /* v25：解锁机制已废——任务放号由 V25.sheet 按自然日+完成度自管，本函数保留空壳兼容死代码调用，s13 整体删除 */
 }
 function checkAch(){
+  /* v25：成就全部改按 25 日单元口径统计（旧纪日/排程 DAYS 口径已废） */
+  let U=[], vdone={};
+  try{ if(window.V25){ U=V25.allUnits(); vdone=V25.v25st().done||{}; } }catch(e){}
+  const doneN=U.filter(u=>vdone[u.n]).length;
+  /* chain：任意一日任务单全部完成 */
+  let dayAllClear=false;
+  try{ const sh=(V25.v25st().sheets||{});
+    dayAllClear=Object.keys(sh).some(k=>{ const s=sh[k]; return s&&s.items&&s.items.length&&s.items.every(it=>s.done&&s.done[it.u]); }); }catch(e){}
+  /* oral10：六篇导游词分站完成节数 */
+  let oralSecN=0; try{ (D.oralFull||[]).forEach(o=>oralSecN+=oralSecDoneCount(o)); }catch(e){}
   D.achievements.forEach(a=>{
     if(st.ach[a.id]) return;
-    let ok=false; const t=totals(); const c=streak();
+    let ok=false; const c=streak();
     switch(a.id){
-      case "first": ok=t.c>=1; break;
-      case "chain": ok=DAYS.some(d=>{const p=dayProg(d); return p.all>0&&p.n===p.all;}); break;
-      /* v54：静态任务退役——从运行时排程（DAYS）统计 */
-      case "main10": { let n=0; DAYS.forEach(dd=>(dd.quests||[]).forEach(qq=>{ if(qq.kind==="main"&&qDone(qq.id)) n++; })); ok=n>=10; } break;
-      case "tower": ok=(st.arenaClears||0)>=1; break;  /* 批5：演界试炼首胜即点亮（原以第20日全清代偿） */
-      case "guild": ok=fullDone(30,30); break;
-      case "ruins": ok=fullDone(41,41); break;
-      case "oral10": { let n=0; DAYS.forEach(dd=>(dd.quests||[]).forEach(qq=>{ if(qq.rtCat==="c"&&qDone(qq.id)) n++; })); ok=n>=10; } break;
-      case "quiz50": ok=st.quizOk>=50; break;
+      case "first": ok=doneN>=1; break;
+      case "chain": ok=dayAllClear; break;
+      case "main10": ok=doneN>=10; break;
+      case "tower": ok=(st.arenaClears||0)>=1; break;
+      case "guild": ok=doneN>=20; break;
+      case "ruins": ok=U.length>0&&doneN>=U.length; break;
+      case "oral10": ok=oralSecN>=10; break;
+      case "quiz50": ok=(st.quizOk||0)>=50; break;
       case "streak7": ok=c>=7; break;
       case "streak14": ok=c>=14; break;
       case "clueall": ok=(st.libSearches||0)>=10; break;
-      case "end": ok=fullDone(1,45); break;
+      case "end": ok=U.length>0&&doneN>=U.length&&(st.day||1)>=25; break;
     }
     if(ok){ st.ach[a.id]=new Date().toISOString(); record("成就解锁", a.name); toast("成就解锁 · "+a.name,"gold"); }
   });
@@ -7938,16 +7987,19 @@ function renderStar(){
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><button class="btn sm primary" id="starQuizBtn" type="button">✦ 随机小考</button><span style="color:var(--ink2);font-size:12.5px">无错题也可主动演练，答错自动入盘</span></div><div id="wHost"></div>`);
   const host=$("#wHost",ov);
   $("#starQuizBtn",ov).onpointerdown=()=>{ SFX.tap(); miniQuiz(); };
-  // 小考题池：已解锁日全部静态可试题（跨任务复用）
+  // v25 小考题池：全部静态可试题跨单元复用；题库为空时用考点锚点判断题兜底
   function quizPool(){
     const pool=[];
-    DAYS.forEach(d=>{ if(d.day>st.unlocked) return;
-      d.quests.forEach(q=>{ const zz=D.quizzes[q.id]; if(zz&&zz.length) pool.push(...zz); }); });
+    Object.keys(D.quizzes||{}).forEach(id=>{ const zz=D.quizzes[id]; if(zz&&zz.length) pool.push(...zz); });
+    if(!pool.length && window.V25){
+      const pids=(D.pointsLib||[]).slice(0,30).map(p=>p.id);
+      return V25.mockQuiz25(pids, 10);
+    }
     return pool;
   }
   function miniQuiz(){
     const pool=quizPool();
-    if(!pool.length){ host.innerHTML=`<div class="missing" style="text-align:center;padding:30px">题池待充盈——先解锁更多日程。</div>`; return; }
+    if(!pool.length){ host.innerHTML=`<div class="missing" style="text-align:center;padding:30px">题池待充盈——先在修行中解锁更多考点。</div>`; return; }
     const picked=[], used=new Set();
     while(picked.length<3&&used.size<pool.length){ const k=Math.floor(Math.random()*pool.length); if(used.has(k))continue; used.add(k); picked.push(pool[k]); }
     let qi=0, okN=0;
@@ -9948,11 +10000,10 @@ function toast(msg, cls){
 
 /* ---------- nav / boot ---------- */
 function switchView(v){
+  if(v==="board"||v==="dash") v="v25"; /* v25：旧任务/看板已废，深链一律回落修行主页 */
   view=v;
   document.querySelectorAll(".navline button").forEach(x=>x.classList.toggle("on",x.dataset.v===v));
   if(view==="v25"&&window.V25&&V25.renderBoard) V25.renderBoard();
-  if(view==="board") renderBoard();
-  if(view==="dash") renderDashboard();
   if(view==="oral") renderOralLine();
   if(view==="lib") renderLib();
   if(view==="night") renderNight();
@@ -10056,9 +10107,8 @@ function intro(){
     st.player=nm.slice(0,12);
     if(!dsReady()) aiHealth="off"; /* 离线模式：本地兜底链全程可通关 */
     ov.remove();
-    syncGameDay();
     save();
-    render(); /* 先建主界面骨架（旧流程由 finishPrologue 负责渲染） */
+    render(); /* v25：启程即入主界面，任务脊柱由 V25 引擎驱动 */
   };
 }
 /* v35：AI 连接重连——发起一次连通性测试，成功则 aiHealth=ok 并刷新状态栏 */
@@ -10101,18 +10151,20 @@ async function boot(){
   if(window.WDQuiz) WDQuiz.init();
   WDChat.init({D,NPC,getSt:()=>st,save,dsChat,dsReady,level,actTopic:npcActTopic,quest:firstActiveQuest});
   const has=load();
-  if(!has){ st=defState(); reconcile(); installRuntimePlan(); syncGameDay(); save(); intro(); }
+  if(!has){ st=defState(); reconcile(); save(); intro(); }
   else{
-    if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,25); if(st.day>st.unlocked) st.unlocked=st.day; save();
-    /* v54 批 1：运行时排程安装（必须在 render 之前重建 DAYS/QMAP） */
-    installRuntimePlan();
-    syncGameDay();
+    if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,25); save();
+    /* v25 大版本迁移：旧 45 日/974 任务存档在此单轨化（幂等，保资产清进度） */
+    const migrated=migrateV25();
+    /* v25：旧运行时排程（installRuntimePlan）与纪日对齐（syncGameDay）已废，
+       任务放号/复习节奏全部由 wd-v25.js 的 sheet 引擎驱动 */
     migrateGuidanceDots(); /* v58c：清理旧版落流的「……」空引导句 */
     hintLegacyPortraits(); /* v58g：旧版黑底立绘提示重传 */
-    /* v48：三套时钟——离线按自然日推进游戏日/雾涌日，恢复心气灵力 */
+    /* v25：单时钟——离线按自然日推进（1 现实日=1 修行日），恢复心气灵力 */
     ensureClocks();
     const elapsed=advanceNaturalDay();
-    if(elapsed>0){ toast("离线 "+elapsed+" 日——次元内历推进至第 "+st.day+" 周，心气灵力已恢复","gold"); }
+    if(migrated) toast("旧四十五日日程已封存——今日重开第 1 日；灵铢、考点卡、错题与记忆档案全数保留","gold");
+    else if(elapsed>0){ toast("离线 "+elapsed+" 日——修行已推进至第 "+st.day+" 日，心气灵力已恢复","gold"); }
     /* v50：每日福利 / 签到（策划案 L601）——登录时自动触发 */
     renderDailyGiftToast();
     /* v53：离线可玩铁律——无密钥直接进入（AI 叙事由本地 cue/口癖池兜底），不弹阻塞门 */
@@ -10133,314 +10185,7 @@ async function boot(){
     save(); refreshStat();
   });
 }
-/* ---------- 任务面板（行者手札 · 任务卷）：对话流之外的独立任务总览 ---------- */
-function dayMemoryPoints(day){
-  const set=new Set();
-  (byDay[day].quests||[]).forEach(q=>{
-    (D.quizzes[q.id]||[]).forEach(z=>{ if(z.pid) set.add(z.pid); });
-  });
-  return set.size;
-}
-function qStage(q){
-  if(qDone(q.id)) return {key:"done", label:"✓ 已完成"};
-  /* 进入过且暂离（questProg 有档）才算进行中；仅解锁未进入=已接取 */
-  if(st.questProg&&st.questProg[q.id]) return {key:"active", label:"▶ 进行中"};
-  if(questUnlocked(q)) return {key:"ready", label:"☆ 已接取"};
-  return {key:"locked", label:"🔒 未接取"};
-}
-/* ==================== 可折叠层级任务树 ==================== */
-/* 节点：{id,label,meta,state('done'|'cur'|'locked'|''),leaf,children:[]} */
-function treeDefaultExpanded(node){
-  if(!st._treeExp) st._treeExp={};
-  if(st._treeExp[node.id]===undefined){
-    // 默认：幕级展开；日级仅当日展开
-    st._treeExp[node.id] = node.level===0 ? true : (node._defaultOpen===true);
-  }
-  return st._treeExp[node.id];
-}
-function setTreeExp(id,val){ if(!st._treeExp) st._treeExp={}; st._treeExp[id]=val; save(); }
-function renderTreeNode(node){
-  const hasKids = node.children && node.children.length>0;
-  const expanded = hasKids && treeDefaultExpanded(node);
-  const stateCls = node.state ? " "+node.state : "";
-  const leafCls = node.leaf ? " leaf" : "";
-  /* 叶子行只挂 data-leaf——若同时挂 data-toggle，bindTree 的 toggle 分支会拦截点击导致任务打不开 */
-  return `<div class="tnode" data-level="${node.level}" data-has-children="${hasKids}" data-expanded="${expanded}" data-tid="${esc(node.id)}">
-    <div class="trow${stateCls}${leafCls}" ${node.leaf?`data-leaf="${esc(node.id)}"`:`data-toggle="${esc(node.id)}"`}>
-      <span class="ttog"${node.leaf?"":` data-toggle="${esc(node.id)}"`}>${hasKids?'<span class="tcar">▶</span>':''}</span>
-      <span class="tdot"></span>
-      <span class="tlabel">${esc(node.label)}</span>
-      ${node.meta?`<span class="tmeta">${esc(node.meta)}</span>`:""}
-    </div>
-    ${(node.level===0&&node.plot)?`<div class="tplot">${esc(node.plot)}</div>`:""}
-    ${hasKids?`<div class="tchildren">${node.children.map(renderTreeNode).join("")}</div>`:""}
-  </div>`;
-}
-function bindTree(container, onLeaf){
-  container.onpointerdown=e=>{
-    /* 先查叶子：叶子行已不挂 data-toggle，此处顺序双保险 */
-    const leaf=e.target.closest("[data-leaf]");
-    if(leaf){ e.stopPropagation(); SFX.tap(); onLeaf&&onLeaf(leaf.dataset.leaf); return; }
-    const tog=e.target.closest("[data-toggle]");
-    if(tog){
-      const n=tog.closest(".tnode"); if(!n) return;
-      e.stopPropagation();
-      const id=n.dataset.tid; const cur=n.dataset.expanded==="true";
-      n.dataset.expanded=String(!cur); setTreeExp(id,!cur); SFX.tap();
-    }
-  };
-}
-function setAllTreeExpanded(nodes, val){
-  const walk=ns=>ns.forEach(n=>{ if(!st._treeExp) st._treeExp={}; st._treeExp[n.id]=val; if(n.children) walk(n.children); });
-  walk(nodes); save();
-}
-/* 构建 阶段→自然日(周)→游戏日→任务 四级树（v53：225 游戏日重排后） */
-function questsOfGd(d, gd){
-  /* d.gameDays 存 quest id 字符串数组，这里解析成 quest 对象数组 */
-  const gdo=(d.gameDays||[]).find(g=>g.gd===gd);
-  if(!gdo) return [];
-  return (gdo.quests||[]).map(id=>QMAP[id]).filter(Boolean);
-}
-function buildQuestTree(){
-  return STAGES.map(s=>{
-    const days=DAYS.filter(d=>d.day>=s.days[0]&&d.day<=s.days[1]);
-    let stgDone=0, stgAll=0;
-    const dayNodes=days.map(d=>{
-      const prog=dayProg(d); stgDone+=prog.n; stgAll+=prog.all;
-      const isCur = d.day===st.day;
-      /* 游戏日节点：本周 5 个游戏日（3 学习 + 2 休息） */
-      const gdNodes=(d.gameDays||[]).map(g=>{
-        const gqs=questsOfGd(d,g.gd);
-        const gdDone=gqs.length?gqs.every(q=>qDone(q.id)):false;
-        const gdLabel=g.kind==="study"
-          ?`纪日 ${g.gd} · 学习`
-          :`纪日 ${g.gd} · 休息`;
-        const gdMeta=g.kind==="study"
-          ?`${gdDone?'✓':gqs.length?(gqs.filter(q=>qDone(q.id)).length+"/"+gqs.length):'—'}`
-          :"可约会 · 回访";
-        const qNodes=gqs.map(q=>{
-          const s2=qStage(q);
-          const leafState={done:"done",active:"cur",ready:"ready",locked:"locked"}[s2.key];
-          return {id:q.id, level:3, leaf:true, state:leafState, label:q.name, meta:q.tlabel+"·"+q.dur+"分"};
-        });
-        return {id:"gd:"+d.day+":"+g.gd, level:2, label:gdLabel, meta:gdMeta,
-          state: g.kind==="rest"?"rest":(gdDone?"done":(isCur?"cur":"")),
-          _defaultOpen:isCur, children:qNodes};
-      });
-      return {id:"day:"+d.day, level:1, label:`次元内 第 ${d.day} 周`, meta:prog.n+"/"+prog.all,
-        state: prog.n===prog.all?"done":(isCur?"cur":""), _defaultOpen:isCur, children:gdNodes};
-    });
-    return {id:"stage:"+s.id, level:0, label:`第${s.id}阶段 · ${s.name}（第${s.days[0]}-${s.days[1]}周）`, meta:stgDone+"/"+stgAll,
-      plot:s.plot, state: stgDone===stgAll?"done":"", _defaultOpen:true, children:dayNodes};
-  });
-}
-/* ==================== v80 全局进度看板 ==================== */
-function dashSrsOf(ids){
-  const today=srsToday();
-  let learned=0,solid=0,due=0,pending=0;
-  ids.forEach(k=>{ const r=st.srs&&st.srs[k]; if(!r||!r.tier)return;
-    learned++; if(r.tier>=3)solid++; if(r.pending)pending++; else if(r.due<=today)due++; });
-  return {total:ids.length,learned,solid,due,pending};
-}
-function dashBar(pct,color){
-  pct=Math.max(0,Math.min(100,Math.round(pct)));
-  return `<div style="height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;margin:4px 0"><div style="height:100%;width:${pct}%;background:${color||"linear-gradient(90deg,#b8923a,var(--gold))"};border-radius:4px"></div></div>`;
-}
-function dashboardStats(){
-  let gdDone=0,gdAll=0;
-  for(let d=1;d<=45;d++){ const dd=byDay[d]; if(!dd)continue;
-    (dd.quests||[]).forEach(qq=>{ gdAll++; if(qDone(qq.id))gdDone++; }); }
-  const subs={};
-  ["S1","S2","S3","S4"].forEach(s=>{
-    subs[s]={name:RT_SUBJ_NAME[s],...dashSrsOf(D.pointsLib.filter(p=>(p.id||"").startsWith(s+"-")).map(p=>p.id))};
-  });
-  subs.S5={name:"英文问契",...dashSrsOf(D.pointsLib.filter(p=>/^S5-/.test(p.id)).map(p=>p.id))};
-  const trans=dashSrsOf(D.oralLib.map(x=>x.id));
-  /* 导游段落：按六篇统计节完成（oralSecDone） */
-  const six=D.oralFull.map(o=>({aid:o.aid,name:o.name,done:oralSecDoneCount(o),total:(o.sections||[]).length}));
-  let oralSecLearned=0,oralSecTotal=0; six.forEach(o=>{oralSecLearned+=o.done;oralSecTotal+=o.total;});
-  return {
-    day:st.day||1, stage:stageOfDay(st.day||1), gdDone,gdAll,
-    today:(byDay[st.day]?dayProg(byDay[st.day]):{n:0,all:0}), todayMin:rtDayEstimate(st.day||1),
-    xp:st.xp||0, coin:st.coin||0, quizOk:st.quizOk||0,
-    subs, trans, six, oralSecLearned, oralSecTotal,
-    dueAll:srsDueKeys().length, wrong:(st.wrong||[]).length, transW:Object.keys(st.transWrongs||{}).length
-  };
-}
-function renderDashboard(){
-  const stream=$("#stream"); if(!stream)return;
-  const r=dashboardStats();
-  const dayPct=r.day/45*100, gdPct=r.gdAll?r.gdDone/r.gdAll*100:0;
-  const subjRow=(key,s)=>{
-    const p=s.total?Math.round(s.learned/s.total*100):0;
-    return `<div style="padding:8px 0;border-bottom:1px dashed var(--border)">
-      <div style="display:flex;justify-content:space-between;font-size:13px"><b>${esc(s.name)}</b>
-        <span style="color:var(--dim);font-size:12px">${s.learned}/${s.total} 已学 · ${s.solid} 巩固${s.due?` · <b style="color:var(--gold)">${s.due} 待回潮</b>`:""}</span></div>
-      ${dashBar(p)}
-    </div>`;
-  };
-  const tpct=r.trans.total?Math.round(r.trans.learned/r.trans.total*100):0;
-  const opct=r.oralSecTotal?Math.round(r.oralSecLearned/r.oralSecTotal*100):0;
-  const stageLine=STAGES.map((s,i)=>{ const cur=r.stage.id===s.id; const past=r.stage.id>s.id;
-    return `<span title="${esc(s.name)} · ${s.days[0]}-${s.days[1]} 日" style="flex:1;height:22px;line-height:22px;text-align:center;font-size:10px;border-radius:4px;margin:0 2px;white-space:nowrap;overflow:hidden;${cur?"background:var(--gold);color:#1a1208;font-weight:600":past?"background:rgba(255,215,138,.22);color:var(--gold)":"background:rgba(255,255,255,.05);color:var(--dim)"}">${i+1}</span>`;
-  }).join("");
-  stream.innerHTML=`
-  <div class="sys daysep">全局进度看板 · 第 ${r.day} 自然日 / 45</div>
-
-  <div style="margin:10px 0;padding:14px 16px;border:1px solid var(--gold);border-radius:10px;background:linear-gradient(135deg,rgba(184,146,58,.12),transparent)">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">
-      <b style="font-size:15px">第 ${r.stage.id} 阶段 · ${esc(r.stage.name)} — ${esc(r.stage.theme)}</b>
-      <span style="font-size:12px;color:var(--dim)">${esc(r.stage.days[0])}–${r.stage.days[1]} 日 · 大节点：${esc(r.stage.major)}</span>
-    </div>
-    <div style="display:flex;margin-top:10px">${stageLine}</div>
-    <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12.5px">
-      <span>自然日 <b style="color:var(--gold)">${r.day}</b>/45</span>
-      <span>纪日任务 <b style="color:var(--gold)">${r.gdDone}</b>/${r.gdAll}（${Math.round(gdPct)}%）</span>
-      <span>今日 ${r.today.n}/${r.today.all} 环${r.todayMin?` · 约 ${r.todayMin} 分钟`:""}</span>
-    </div>
-    <div style="margin-top:2px">${dashBar(dayPct)}</div>
-  </div>
-
-  <div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">
-    ${[["修行",r.xp],["灵铢",r.coin],["试炼答对",r.quizOk],["待回潮",r.dueAll],["错题知识点",r.wrong],["误译册",r.transW]]
-      .map(([k,v],i)=>`<div style="flex:1;min-width:104px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;text-align:center;background:rgba(255,255,255,.03)">
-        <div style="font-size:20px;font-weight:700;color:${i>=3?"var(--gold)":"var(--neon)"}">${v}</div>
-        <div style="font-size:11px;color:var(--dim);margin-top:2px">${k}</div></div>`).join("")}
-  </div>
-
-  <div style="margin:12px 0;padding:4px 14px 10px;border:1px solid var(--border);border-radius:10px">
-    <div style="font-size:13px;color:var(--gold);letter-spacing:.1em;padding:8px 0 2px">✦ 笔试四科 · 掌握度</div>
-    ${Object.keys(r.subs).slice(0,4).map(k=>subjRow(k,r.subs[k])).join("")}
-    <div style="padding:8px 0">
-      <div style="display:flex;justify-content:space-between;font-size:13px"><b>${r.subs.S5.name}</b>
-        <span style="color:var(--dim);font-size:12px">${r.subs.S5.learned}/${r.subs.S5.total} 已学 · ${r.subs.S5.solid} 巩固${r.subs.S5.due?` · <b style="color:var(--gold)">${r.subs.S5.due} 待回潮</b>`:""}</span></div>
-      ${dashBar(r.subs.S5.total?r.subs.S5.learned/r.subs.S5.total*100:0,"linear-gradient(90deg,#2aa198,var(--neon))")}
-    </div>
-  </div>
-
-  <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
-    <div style="flex:1;min-width:260px;padding:4px 14px 10px;border:1px solid var(--border);border-radius:10px">
-      <div style="font-size:13px;color:var(--gold);letter-spacing:.1em;padding:8px 0 2px">✦ 传译语料（${r.trans.learned}/${r.trans.total} 句已练）</div>
-      ${dashBar(tpct,"linear-gradient(90deg,#2aa198,var(--neon))")}
-      <div style="font-size:12px;color:var(--dim);margin-top:2px">${r.trans.solid} 句巩固 · ${r.trans.due} 句待回潮${r.transW?` · <b style="color:var(--gold)">${r.transW} 句在误译册，会带同题材句子回访</b>`:""}</div>
-    </div>
-    <div style="flex:1;min-width:260px;padding:4px 14px 10px;border:1px solid var(--border);border-radius:10px">
-      <div style="font-size:13px;color:var(--gold);letter-spacing:.1em;padding:8px 0 2px">✦ 六篇导游词整段复述（${r.oralSecLearned}/${r.oralSecTotal} 节已诵）</div>
-      ${dashBar(opct)}
-      <div style="font-size:12px;color:var(--dim);margin-top:2px">六篇共 56 节 · 替换台可整段换稿，换后分句/复述/时长自动跟随</div>
-    </div>
-  </div>
-
-  <div style="padding:10px 14px;border:1px dashed var(--border);border-radius:10px;margin-bottom:20px">
-    ${r.six.map(o=>{ const p=o.total?o.done/o.total*100:0;
-      return `<div style="margin:6px 0">
-        <div style="display:flex;justify-content:space-between;font-size:12.5px"><span>${esc(o.name)} <span style="color:var(--dim)">（${esc(o.aid)}）</span></span><b style="color:${o.done>=o.total?"var(--ok)":"var(--fg2)"}">${o.done}/${o.total}</b></div>
-        ${dashBar(p)}
-      </div>`; }).join("")}
-  </div>`;
-}
-function renderBoard(){
-  const stream=$("#stream");
-  const d=byDay[st.day];
-  const qs=d.quests;
-  const totalMin=qs.reduce((s,q)=>s+q.dur,0);
-  const memPts=dayMemoryPoints(st.day);
-  const prog=dayProg(d);
-  /* v58c：负荷/预估以当前纪日为口径（整周总量另在纪日组头汇总） */
-  const curGi=curGiOfDay(st.day);
-  const curGdMin=curGi==null?0:rtGdEstimate(st.day,curGi);
-  const load=Math.min(160, Math.round(curGdMin/60*60 + memPts/25*40));
-  const heavy=load>100;
-  const todayGdQuests=curGi==null?[]:gdQuests(st.day,curGi);
-  const active=todayGdQuests.find(q=>qStage(q).key==="active")||todayGdQuests.find(q=>qStage(q).key==="ready");
-  const oral=qs.find(q=>q.type==="oral");
-
-  /* 本周任务：按周一~周五（纪日）分组；当前纪日高亮，空纪日灰显 */
-  const gdGroups=[0,1,2,3,4].map(gi=>{
-    const gqs=gdQuests(st.day,gi), gp=gdProg(st.day,gi);
-    const kind=gdKind(st.day,gi), isCur=gi===curGi;
-    const isBoss=gqs.some(q=>q.type==="boss");
-    if(!gqs.length){
-      return `<div class="gdgroup empty">
-        <div class="gdhead"><span class="gdname">${GD_LABELS[gi]}</span><span class="gdkind">${kind==="rest"?"轻修 · 可约会回访":"无安排"}</span></div>
-      </div>`;
-    }
-    const rows=gqs.map(q=>{
-      const stg=qStage(q);
-      const enter = stg.key==="active"
-        ? `<button class="btn sm primary" data-enter="${q.id}">继续</button>`
-        : stg.key==="ready"
-        ? `<button class="btn sm" data-enter="${q.id}">进入</button>`
-        : stg.key==="done"
-        ? `<button class="btn sm ghost" data-enter="${q.id}">回看</button>`
-        : `<span style="font-size:11px;color:var(--dim)">前序未完</span>`;
-      return `<div class="qrow ${stg.key}">
-        <span class="qstage">${stg.label}</span>
-        <div class="qinfo"><div class="qn">${esc(q.name)}</div>
-        <div class="qmeta">${esc(q.tlabel)} · ${fmtDur(q.dur)}${q.type==="oral"?" · 含英文导游词背诵":""}</div></div>
-        <span class="qrew">+${q.xp}修行 +${q.coin}灵铢</span>
-        ${enter}
-      </div>`;
-    }).join("");
-    return `<div class="gdgroup${isCur?" cur":""}${gp.n===gp.all?" done":""}">
-      <div class="gdhead"><span class="gdname">${GD_LABELS[gi]}${isBoss?" · 验界":kind==="rest"?" · 轻修":" · 正修"}</span>
-      <span class="gdprog">${gp.n}/${gp.all}${isCur?" · 当前":gp.n===gp.all?" · ✓ 已清":""}</span></div>
-      ${rows}
-    </div>`;
-  }).join("");
-
-  // 多入口（g2）：不锁定唯一线索，从任一法器进入当日修行
-  const entries=[
-    {ic:"📜",t:"今日修习",go:()=>{ if(active) openQuest(active.id); else toast("今日已圆满，可去巡夜温故"); }},
-    {ic:"🎙️",t:"英文背诵",go:()=>{ if(oral&&qStage(oral).key!=="locked") openQuest(oral.id); else toast("英文背诵随今日进度解锁"); }},
-    {ic:"📚",t:"藏经阁",go:()=>renderLib()},
-    {ic:"🌙",t:"巡夜卡匣",go:()=>renderNight()},
-    {ic:"✍️",t:"录问契",go:()=>openOralInput()},
-    {ic:"⭐",t:"星盘错题",go:()=>renderStar()},
-  ];
-  const entryHtml=entries.map((e,i)=>`<button class="entrybtn" data-entry="${i}"><span class="ei">${e.ic}</span>${e.t}</button>`).join("");
-
-  // 可折叠任务树（幕→日→任务），替换原扁平链条
-  const tree=buildQuestTree();
-  const treeHtml=`<div class="treetools">
-      <button class="btn sm ghost" id="treeExpand" type="button">▸ 展开全部</button>
-      <button class="btn sm ghost" id="treeCollapse" type="button">▾ 折叠全部</button>
-    </div>
-    <div class="tree" id="questTree">${tree.map(renderTreeNode).join("")}</div>`;
-
-  stream.innerHTML=`
-  <div class="sys daysep">行者手札 · 任务卷 · 次元内第${st.day}周 · 纪日${(st.day-1)*5+1}~${(st.day-1)*5+5}</div>
-  <div class="loadmeter ${heavy?"heavy":""}">
-    <div class="lmrow"><span>${curGi!=null?GD_LABELS[curGi]+"负荷":"本周已圆满"}（剩余约 ${curGdMin} 分钟 · 记忆点 ${memPts} 个）${totalMin!==curGdMin?` · 全周 ${totalMin} 分钟`:""}</span><span>${heavy?"偏重，可拆两段":"适中"} ${load}%</span></div>
-    <div class="lmtrack"><div class="lmfill" style="width:${Math.min(100,load)}%"></div></div>
-    <div class="ad">周一·三·五正修学新，周二·四轻修休息（复习·回访） · 本周完成 ${prog.n}/${prog.all}</div>
-  </div>
-  <div class="boardgroup"><h3>快捷入口</h3>
-    <div class="entrygrid">${entryHtml}</div>
-    <div class="ad">不必拘于一条线索——从任一法器切入，系统据你所选指引后续内容。</div>
-  </div>
-  <div class="boardgroup"><h3>本周任务 · 一三五正修 · 二四休息（${prog.n}/${prog.all}）</h3>${gdGroups}</div>
-  <div class="boardgroup"><h3>任务树 · 全程（阶段 / 周 / 纪日 / 任务，点击三角折叠）</h3>
-    ${treeHtml}
-  </div>`;
-
-  // 绑定入口
-  stream.querySelectorAll("[data-entry]").forEach(b=>{
-    b.onpointerdown=()=>{ SFX.tap(); entries[+b.dataset.entry].go(); };
-  });
-  stream.querySelectorAll("[data-enter]").forEach(b=>{
-    b.onpointerdown=e=>{ e.stopPropagation(); SFX.tap(); openQuest(b.dataset.enter); };
-  });
-  // 任务树：事件委托 + 展开状态记忆
-  const treeEl=$("#questTree",stream);
-  bindTree(treeEl, (qid)=>{
-    const q=QMAP[qid];
-    if(qDone(q.id)||questUnlocked(q)) openQuest(q.id);
-    else toast("该环节尚未解锁——先破当前关");
-  });
-  $("#treeExpand",stream).onpointerdown=()=>{ SFX.tap(); setAllTreeExpanded(tree,true); renderBoard(); };
-  $("#treeCollapse",stream).onpointerdown=()=>{ SFX.tap(); setAllTreeExpanded(tree,false); renderBoard(); };
-}
+/* v25：旧任务树/全局看板（buildQuestTree/renderDashboard/renderBoard 等 ~310 行）已物理删除，任务脊柱为 V25.renderBoard */
 /* ==================== 吟游 · 英文导游词独立任务线 ==================== */
 /* v52 R6：六篇导游词显式学习顺序——故宫为起点（策划要求），不再以天安门开篇 */
 const ORAL_ORDER=["GUG","TAM","TAN","SUM","WAL","TOM"];
@@ -10855,46 +10600,7 @@ function openOralStudy(aid){
 }
 function renderOralLine(){
   const stream=$("#stream");
-  // v64 修诵融合：任务清单取运行时任务（与任务页/修诵任务页同 id、同 st.done），旧静态吟游任务不再展示
-  const orals=[];
-  for(let day=1;day<=45;day++){ const dd=byDay[day]; if(!dd) continue;
-    (dd.quests||[]).forEach(q=>{ if(q.type==="oral") orals.push(q); });
-  }
-  orals.sort((a,b)=>a.day-b.day||a.id.localeCompare(b.id));
-  const doneN=orals.filter(q=>qDone(q.id)).length;
-  const pct=Math.round(doneN/orals.length*100);
-  // 按幕分组展示顺序链
-  const groups=[];
-  orals.forEach(q=>{
-    const sg=stageOfDay(q.day);
-    let g=groups.find(x=>x.stage===sg.id);
-    if(!g){ g={stage:sg.id, stageName:sg.name, items:[]}; groups.push(g); }
-    g.items.push(q);
-  });
-  groups.sort((a,b)=>a.stage-b.stage);
-  const listHtml=groups.map(g=>{
-    const rows=g.items.map((q,i)=>{
-      const s=qStage(q);
-      let btn, need="";
-      if(s.key==="done") btn=`<button class="btn sm ghost" data-oral="${q.id}" type="button">回看</button>`;
-      else if(s.key==="active") btn=`<button class="btn sm primary" data-oral="${q.id}" type="button">继续背诵</button>`;
-      else if(s.key==="ready") btn=`<button class="btn sm" data-oral="${q.id}" type="button">进入背诵</button>`;
-      else{
-        /* v52 R6：明示解锁条件，不再让玩家猜前置 */
-        const prevs=(q.prev||[]).map(p=>QMAP[p]?QMAP[p].name:p).filter(Boolean);
-        need=prevs.length?`需先完成：${prevs.join("、")}`:`主线推进至第 ${q.day} 日`;
-        btn=`<span style="font-size:11px;color:var(--dim)" title="${esc(need)}">🔒 ${esc(need.length>14?need.slice(0,14)+"…":need)}</span>`;
-      }
-      return `<div class="qrow oral ${s.key}" style="border-left:3px solid var(--cyber);cursor:${s.key==="locked"?"help":"pointer"}" data-roworal="${q.id}" data-locked="${s.key==="locked"?1:0}" data-need="${esc(need)}">
-        <span class="qstage">${s.label}</span>
-        <div class="qinfo"><div class="qn">次元内第${q.day}周 · 纪日${q.gd||((q.day-1)*5+1)} · ${esc(q.name)}</div>
-        <div class="qmeta">${fmtDur(q.dur)} · 出声朗读 + 复述自评</div></div>
-        <span class="qrew">+${q.xp}修行</span>
-        ${btn}
-      </div>`;
-    }).join("");
-    return `<div class="boardgroup"><h3>第${g.stage}阶段 · ${esc(g.stageName)}</h3>${rows}</div>`;
-  }).join("");
+  /* v25：修诵=独立修炼场，不再挂纪日任务链；六篇导游词自成一线，进度存 oralSec */
 
   // v52 R6：六篇学习总进度（分站背诵 / 通篇考核）
   const six=orderedOral();
@@ -10906,10 +10612,10 @@ function renderOralLine(){
   const plan=oralPlanOf(st.day);
   const planO=plan.aid?oralByIdAid(plan.aid):null;
   const planHtml=`<div class="boardgroup" style="border-color:var(--gold)">
-    <h3>今日修诵 · 次元内第 ${st.day}/45 周${planO?" · "+esc(planO.name):""}</h3>
+    <h3>今日修诵 · 第 ${st.day}/25 日${planO?" · "+esc(planO.name):""}</h3>
     <div class="qrow oral active" style="border-left:3px solid var(--gold)">
       <div class="qinfo"><div class="qn">${esc(plan.label)}</div>
-      <div class="qmeta">30 日：六篇通读+分站背诵成基础；45 日：通篇背诵达考核标准</div></div>
+      <div class="qmeta">25 日周期：前 24 日六篇通读+分站背诵，第 25 日通篇背诵达考核标准</div></div>
       ${planO?`<button class="btn sm primary" data-study="${planO.aid}" type="button">进入修习室</button>`
         :`<button class="btn sm ghost" data-study="${six[0]?six[0].aid:"GUG"}" type="button">打开修诵卷</button>`}
     </div></div>`;
@@ -10932,24 +10638,10 @@ function renderOralLine(){
   </div>`;
 
   stream.innerHTML=`
-  <div class="sys daysep">修诵 · 英文导游词任务线</div>
-  <div class="boardgroup">
-    <div class="lmrow"><span>主线内修诵任务进度</span><span>${doneN}/${orals.length} · ${pct}%</span></div>
-    <div class="oralprog"><div style="width:${pct}%"></div></div>
-    <div class="ad">六篇导游词自成一线：故宫为起点，按 故宫→天安门→天坛→颐和园→长城→明十三陵 推进；主线推进到对应周目，修诵任务即解锁（不再被前序链卡死）。</div>
-  </div>
+  <div class="sys daysep">修诵 · 英文导游词修炼场（独立于 25 日任务单元，随时可练）</div>
   ${planHtml}
-  ${fullHtml}
-  ${listHtml}`;
+  ${fullHtml}`;
 
-  stream.querySelectorAll("[data-oral]").forEach(b=>b.onpointerdown=e=>{ e.stopPropagation(); SFX.tap(); openQuest(b.dataset.oral); });
-  /* v64：整行可点——点状态图标/行内空白同样进入；锁定行点击明示解锁条件（修复"图标无法点击"） */
-  stream.querySelectorAll("[data-roworal]").forEach(r=>{
-    r.onpointerdown=e=>{ if(e.target.closest("button"))return; SFX.tap();
-      if(r.dataset.locked==="1"){ toast(r.dataset.need||"此环尚未解锁"); return; }
-      openQuest(r.dataset.roworal);
-    };
-  });
   /* v52 R6：修习室入口（整卡可点） */
   stream.querySelectorAll("[data-study]").forEach(el=>{
     el.onpointerdown=e=>{

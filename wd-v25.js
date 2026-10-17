@@ -413,7 +413,9 @@ function ensurePlan25(day, sh, stream){
 function unitDone(n, ok, all){
   const v=v25st(); v.done=v.done||{};
   const day=Math.min(25, st.day||1);
+  let firstPass=false;
   if(!v.done[n]){
+    firstPass=true;
     const u=unitByN(n); /* 先取单元（标完成前用户卡还在单元里），登记卡片级完成档案 */
     v.done[n]={ day, ok, all, at:new Date().toISOString(), revs:0 };
     const adds=(v.cards&&v.cards.added)||[];
@@ -422,7 +424,20 @@ function unitDone(n, ok, all){
   }
   else { const r=v.done[n]; r.lastRev=day; r.revs=(r.revs||0)+1; r.ok=ok; r.all=all; r.at=new Date().toISOString(); }
   const sh=sheet(day); sh.done=sh.done||{}; sh.done[n]=true;
+  /* v25 成长奖励：首通足额（约 2 修行值/分钟、0.8 灵铢/分钟），复习减半 */
+  const u0=unitByN(n);
+  const mins=u0?u0.mins:10;
+  const mult=firstPass?1:0.5;
+  const gainXp=Math.max(1,Math.round(mins*2*mult));
+  const gainCoin=Math.max(1,Math.round(mins*0.8*mult));
+  st.xp=(st.xp||0)+gainXp;
+  st.coin=(st.coin||0)+gainCoin;
   save();
+  try{
+    toast((firstPass?"单元初通 · ":"温故知新 · ")+"+"+gainXp+" 修行 · +"+gainCoin+" 灵铢","gold");
+    if(firstPass){ checkAch(); checkLevelUp(); }
+    refreshStat(false);
+  }catch(e){}
 }
 
 /* ==================== [7] 执行流公共 ==================== */
@@ -431,7 +446,7 @@ function _finBtn(host, ov, u, ok, all, html){
   host.innerHTML=html+'<div style="margin-top:10px"><button class="btn primary" id="v25fin" type="button">完成单元</button></div>';
   const b=ov.querySelector("#v25fin");
   if(b) b.onpointerdown=()=>{ try{SFX.tap();}catch(e){} unitDone(u.n, ok, all);
-    const c=ov.querySelector(".close"); if(c) c.click(); renderBoard(); };
+    const c=ov.querySelector(".close"); if(c) c.click(); try{render();}catch(e){ renderBoard(); } };
 }
 function runUnit(n){
   const u=unitByN(n); if(!u){ toast("单元不存在"); return; }
@@ -473,7 +488,7 @@ function runQuizUnit(u){
         else if(z.kind==="blank"){ const acc=[z.a].concat(z.accept||[]).map(_QNORM); good=acc.includes(_QNORM(val)); }
         else if(z.kind==="multi"){ const want=new Set((Array.isArray(z.a)?z.a:[z.a]).map(_QNORM)); const got=new Set(val.map(_QNORM)); good=want.size===got.size&&[...want].every(x=>got.has(x)); }
         else good=_QNORM(z.a)===_QNORM(val);
-        if(good){ ok++; try{srsReview(z.pid,2);}catch(e){} } else { try{srsLapse(z.pid);}catch(e){} }
+        if(good){ ok++; st.quizOk=(st.quizOk||0)+1; try{srsReview(z.pid,2);}catch(e){} } else { try{srsLapse(z.pid);}catch(e){} }
         const aTxt=z.kind==="judge"?(z.a===true||z.a==="true"?"对":"错"):(Array.isArray(z.a)?z.a.join("、"):String(z.a));
         const why=ov.querySelector("#v25why");
         why.innerHTML='<div class="note" style="border-left-color:'+(good?"var(--ok)":"var(--danger)")+';font-size:13px;line-height:1.8">'
@@ -627,8 +642,7 @@ function renderBoard(){
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline">'
     +'<span style="font-size:22px;color:var(--neon);font-weight:700">第 '+day+' 日 / 25</span>'
     +'<span>今日 <b>'+doneToday+'/'+sh.items.length+'</b> 单元 · 约 '+Math.round(estMins)+' 分钟</span>'
-    +'<span>总进度 <b>'+doneN+'/'+U.length+'</b>（'+pct+'%）</span>'
-    +'<span style="color:var(--dim)">星盘到期 '+dueN+' 张</span></div>'
+    +'<span>总进度 <b>'+doneN+'/'+U.length+'</b>（'+pct+'%）</span></div>'
     +'<div style="height:8px;background:var(--bg3);border-radius:4px;margin:10px 0"><div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,var(--neon),var(--cyber));border-radius:4px"></div></div>';
   /* 25 日周期热力格：全完成=neon / 部分=gold / 今日=描边 / 未来=暗，悬停看日期 */
   const d0=v.startDate?new Date(v.startDate+"T00:00:00"):null;
@@ -675,11 +689,60 @@ function renderBoard(){
         +'</div>';
     }).join("");
   }
-  /* 科目进度：五科完成度小条，哪科落后一眼看清 */
+  /* ===== 学情看板（原全局看板并入）：待回潮/错题/误译/掌握度，数字可点直达修炼场 ===== */
+  const subSrs={};
+  try{
+    const srsOf=(ids)=>{ const today=srsToday(); let learned=0,solid=0,due=0;
+      ids.forEach(k=>{ const r=st.srs&&st.srs[k]; if(!r||!r.tier)return;
+        learned++; if(r.tier>=3)solid++; if(!r.pending&&r.due<=today)due++; });
+      return {total:ids.length,learned,solid,due}; };
+    ["S1","S2","S3","S4","S5"].forEach(s=>{
+      subSrs[s]=srsOf((D.pointsLib||[]).filter(p=>(p.id||"").startsWith(s+"-")).map(p=>p.id));
+    });
+    subSrs.trans=srsOf((D.oralLib||[]).map(x=>x.id));
+  }catch(e){}
+  const wrongN=(st.wrong||[]).length, transN=Object.keys(st.transWrongs||{}).length;
+  const kpi=(go,val,label,hot)=>'<div data-go="'+go+'" style="flex:1;min-width:84px;padding:10px 8px;border:1px solid var(--border);border-radius:8px;text-align:center;background:rgba(255,255,255,.03);cursor:pointer">'
+    +'<div style="font-size:20px;font-weight:700;color:'+(hot?"var(--gold)":"var(--neon)")+'">'+val+'</div>'
+    +'<div style="font-size:11px;color:var(--dim);margin-top:2px">'+label+'</div></div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">'
+    +kpi("night",dueN,"今日待回潮",dueN>0)
+    +kpi("star",wrongN,"错题知识点",wrongN>0)
+    +kpi("night",transN,"误译册",transN>0)
+    +kpi("star",st.quizOk||0,"累计答对",false)+'</div>';
+  /* 五科考点掌握度：进度条=已学/全部考点；金色「待回潮」可点进巡夜 */
+  h+='<div style="margin:14px 0 2px;font-size:12px;color:var(--gold);letter-spacing:.08em">✦ 五科考点掌握度</div>'
+    +'<div style="font-size:11px;color:var(--dim);margin-bottom:4px">点科目行进藏经阁看全部考点；点金色「待回潮」直接去巡夜复习</div>';
+  ["S1","S2","S3","S4","S5"].forEach(s=>{
+    const z=subSrs[s]; if(!z)return;
+    const name=(typeof RT_SUBJ_NAME!=="undefined"&&RT_SUBJ_NAME[s])||(s==="S5"?"英文问契":("科目"+s.slice(1)));
+    const pc=z.total?Math.round(100*z.learned/z.total):0;
+    h+='<div style="display:flex;align-items:center;gap:8px;margin:5px 0;padding:6px 8px;border:1px solid var(--border);border-radius:8px">'
+      +'<span data-go="lib" title="进藏经阁查看本科全部考点" style="font-size:12px;width:72px;cursor:pointer">'+esc(name)+'</span>'
+      +'<div data-go="lib" style="flex:1;height:7px;background:var(--bg3);border-radius:4px;overflow:hidden;cursor:pointer"><div style="height:100%;width:'+pc+'%;background:linear-gradient(90deg,#2aa198,var(--neon));border-radius:4px"></div></div>'
+      +'<span style="font-size:11px;color:var(--dim);width:64px;text-align:right">'+z.learned+'/'+z.total+'</span>'
+      +(z.due?'<span data-go="night" style="font-size:11px;color:var(--gold);width:60px;text-align:right;cursor:pointer">'+z.due+' 待回潮</span>'
+             :'<span style="font-size:11px;color:var(--dim);width:60px;text-align:right">'+z.solid+' 巩固</span>')
+      +'</div>';
+  });
+  /* 传译语料 + 六篇修诵（独立修炼场入口） */
+  let oLearned=0,oTotal=0;
+  const six=(D.oralFull||[]).map(o=>{ const dn=oralSecDoneCount(o), tn=(o.sections||[]).length; oLearned+=dn; oTotal+=tn; return {o,dn,tn}; });
+  const tz=subSrs.trans||{total:0,learned:0,due:0,solid:0}, tp=tz.total?Math.round(100*tz.learned/tz.total):0, op=oTotal?Math.round(100*oLearned/oTotal):0;
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px">'
+    +'<div data-go="night" style="flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">'
+    +'<div style="font-size:12px;color:var(--gold);margin-bottom:4px">✦ 传译语料（'+tz.learned+'/'+tz.total+' 句已练）</div>'
+    +'<div style="height:7px;background:var(--bg3);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+tp+'%;background:linear-gradient(90deg,#2aa198,var(--neon));border-radius:4px"></div></div>'
+    +'<div style="font-size:11px;color:var(--dim);margin-top:4px">'+tz.solid+' 句巩固'+(tz.due?' · <b style="color:var(--gold)">'+tz.due+' 句待回潮</b>':'')+(transN?' · '+transN+' 句在误译册':'')+'</div></div>'
+    +'<div data-go="oral" style="flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">'
+    +'<div style="font-size:12px;color:var(--gold);margin-bottom:4px">✦ 六篇导游词整段复述（'+oLearned+'/'+oTotal+' 节已诵）</div>'
+    +'<div style="height:7px;background:var(--bg3);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+op+'%;background:linear-gradient(90deg,#b8923a,var(--gold));border-radius:4px"></div></div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+six.map(z=>'<span style="font-size:10.5px;padding:1px 7px;border-radius:9px;border:1px solid var(--border);color:'+(z.dn>=z.tn?"var(--ok)":"var(--dim)")+'">'+esc(z.o.name)+' '+z.dn+'/'+z.tn+'</span>').join("")+'</div></div></div>';
+  /* 任务推进：五科单元完成度（与上面的考点掌握度不同口径：这是 25 日任务单的完成情况） */
   const bySubj={};
   U.forEach(u=>{ const k=(u.subj.match(/^科目[一二三四五]/)||["其他"])[0];
     (bySubj[k]=bySubj[k]||{full:u.subj,arr:[]}).arr.push(u); });
-  h+='<div style="margin-top:14px;font-size:12px;color:var(--dim)">科目进度</div>';
+  h+='<div style="margin-top:14px;font-size:12px;color:var(--dim)">任务推进 · 五科单元（25 日任务单完成情况）</div>';
   Object.keys(bySubj).forEach(k=>{
     const g=bySubj[k]; const dn3=g.arr.filter(u=>doneMap[u.n]).length;
     const pc=g.arr.length?Math.round(100*dn3/g.arr.length):0;
@@ -696,6 +759,7 @@ function renderBoard(){
   stream.innerHTML=h;
   const ab=stream.querySelector("#v25arena"); if(ab) ab.onpointerdown=()=>{ try{switchView("arena");}catch(e){} };
   stream.querySelectorAll("[data-u]").forEach(b=>b.onpointerdown=()=>{ try{SFX.tap();}catch(e){} runUnit(+b.dataset.u); });
+  stream.querySelectorAll("[data-go]").forEach(b=>b.onpointerdown=()=>{ try{SFX.tap();switchView(b.dataset.go);}catch(e){} });
 }
 /* 引擎启动：登记启程日；若当前停在修行视图则立刻渲染 */
 function engineBoot(){
