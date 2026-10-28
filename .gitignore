@@ -3,3 +3,7 @@ _backup-before-rollback-20260909-1320/
 
 # macOS
 .DS_Store
+
+# 本地备份与源表格（不入库）
+index.html.bak-*
+*.numbers

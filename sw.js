@@ -1,11 +1,20 @@
 // 问道之旅 Service Worker — 离线缓存 + 即时更新
 // 版本号每次内容变更必须 +1，activate 时据此清除旧缓存
-const CACHE = "wdzx-v90";
+const CACHE = "wdzx-v25-92";
 const CORE = [
   "./",
   "./index.html",
   "./game-data.js",
   "./exam-2026-data.js",
+  "./exam-2026-data-ext.js",
+  "./exam-2026-enrich.js",
+  "./exam-2026-text-enrich.js",
+  "./exam-2026-data-ext2.js",
+  "./shizheng-bank.js",
+  "./interp-bank.js",
+  "./task-units.js",
+  "./wd-planner.js",
+  "./wd-v25.js",
   "./wd-chat.js",
   "./wd-avatar.js",
   "./wd-fx.js",
@@ -23,10 +32,12 @@ const CORE = [
 const MIRROR = "https://cdn.jsdelivr.net/gh/zhalibulang/wendao-zhilv@main/";
 
 self.addEventListener("install", e => {
-  // 逐个缓存，单个资源失败不拖垮整体安装
+  // 逐个缓存，单个资源失败不拖垮整体安装。
+  // cache:"reload" 必须加：http.server 无 Cache-Control 头，浏览器启发式 HTTP 缓存会让
+  // install 抓到旧版 HTML/JS（v60 曾因此缓存进带 ?v38 引用的旧 index.html，新代码永远加载不出来）
   e.waitUntil(
     caches.open(CACHE).then(c =>
-      Promise.allSettled(CORE.map(p => c.add(p)))
+      Promise.allSettled(CORE.map(p => c.add(new Request(p, { cache: "reload" }))))
     ).then(() => self.skipWaiting())
   );
 });
@@ -56,9 +67,15 @@ self.addEventListener("fetch", e => {
 
   const isCore = CORE.some(p => url.pathname.endsWith(p) || url.pathname === p.replace("./", "/"));
 
+  // cache:"no-cache" 必须加：http.server 无 Cache-Control 头，浏览器对带 ?vXX 参数的
+  // 子资源走启发式 HTTP 缓存，network-first 的 fetch() 会直接命中浏览器 HTTP 缓存里的
+  // 旧响应而根本不到服务器（v60 曾因此「磁盘已修复但页面永远执行旧 JS」）。
+  // no-cache = 每次向服务器校验，文件没变走 304，变了必拿新正文。
+  const netReq = () => new Request(e.request, { cache: "no-cache" });
+
   if (isCore) {
     e.respondWith(
-      fetch(e.request).then(resp => {
+      fetch(netReq()).then(resp => {
         const copy = resp.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));
         return resp;
@@ -77,7 +94,7 @@ self.addEventListener("fetch", e => {
   } else {
     // 非core（assets/ 角色素材等）：network-first，成功响应也回填缓存 → 素材上传 GitHub 后离线仍可用
     e.respondWith(
-      fetch(e.request).then(resp => {
+      fetch(netReq()).then(resp => {
         if (resp.ok) {
           const copy = resp.clone();
           caches.open(CACHE).then(c => c.put(e.request, copy));
