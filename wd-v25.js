@@ -38,10 +38,15 @@ function _applyCsvOverrides(){
       if(!st||!st.edits) return;
       const base="fullp:"+aid+":"+si+":", whole="full:"+aid+":"+si, whole2="fullsec:"+aid+":"+si;
       Object.keys(st.edits).forEach(k=>{
-        const arr=st.edits[k]||[]; const at=Date.parse(((arr[0]||{}).at)||"")||0;   /* 修订时间是 ISO 字符串，需转毫秒 */
+        const arr=st.edits[k]||[]; const rawAt=(arr[0]||{}).at;
+        /* 修订时间是 ISO 字符串；兼容历史/数字时间戳，解析不出就按 0 处理 */
+        const at=typeof rawAt==="number"?rawAt:(Date.parse(rawAt||"")||0);
         if(k===whole){ if(at&&ovAt&&at<ovAt) delete st.edits[k]; return; }
         if(k===whole2){
-          if(!at||!ovAt||at<ovAt) delete st.edits[k];   /* 整片修订只按时间戳裁决 */
+          /* 只在能确定「修订确实早于 CSV」时才删。以前写成 `!at||!ovAt||at<ovAt`，
+             at 解析失败(0) 就把整片修订删掉——用户保存的稿子刷新一次就消失，代价太大。
+             宁可多留一份（最坏是 CSV 改动没立刻压过它），也不能误删。 */
+          if(at&&ovAt&&at<ovAt) delete st.edits[k];
           return;
         }
         if(k.indexOf(base)!==0) return;
@@ -2848,9 +2853,56 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
   /* v117：整片修订/CSV 会整体替换 sec.paragraphs——原地重挂段落数组，后续步骤才读得到新段落对象
      注意 _oralParas(sec) 返回的就是 sec.paragraphs 本体，必须先拷贝再清空：
      否则 allParas.length=0 会把整节原文抹掉（v116 的 bug：第2节变成「0 句」空白页） */
+  /* v120：整片修订存档（fullsec）必须在进页时应用。
+     之前它只在「保存」当场写进内存，刷新后存档完全不生效，正文退回 CSV/原文——
+     用户看到的就是「修订版本不见了」。这里把存档解析成段落写回，并逐段与原文比对：
+     文字一致就沿用原 HTML，加粗/字色等富文本不会因为套用修订而丢。 */
+  const applySecSaved=()=>{
+    try{
+      const arrSec=(st&&st.edits&&st.edits["fullsec:"+art.id+":"+si])||[];
+      const arrFull=(st&&st.edits&&st.edits["full:"+art.id+":"+si])||[];
+      /* 两种入口保存的整节稿都认：fullsec（整体修订，带小标题/小注标记）优先，其次 full（整节纯文本） */
+      const src=arrSec.length?String((arrSec[0]||{}).text||""):(arrFull.length?String((arrFull[0]||{}).text||""):"");
+      if(!src) return;
+      const ap=_oralParas(sec);
+      if(!ap.length) return;
+      /* 只在整节视图套用：分页子任务只序列化了本片，整节存档硬套会打乱分页 */
+      if(p0!==0||p1!==ap.length) return;
+      let blocks=_parseSecText(_htmlLines(src).join("\n"));
+      if(!blocks.length) return;
+      /* 旧版 full（整节纯文本）存档可能只有单换行，解析出来会并成 1 块。
+         这时绝不能真去套用——那会把十几段压成一段。先按空行重分，分不出就放弃、保持原文。 */
+      if(!arrSec.length&&blocks.length===1&&ap.length>1){
+        const alt=String(src).split(/\n{2,}/).map(x=>x.trim()).filter(Boolean);
+        if(alt.length>1) blocks=alt.map(t=>({head:"",note:"",text:t}));
+        else return;
+      }
+      const plainOf=x=>_htmlToText(String(x||"")).replace(/\s+/g," ").trim();
+      const oldRaw=ap.map(p=>String(_oralParaRaw(art,si,paOf(p),p.text)||""));
+      const oldPlain=oldRaw.map(plainOf);
+      const oldMeta=ap.map(p=>({head:p.head||"",note:p.note||""}));
+      const used=[];
+      const np=blocks.map((b,i)=>{
+        const keep=blocks.length===ap.length?(oldMeta[i]||{head:"",note:""}):{head:"",note:""};
+        let text=b.text;
+        const bt=String(b.text||"").replace(/\s+/g," ").trim();
+        const j=oldPlain.findIndex((t,k)=>!used[k]&&t===bt);
+        if(j>=0){ used[j]=1; text=oldRaw[j]; }
+        return { n:i+1, text:text, head:b.head||keep.head, note:b.note||keep.note };
+      });
+      let changed=(np.length!==ap.length);
+      if(!changed) np.forEach((p,i)=>{ if(p.text!==ap[i].text||p.head!==(ap[i].head||"")||p.note!==(ap[i].note||"")) changed=true; });
+      if(!changed) return;   /* 已应用过：不要每帧重建段落对象 */
+      sec.paragraphs=np;
+      sec.text=np.map(x=>x.text||"").join("\n\n");
+    }catch(e){ console.warn("[fullsec]",e); }
+  };
   const resyncParas=()=>{
+    applySecSaved();
     const ap=_oralParas(sec).slice();
     if(!ap.length) return;
+    /* 套用存档可能删段/加段，分页上界要跟着收，否则会截掉多出来的段 */
+    if(p1>ap.length) p1=ap.length;
     allParas.length=0; ap.forEach(p=>allParas.push(p));
     paras.length=0; ap.slice(p0,p1).forEach(p=>paras.push(p));
   };
