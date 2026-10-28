@@ -8847,6 +8847,60 @@ function downloadFile(name,text,mime){
     setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   }catch(e){ toast("导出失败："+e.message); }
 }
+/* 导出导游词文稿源文件（含本机全部修订）——把当前生效的全文固化为 oral-full-gug.js。
+   游戏内修订只存在浏览器存档里，磁盘文件感知不到；导出后替换项目同名文件即可提交 GitHub，
+   富文本样式（加粗/字色）随 HTML 一起保留。覆盖顺序：整片修订 fullsec > 整节修订 full > 逐段修订 fullp */
+function exportOralSrc(){
+  try{
+    const arts=JSON.parse(JSON.stringify(D.oralFull||[]));
+    const parseSec=text=>{   /* 与整体修订同款解析：【小标题】/【小注】标记行 + 空行分段 */
+      const blocks=[]; let cur=null;
+      const flush=()=>{ if(cur&&(String(cur.text).trim()||cur.head||cur.note)) blocks.push(cur); cur=null; };
+      String(text||"").split("\n").forEach(raw=>{
+        const t=raw.trim();
+        const mH=t.match(/^【小标题】\s?([\s\S]*)$/), mN=t.match(/^【小注】\s?([\s\S]*)$/);
+        if(mH){ cur=cur||{head:"",note:"",text:""}; cur.head=mH[1].trim(); return; }
+        if(mN){ cur=cur||{head:"",note:"",text:""}; cur.note=mN[1].trim(); return; }
+        if(!t){ flush(); return; }
+        cur=cur||{head:"",note:"",text:""};
+        cur.text+=(cur.text?" ":"")+t;
+      });
+      flush(); return blocks;
+    };
+    arts.forEach(o=>{
+      (o.sections||[]).forEach((s,si)=>{
+        let ps=(Array.isArray(s.paragraphs)&&s.paragraphs.length?s.paragraphs:[{n:1,text:s.text||s.en||""}]).map(p=>Object.assign({},p));
+        const secEdit=getEdit("fullsec:"+o.id+":"+si,"");
+        if(secEdit){
+          const plain=(typeof _htmlLines==="function")?_htmlLines(secEdit).join("\n"):String(secEdit).replace(/<[^>]*>/g," ");
+          const blocks=parseSec(plain);
+          if(blocks.length) ps=blocks.map((b,i)=>({n:i+1,text:b.text,head:b.head,note:b.note}));
+        }else{
+          const fe=getEdit("full:"+o.id+":"+si,"");
+          if(fe){
+            const pts=String(fe).split(/\n{2,}/).map(x=>x.trim()).filter(Boolean);
+            if(pts.length>1||(pts.length===1&&ps.length===1)) ps=pts.map((t,i)=>Object.assign({},ps[i]||{},{n:i+1,text:t}));
+          }
+        }
+        ps.forEach((p,pi)=>{ p.text=getEdit("fullp:"+o.id+":"+si+":"+pi, p.text); });
+        ps.forEach((p,i)=>{ p.n=i+1; });
+        s.paragraphs=ps;
+        s.text=ps.map(p=>p.text||"").join("\n\n");
+      });
+    });
+    const day=new Date().toISOString().slice(0,10);
+    const js="/* 本文件由游戏内「导出导游词文稿」生成（含本机全部修订） "+day+"；原始底稿由 tools/build-oral.mjs 从 oral-src/gug.md 生成 */\n"
+      +"(function(){\n  var ARTS="+JSON.stringify(arts)+";\n"
+      +"  ARTS.forEach(function(GUG){\n"
+      +"    if(GUG.id==='forbidden-city') window.ORAL_FULL_GUG=GUG;\n"
+      +"    try{\n      var D=window.GAME_DATA;\n"
+      +"      if(D&&Array.isArray(D.oralFull)){\n"
+      +"        var i=D.oralFull.findIndex(function(x){return x.id===GUG.id;});\n"
+      +"        if(i>=0) D.oralFull[i]=GUG; else D.oralFull.push(GUG);\n      }\n    }catch(e){}\n  });\n})();\n";
+    downloadFile("oral-full-gug.js",js,"text/javascript");
+    toast("已导出 oral-full-gug.js（含全部本机修订）——把它替换到项目目录后叫我推送","gold");
+  }catch(e){ toast("导出失败："+e.message); }
+}
 function pickFile(accept,cb){
   const inp=document.createElement("input"); inp.type="file"; inp.accept=accept;
   inp.style.cssText="position:fixed;left:-9999px;top:-9999px";
@@ -9858,7 +9912,8 @@ function renderSync(){
       <div style="border-top:1px dashed var(--border);margin-top:14px;padding-top:10px">
         <b>离线备份（不走网络，最稳妥）：</b>
         <span style="margin-left:8px"><button class="btn sm" id="syExp" type="button">⬇ 导出完整备份文件</button>
-        <button class="btn sm" id="syImp" type="button">⬆ 导入备份文件</button></span>
+        <button class="btn sm" id="syImp" type="button">⬆ 导入备份文件</button>
+        <button class="btn sm" id="syExpOral" type="button">⬇ 导出导游词文稿（含修订）</button></span>
         <input type="file" id="syImpF" accept="application/json,.json" style="display:none">
         <div class="note" style="margin-top:6px;font-size:11.5px">备份含全部进度与配置（不含 AI 密钥）。可用 AirDrop/微信文件/iCloud 云盘发到 iPhone、iPad 后选择「导入」。</div>
       </div>`;
@@ -9901,6 +9956,7 @@ function renderSync(){
             <b>离线备份：</b>
             <button class="btn sm" id="syExp2" type="button" style="margin-left:8px">⬇ 导出备份文件</button>
             <button class="btn sm" id="syImp2" type="button">⬆ 导入备份文件</button>
+            <button class="btn sm" id="syExpOral2" type="button">⬇ 导出导游词文稿（含修订）</button>
           </div>
         </div>
         <div style="text-align:center">
@@ -9936,6 +9992,7 @@ function renderSync(){
   }
   function bindCommon(){
     [$("#syExp",body),$("#syExp2",body)].forEach(b=>{ if(b) b.onpointerdown=()=>{ S.exportFile(); toast("备份文件已生成"); }; });
+    [$("#syExpOral",body),$("#syExpOral2",body)].forEach(b=>{ if(b) b.onpointerdown=()=>{ SFX.tap(); exportOralSrc(); }; });
     [$("#syImp",body),$("#syImp2",body)].forEach(b=>{ if(!b) return; b.onpointerdown=()=>$("#syImpF",body).click(); });
     const f=$("#syImpF",body);
     if(f) f.onchange=async e=>{
