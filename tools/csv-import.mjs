@@ -182,10 +182,24 @@ if (bkRows) {
 }
 
 /* ---------- 写出运行时覆盖文件 ---------- */
-/* stamp = 本次导入的时间戳：运行时据此判断「游戏内的修订」是否比 CSV 新，
-   比 CSV 旧的修订被 CSV 覆盖（保证改 CSV 立即生效），比 CSV 新的修订保留（保住富文本样式） */
-ov.stamp = Date.now();
+/* stamp = CSV 源文件的最后修改时间（不是"本次运行时间"）：
+   运行时据此判断「游戏内的修订」是否比 CSV 新。用运行时间会导致"只重跑导入、没改 CSV"
+   也把 stamp 推到现在，从而误删用户之后做的修订。取 mtime 才能如实反映内容新旧。 */
+try {
+  const dir = path.join(ROOT, "csv");
+  const mts = fs.readdirSync(dir).filter(f => f.endsWith(".csv") && !f.startsWith("~$"))
+    .map(f => fs.statSync(path.join(dir, f)).mtimeMs).filter(n => n > 0);
+  ov.stamp = mts.length ? Math.max(...mts) : Date.now();
+} catch (e) { ov.stamp = Date.now(); }
 const js = "/* 由 tools/csv-import.mjs 从 csv/*.csv 生成，请勿手改；改 CSV 后重跑此脚本 */\n"
   + "window.WD_CSV=" + JSON.stringify(ov) + ";\n";
 fs.writeFileSync(path.join(ROOT, "csv-overrides.js"), js, "utf8");
+/* 必须给 index.html 里的引用递增版本号：直接 file:// 打开时没有 Service Worker，
+   浏览器按 URL（含 ?vN）做 HTTP 缓存，版本号不变就永远加载旧覆盖文件——改了 CSV 却不生效 */
+try {
+  const hp = path.join(ROOT, "index.html");
+  const h = fs.readFileSync(hp, "utf8");
+  const nh = h.replace(/csv-overrides\.js\?v(\d+)/, (m, n) => "csv-overrides.js?v" + (Number(n) + 1));
+  if (nh !== h) { fs.writeFileSync(hp, nh, "utf8"); console.log("已递增 index.html 中 csv-overrides.js 版本号"); }
+} catch (e) { console.warn("更新 index.html 版本号失败：", e.message); }
 console.log("已生成 csv-overrides.js ·", JSON.stringify(ov.stats), "· stamp", ov.stamp);

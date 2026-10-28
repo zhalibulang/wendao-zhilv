@@ -2858,7 +2858,9 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
   const _secSerialize=()=>{
     const lines=[];
     paras.forEach(p=>{
-      const raw=_htmlToText(_oralParaRaw(art,si,paOf(p),p.text)).trim();
+      /* 用 _htmlLines 而不是 _htmlToText：富文本正文可能是 <div>行</div><div>行</div>，
+         直接剥标签会把这些行拼成一行（保存后段落内的换行全丢） */
+      const raw=_htmlLines(_oralParaRaw(art,si,paOf(p),p.text)).join("\n").trim();
       if(p.head) lines.push("【小标题】"+p.head);
       if(p.note) lines.push("【小注】"+p.note);
       lines.push(raw,"");
@@ -2872,12 +2874,20 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     .split("\n");
   const _parseSecText=text=>{
     const blocks=[]; let cur=null;
-    const flush=()=>{ if(cur&&(cur.text.trim()||cur.head||cur.note)) blocks.push(cur); cur=null; };
+    const flush=()=>{ if(cur&&(String(cur.text).trim()||cur.head||cur.note)) blocks.push(cur); cur=null; };
+    /* 自愈：标记行后面粘了英文正文（历史稿在 contenteditable 里被折叠换行所致）时，
+       把「中文标签」和「英文正文」切开，否则整行会被当成小注，正文整段变灰字消失 */
+    const splitLab=v=>{
+      const s=String(v||"").trim();
+      const m=s.match(/^([\u4e00-\u9fff][\u4e00-\u9fff0-9\s，。、；：·（）()《》「」『』“”‘’—\-~～]*?)([A-Za-z“"'(][\s\S]{40,})$/);
+      if(m&&m[1].trim()) return {lab:m[1].trim(), rest:m[2].trim()};
+      return {lab:s, rest:""};
+    };
     String(text||"").split("\n").forEach(raw=>{
       const t=raw.trim();
       const mH=t.match(/^【小标题】\s?([\s\S]*)$/), mN=t.match(/^【小注】\s?([\s\S]*)$/);
-      if(mH){ cur=cur||{head:"",note:"",text:""}; cur.head=mH[1].trim(); return; }
-      if(mN){ cur=cur||{head:"",note:"",text:""}; cur.note=mN[1].trim(); return; }
+      if(mH){ const r=splitLab(mH[1]); cur=cur||{head:"",note:"",text:""}; cur.head=r.lab; if(r.rest) cur.text+=(cur.text?" ":"")+r.rest; return; }
+      if(mN){ const r=splitLab(mN[1]); cur=cur||{head:"",note:"",text:""}; cur.note=r.lab; if(r.rest) cur.text+=(cur.text?" ":"")+r.rest; return; }
       if(!t){ flush(); return; }
       cur=cur||{head:"",note:"",text:""};
       cur.text+=(cur.text?" ":"")+t;
@@ -2885,6 +2895,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     flush();
     return blocks;
   };
+  try{ window.__wdParseSecText=_parseSecText; }catch(e){}
   const _applySecEdit=eid=>{
     const blocks=_parseSecText(_htmlLines(getEdit(eid,"")).join("\n"));
     if(!blocks.length){ toast("内容为空，未应用"); return; }
@@ -3017,10 +3028,25 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
         const eid="fullsec:"+art.id+":"+si;
         /* 库里已有逐段改动（与快照原文不同）且尚无整片存档 → 先把当前稿存为首版，免得编辑器打开的是过期快照 */
         try{ const curSer=_secSerialize(); if(!hasEdit(eid)&&curSer!==String(originalOf(eid)||"").trim()) saveEdit(eid,curSer); }catch(x){}
+        /* 编辑器正文取「当前生效稿」，但已有整片存档时先过一遍解析再重组：
+           历史存档如果因为换行被折叠导致【小注】行与正文粘连，这里会顺手修好结构，
+           用户直接保存即可把正确结构固化，不必自己重敲 */
+        const serializeBlocks=bs=>bs.map(b=>{
+          const l=[]; if(b.head) l.push("【小标题】"+b.head); if(b.note) l.push("【小注】"+b.note);
+          l.push(b.text,""); return l.join("\n");
+        }).join("\n").trim();
+        let openBody=_secSerialize();
+        try{
+          const saved=getEdit(eid,"");
+          if(saved){
+            const bs=_parseSecText(_htmlLines(saved).join("\n"));
+            if(bs.length) openBody=serializeBlocks(bs);
+          }
+        }catch(x){}
         openEditor({ uid:eid, editId:eid, id:art.aid+"-S"+(si+1)+"-SEC",
           title:art.name+" 第"+(si+1)+"节 · 整体修订", cat:"full",
           catLabel:"导游词 · "+art.name+" · 段落按空行分隔；【小标题】/【小注】行可改可删；整段文字删掉即删段；保存为纯文本稿",
-          body:_secSerialize(),
+          body:openBody,
           onSaved:()=>{ try{ _applySecEdit(eid); renderRead(pass); }catch(x){ console.warn("[secedit]",x); } } });
       }catch(x){ toast("编辑器暂不可用"); }
     };
