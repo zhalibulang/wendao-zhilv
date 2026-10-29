@@ -1741,8 +1741,15 @@ function _finBtn(host, ov, u, ok, all, html){
 function _finNow(host, ov, u, ok, all){
   try{SFX.tap();}catch(e){}
   const r=unitDone(u.n, ok, all)||{};
-  const c=ov.querySelector(".close"); if(c) c.click(); else { try{ ov.remove(); }catch(e){} }
+  /* 必须直接 remove：panel 的关闭按钮只绑了 onpointerdown，c.click() 触发的是 click，
+     不会关掉旧面板——旧面板留在屏上、总结面板叠在它上面，用户就在两个面板之间来回循环。 */
+  _closePanel(ov);
   _taskSummary(u, ok, all, r);
+}
+/* 统一关闭 panel：移除节点并撤掉 body 遮罩态（panel 内的 MutationObserver 也会补一次，这里主动做更稳） */
+function _closePanel(ov){
+  try{ if(ov&&ov.remove) ov.remove(); }catch(e){}
+  try{ if(!document.querySelector(".ov")) document.body.classList.remove("ov-open"); }catch(e){}
 }
 /* —— 任务开篇预告（旧版流程节点①）—— */
 function _taskPreview(u){
@@ -3516,7 +3523,7 @@ function runDynInterpUnit(u){
       host.innerHTML='<div class="note">这次没能出题（网络或密钥问题）。可以先做别的任务，稍后再来——口译任务每天都会重试出新。</div>'
         +'<div style="margin-top:10px"><button class="btn primary" id="v25fin" type="button">先跳过</button></div>';
       const b=ov.querySelector("#v25fin");
-      if(b) b.onpointerdown=()=>{ try{SFX.tap();}catch(e){} const c=ov.querySelector(".close"); if(c) c.click(); };
+      if(b) b.onpointerdown=()=>{ try{SFX.tap();}catch(e){} _closePanel(ov); };
       return;
     }
     let i=0;
