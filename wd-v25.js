@@ -1734,11 +1734,15 @@ const _QNORM=s=>String(s).replace(/[\s，。、；：""''！？（）()·—…�
 function _finBtn(host, ov, u, ok, all, html){
   host.innerHTML=html+'<div style="margin-top:10px"><button class="btn primary" id="v25fin" type="button">完成单元</button></div>';
   const b=ov.querySelector("#v25fin");
-  if(b) b.onpointerdown=()=>{ try{SFX.tap();}catch(e){}
-    const r=unitDone(u.n, ok, all)||{};
-    const c=ov.querySelector(".close"); if(c) c.click();
-    _taskSummary(u, ok, all, r);
-  };
+  if(b) b.onpointerdown=()=>{ _finNow(host, ov, u, ok, all); };
+}
+/* 立即结算单元：不依赖流程是否走到最后一步。
+   语音识别不可用、或用户不想逐句走完时，用它收尾（手动完成）。 */
+function _finNow(host, ov, u, ok, all){
+  try{SFX.tap();}catch(e){}
+  const r=unitDone(u.n, ok, all)||{};
+  const c=ov.querySelector(".close"); if(c) c.click(); else { try{ ov.remove(); }catch(e){} }
+  _taskSummary(u, ok, all, r);
 }
 /* —— 任务开篇预告（旧版流程节点①）—— */
 function _taskPreview(u){
@@ -3006,7 +3010,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       armed=false;
       if(!rec) return false;
       try{ rec.stop(); }catch(e){}
-      rec=null; micRecStop(); asrBtn.textContent="🎙 重说";
+      rec=null; micRecStop(); asrBtn.textContent="🎙 语音输入";
       if(onDur) onDur((Date.now()-t0)/1000);
       say("已停止录音——整段识别完会直接填进输入框");
       return true;
@@ -3026,7 +3030,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
         rec=asrSingleShot(lang,txt=>{
           ta.value=String(txt||"").trim();
           say("已识别——对照一下，漏词/多词会标色");
-        },e=>{ rec=null; asrBtn.textContent="🎙 重说"; say(e); },
+        },e=>{ rec=null; asrBtn.textContent="🎙 语音输入"; say(e); },
         got=>{ if(!got&&!String(ta.value||"").trim()) say("没听清——可回放核对，或直接在框里改写"); },
         alive||(()=>ta.isConnected));
       });
@@ -3037,7 +3041,22 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
   const killAutoTts=()=>{ if(autoTtsT){ clearTimeout(autoTtsT); autoTtsT=null; } };
   const stopVoice=()=>{ killAutoTts(); if(liveRec){ try{ liveRec.stop(); }catch(e){} liveRec=null; } ttsStop(); };
   const allPlain=()=>paras.map(p=>_htmlToText(_oralParaRaw(art,si,paOf(p),p.text))).join(" ");
-  const bar=(step,count,extra)=>'<div class="v25rd-bar"><span class="v25rd-step">'+step+'</span><span class="v25rd-count">'+esc(count)+'</span><span class="v25rd-rule"></span>'+(extra||"")+'</div>';
+  const bar=(step,count,extra)=>'<div class="v25rd-bar"><span class="v25rd-step">'+step+'</span><span class="v25rd-count">'+esc(count)+'</span><span class="v25rd-rule"></span>'+(extra||"")+'<button class="btn sm" data-v25now="1" type="button" style="margin-left:auto" title="跳过剩余环节，直接完成本节">✓ 完成本节</button></div>';
+  /* 五步流程的「完成本节」：五步各自重建 host.innerHTML，事件委托挂在 host 上一直有效。
+     语音识别不可用或不想逐句走完时，一键收尾，不必被流程卡死。 */
+  if(!host.__v25NowBound){
+    host.__v25NowBound=1;
+    host.addEventListener("click",e=>{
+      const b=e.target&&e.target.closest&&e.target.closest("[data-v25now]");
+      if(!b) return;
+      e.preventDefault(); e.stopPropagation();
+      try{SFX.tap();}catch(x){}
+      if(!confirm("跳过剩余环节，直接完成本节？")) return;
+      stopVoice();
+      try{ done(); }catch(x){ console.warn("[quickdone]",x); }
+      const fb=host.querySelector("#v25fin"); if(fb&&fb.onpointerdown) fb.onpointerdown();
+    });
+  }
   const head=()=>'<div class="v25rd-head"><h3 class="v25rd-title">'+esc(name)+'</h3>'
     +'<span class="v25rd-count" style="font-size:12px">'+esc(sec.h||"")+' · '+sents.length+' 句</span></div>';
 
@@ -3299,10 +3318,10 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       +head()
       +'<div class="v25sent-no">第 '+(i+1)+' 句 · 先遮盖原文，复述完再点开对照</div>'
       +_oralCover(esc(sn.text))
-      +'<textarea data-sp-patch="1" id="v25said" rows="3" placeholder="复述本句（点「🎙 开始说」，也可直接打字）" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;line-height:1.8;background:rgba(255,250,240,.5);resize:vertical"></textarea>'
+      +'<textarea data-sp-patch="1" id="v25said" rows="3" placeholder="复述本句（点「🎙 语音输入」开口说，也可直接打字）" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;line-height:1.8;background:rgba(255,250,240,.5);resize:vertical"></textarea>'
       +'<div id="v25rstat" style="font-size:12px;color:var(--dim);margin:4px 0 0;min-height:16px"></div>'
       +'<div class="v25rd-acts">'
-        +'<button class="btn sm" id="v25oasr" type="button">🎙 开始说</button>'
+        +'<button class="btn sm" id="v25oasr" type="button">🎙 语音输入</button>'
         +'<button class="btn sm primary" id="v25ook" type="button">完成本句，查看对照</button>'
         +'<button class="btn sm" id="v25oskipone" type="button">跳过本句</button>'
       +'</div>'
@@ -3364,7 +3383,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       +'<textarea data-sp-patch="1" id="v25said" rows="4" placeholder="整段复述上屏，也可直接打字" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;line-height:1.8;background:rgba(255,250,240,.5);resize:vertical"></textarea>'
       +'<div id="v25rstat" style="font-size:12px;color:var(--dim);margin:4px 0 0;min-height:16px"></div>'
       +'<div class="v25rd-acts">'
-        +'<button class="btn sm" id="v25oasr" type="button">🎙 开始说</button>'
+        +'<button class="btn sm" id="v25oasr" type="button">🎙 语音输入</button>'
         +'<button class="btn sm primary" id="v25ook" type="button">完成复述，查看对照</button>'
         +'<button class="btn sm" id="v25opeek" type="button">👁 偷看原文</button>'
       +'</div>'

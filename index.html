@@ -882,7 +882,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v67"></script>
 <script src="wd-planner.js?v32"></script>
-<script src="wd-v25.js?v121"></script>
+<script src="wd-v25.js?v122"></script>
 <script>
 
 "use strict";
@@ -3700,6 +3700,7 @@ function openQuest(qid){
       <span style="margin-right:auto;color:var(--gold);font-size:13px">${readonly?"<span style='color:var(--ok)'>✓ 已完成 · 回看模式（可复读/录音）</span>":""}</span>
       <button class="btn ghost" id="qxBack" type="button">← 返回</button>
       ${readonly?"":`<button class="btn sm ghost" id="qxSkip" type="button" title="略过本任务，记入待消印集合日后可回顾">跳过 ⏭</button>`}
+      ${readonly?"":`<button class="btn sm" id="qxManual" type="button" title="不进入流程，直接把本任务记作已完成">✓ 手动完成</button>`}
       <button class="btn" id="qx2">${readonly?"关闭":"暂离"}</button>
       <button class="btn primary" id="finBtn" style="display:none" disabled>通过试炼以完成</button>
     </div>
@@ -5654,6 +5655,13 @@ function openQuest(qid){
   /* FIX-P3：返回键=严格单层 backOne；跳过按钮=略过任务进待消印集合（视作已做完，给奖励解锁进度，标记待复习） */
   const qxBack=$("#qxBack",ov); if(qxBack) qxBack.onpointerdown=backOne;
   const qxSkip=$("#qxSkip",ov); if(qxSkip) qxSkip.onpointerdown=()=>{ SFX.tap(); st.skipped[q.id]=true; record("略过任务","「"+q.name+"」已略过，记入待消印集合，日后可回顾"); settleQuest(q,false,ov); };
+  /* 手动完成：不进入任何流程，直接按正常完成结算。
+     语音识别/网络不可用导致流程卡住时，用它收尾，保证任务不会被永久卡成"进行中"。 */
+  const qxManual=$("#qxManual",ov); if(qxManual) qxManual.onpointerdown=()=>{
+    SFX.tap();
+    if(!confirm("直接标记「"+q.name+"」为已完成？（跳过剩余环节）")) return;
+    settleQuest(q,false,ov);
+  };
   if(finBtn) finBtn.onpointerdown=()=>{ settleQuest(q,quizPerfect,ov); };
 }
 /* ---------- 任务结算（finBtn 抽取为全局函数，便于测试与复用） ---------- */
