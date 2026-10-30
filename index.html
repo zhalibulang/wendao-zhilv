@@ -882,7 +882,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v67"></script>
 <script src="wd-planner.js?v32"></script>
-<script src="wd-v25.js?v123"></script>
+<script src="wd-v25.js?v124"></script>
 <script>
 
 "use strict";
@@ -5967,6 +5967,12 @@ function rollbackEdit(id, index){
   syncLibText(id, text);
   save();
 }
+/* 时间戳本地化显示：版本历史/「已保存」统一用本地时区，别再拿 UTC slice 出 8 小时外的钟点 */
+function _atLocal(iso, withSec){
+  const d=new Date(iso); if(isNaN(d)) return String(iso||"").slice(0,16).replace("T"," ");
+  const p=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())+(withSec?":"+p(d.getSeconds()):"");
+}
 /* ==================== 藏经阁内容卡片池 ==================== */
 const CATEGORIES=[
   ["full","修诵卷全文"],["oral","修诵句"],["pts","考点卷"],["clue","线索册"],
@@ -6408,7 +6414,7 @@ function openEditor(card){
     if(!vers.length){ hist.innerHTML=`<div class="vitem"><span class="vat">官方原文</span><span class="vprev">（尚无校订版本）</span></div>`; return; }
     hist.innerHTML=`<div style="font-size:12px;color:var(--cyber);margin-bottom:4px">版本历史（最新在前，点「恢复」回退）</div>`+
       vers.map((v,i)=>`<div class="vitem ${i===0?"cur":""}">
-        <span class="vat">${i===0?"当前 · ":"v"+(vers.length-i)+" · "}${v.at.slice(0,16).replace("T"," ")}</span>
+        <span class="vat">${i===0?"当前 · ":"v"+(vers.length-i)+" · "}${_atLocal(v.at)}</span>
         <span class="vprev">${esc(_htmlToText(v.text).slice(0,40))}…</span>
         <button class="btn sm ghost editbtn" data-v="${i}" type="button" ${i===0?"disabled":""}>${i===0?"最新":"恢复"}</button>
       </div>`).join("");
@@ -6422,7 +6428,7 @@ function openEditor(card){
   $("#edSave",ov).onpointerdown=()=>{
     if(!valPlain()){ toast("内容不能为空"); return; }
     const html=area.innerHTML.trim();
-    if(saveEdit(card.editId, html)){ SFX.ok(); dirty=false; status.className="estatus saved"; status.textContent="● 已保存 "+new Date().toLocaleTimeString(); drawHist(); toast("新版本已存档"); if(card.onSaved)card.onSaved(); }
+    if(saveEdit(card.editId, html)){ SFX.ok(); dirty=false; status.className="estatus saved"; status.textContent="● 已保存 "+_atLocal(new Date().toISOString(), true); drawHist(); toast("新版本已存档"); if(card.onSaved)card.onSaved(); }
     else { status.className="estatus saved"; status.textContent="● 内容未变化"; }
   };
   $("#edReset",ov).onpointerdown=()=>{
@@ -11564,6 +11570,7 @@ function openOralStudy(aid){
               <div class="kitbar" style="margin:4px 0">
                 <button class="btn sm ghost" data-secread="${si}" type="button">📖 阅读（中英对照）</button>
                 <button class="btn sm ghost" data-sectest="${si}" type="button">🎙️ 分站背诵考核</button>
+                <button class="btn sm ghost" data-secedit="${si}" type="button">✎ 校订本节</button>
               </div>
               <div class="osents" data-sents="${si}">${sentenceHtml(sens,zhs)}</div>
               <div class="osectest" data-osectest="${si}" style="display:none"></div>
@@ -11634,6 +11641,18 @@ function openOralStudy(aid){
             `<span style="color:${pass?"var(--ok)":"var(--gold)"}">${pass?"✓ 分站达标":"未达标"}</span> · 文本覆盖 ${score}% · 关键词 ${checkedKws}/5${pass?"（已记录，继续下一节）":"——再读两遍后重试"}`;
           if(pass){ setTimeout(render,700); }
         };
+      };
+    });
+    /* 校订本节：直接进该节修订编辑器（与藏经阁 full: 同源，改完即回写本节文本） */
+    ov.querySelectorAll("[data-secedit]").forEach(b=>{
+      b.onpointerdown=()=>{
+        const si=+b.dataset.secedit;
+        const s=o.sections[si]; if(!s) return;
+        SFX.tap();
+        const eid="full:"+o.id+":"+si;
+        openEditor({id:eid, catLabel:"修诵卷 · "+o.name, title:o.name+" · 第"+(si+1)+"节"+(s.h?" · "+s.h:""),
+          body:getEdit(eid, String(s.text||s.en||"")), editable:true, editId:eid,
+          onSaved:()=>render()});
       };
     });
     /* 通篇背诵考核：遮全篇 + 打字对照整篇关键词，覆盖 ≥70 达标 → fullCert */

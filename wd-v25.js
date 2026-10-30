@@ -2983,6 +2983,17 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     const after2=after.map((p,i)=>Object.assign({},p,{n:before.length+np.length+i+1}));
     sec.paragraphs=before.concat(np,after2);
     sec.text=sec.paragraphs.map(x=>x.text||"").join("\n\n");
+    /* v124：整片修订镜像到 full:——藏经阁 / 修习室 / 通篇考核统一读 full:，
+       这里把修正后的整节纯文本同步过去，刷新后四处读到同一份稿，不再「改完就丢」 */
+    try{
+      if(!st.edits) st.edits={};
+      const fk="full:"+art.id+":"+si;
+      const joined=_htmlToText(sec.paragraphs.map(x=>x.text||"").join("\n\n")).trim();
+      if(joined){
+        const farr=st.edits[fk]||(st.edits[fk]=[]);
+        if(!farr.length||farr[0].text!==joined) farr.unshift({at:new Date().toISOString(), text:joined});
+      }
+    }catch(e){}
     /* 本片段的逐段旧修订已并入整片稿，清掉避免新旧两个源打架 */
     try{ Object.keys(st.edits||{}).forEach(k=>{ if(k.indexOf("fullp:"+art.id+":"+si+":")===0) delete st.edits[k]; }); save(); }catch(e){}
     resyncParas(); rebuildSents();
@@ -3025,7 +3036,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     asrBtn.onpointerdown=()=>{
       try{SFX.tap();}catch(e){}
       if(stopRec()) return;
-      ta.value=""; t0=Date.now(); reciteT0=t0;
+      ta.value=""; t0=Date.now(); reciteT0=null;   /* v124：清空即重置计时——识别不出字就不走表，避免 0 词却一直计时 */
       armed=true;
       say("录音中……整段说完点「■ 停止」");
       asrBtn.textContent="■ 停止";
@@ -3036,6 +3047,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
         if(!armed) return;
         rec=asrSingleShot(lang,txt=>{
           ta.value=String(txt||"").trim();
+          if(!reciteT0&&String(ta.value||"").trim()) reciteT0=Date.now();  /* v124：真识别到内容才开始计时 */
           say("已识别——对照一下，漏词/多词会标色");
         },e=>{ rec=null; asrBtn.textContent="🎙 语音输入"; say(e); },
         got=>{ if(!got&&!String(ta.value||"").trim()) say("没听清——可回放核对，或直接在框里改写"); },
@@ -3330,7 +3342,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       +'<div class="v25rd-acts">'
         +'<button class="btn sm" id="v25oasr" type="button">🎙 语音输入</button>'
         +'<button class="btn sm primary" id="v25ook" type="button">完成本句，查看对照</button>'
-        +'<button class="btn sm" id="v25oskipone" type="button">跳过本句</button>'
+        +'<button class="btn sm" id="v25oskipone" type="button">下一句 ⏭</button>'
       +'</div>'
       +'<div id="v25ost"></div>'
       +'<div id="v25ores"></div></div>';
@@ -3357,7 +3369,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       if(mic&&mic.busy()){ toast("还在录音——先点「■ 停止」，等整段识别完再结算"); return; }
       stopVoice();
       const said=(ta.value||"").trim();
-      if(!said){ toast("先复述一句，或点「跳过本句」"); return; }
+      if(!said){ toast("还没有内容——可以直接打字，或点「下一句」先跳过"); return; }
       /* v109：语音输入走容错对照（识别误差不算错），时长优先用录音实测时长 */
       const byVoice=speechDur>0.8;
       const cov=oralScore(said, sn.text, byVoice);
