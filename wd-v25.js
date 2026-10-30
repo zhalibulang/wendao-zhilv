@@ -3008,57 +3008,41 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
      - 停止：识别器把这一整段一次性给终稿，不再逐字回填，因此不会重复复写
      - 计时：从按下那一刻开始，停止时冻结语音时长交给语速统计（比「首次按键」更贴近真实语速） */
   const _bindReciteMic=(ta,asrBtn,stEl,lang,onDur,alive)=>{
-    let rec=null, t0=0, armed=false;
-    const ensure=()=>{
-      if(!stEl) return null;
-      if(!stEl.querySelector("#v25ostm")) stEl.innerHTML='<div id="v25ostm" style="margin-top:2px"></div><div id="v25ostp" style="margin-top:4px"></div>';
-      return {msg:stEl.querySelector("#v25ostm"), play:stEl.querySelector("#v25ostp")};
-    };
-    const say=t=>{ const e=ensure(); if(e) e.msg.textContent=t; };
-    const paintPlay=url=>{
-      const e=ensure(); if(!e) return;
-      e.play.innerHTML='<span style="opacity:.7">刚录的这一遍：</span>'
-        +'<button class="btn sm" id="v25play" type="button" style="padding:0 8px;font-size:11px">▶ 回放</button> '
-        +'<button class="btn sm" id="v25rclr" type="button" style="padding:0 8px;font-size:11px">清除录音</button>';
-      const pb=e.play.querySelector("#v25play"), cb=e.play.querySelector("#v25rclr");
-      if(pb) pb.onpointerdown=()=>{ try{ new Audio(url).play(); }catch(_){} };
-      if(cb) cb.onpointerdown=()=>{ micRecClear(); e.play.innerHTML=""; say("录音已清除"); };
-    };
+    let rec=null, t0=0;
+    const say=t=>{ if(stEl) stEl.textContent=String(t||""); };
     const stopRec=()=>{
-      armed=false;
       if(!rec) return false;
       try{ rec.stop(); }catch(e){}
-      rec=null; micRecStop(); asrBtn.textContent="🎙 语音输入";
+      rec=null; asrBtn.textContent="🎙 语音输入";
       if(onDur) onDur((Date.now()-t0)/1000);
-      say("已停止录音——整段识别完会直接填进输入框");
+      say("已停止——识别到的内容已填进输入框");
       return true;
     };
     asrBtn.onpointerdown=()=>{
       try{SFX.tap();}catch(e){}
       if(stopRec()) return;
       ta.value=""; t0=Date.now(); reciteT0=null;   /* v124：清空即重置计时——识别不出字就不走表，避免 0 词却一直计时 */
-      armed=true;
-      say("录音中……整段说完点「■ 停止」");
       asrBtn.textContent="■ 停止";
+      say("正在听……整句说完再点「■ 停止」");
       try{ ta.focus(); }catch(_){}
-      /* v116：先拿到麦克风（只弹一次授权），再启动识别。
-         以前 getUserMedia 与 SpeechRecognition 同时发请求，Chrome 首次会各弹一次权限框。 */
-      micRecStart(paintPlay, ()=>{
-        if(!armed) return;
-        rec=asrSingleShot(lang,txt=>{
-          ta.value=String(txt||"").trim();
-          if(!reciteT0&&String(ta.value||"").trim()) reciteT0=Date.now();  /* v124：真识别到内容才开始计时 */
-          say("已识别——对照一下，漏词/多词会标色");
-        },e=>{ rec=null; asrBtn.textContent="🎙 语音输入"; say(e); },
-        got=>{ if(!got&&!String(ta.value||"").trim()) say("没听清——可回放核对，或直接在框里改写"); },
-        alive||(()=>ta.isConnected));
-      });
+      /* v125：只做识别，不再同时开录音（MediaRecorder 回放）。
+         MediaRecorder 与 SpeechRecognition 会抢同一个麦克风：录音在跑时识别拿不到音频，
+         于是「录到了、却没识别成文字」。两者不能同时用——复述环节以逐字对照为主，故只识别。 */
+      rec=asrSingleShot(lang,txt=>{
+        ta.value=String(txt||"").trim();
+        if(!reciteT0&&String(ta.value||"").trim()) reciteT0=Date.now();   /* v124：真识别到内容才开始计时 */
+        say("已识别——对照一下，漏词/多词会标色");
+      },e=>{ rec=null; asrBtn.textContent="🎙 语音输入"; say(e); },
+      got=>{ if(!got&&!String(ta.value||"").trim()) say("没听清——可再试一次，或直接在框里改写"); },
+      alive||(()=>ta.isConnected));
+      if(!rec){ asrBtn.textContent="🎙 语音输入"; return; }
+      try{ rec.start(); }catch(e){ rec=null; asrBtn.textContent="🎙 语音输入"; say("启动失败——可直接打字"); }
     };
-    /* 结算前调用：还在录音就拦一下，避免「识别终稿」晚到覆盖对照结果 */
+    /* 结算前调用：还在识别就拦一下，避免「识别终稿」晚到覆盖对照结果 */
     return { busy:()=>!!rec, stop:stopRec };
   };
   const killAutoTts=()=>{ if(autoTtsT){ clearTimeout(autoTtsT); autoTtsT=null; } };
-  const stopVoice=()=>{ killAutoTts(); if(liveRec){ try{ liveRec.stop(); }catch(e){} liveRec=null; } ttsStop(); };
+  const stopVoice=()=>{ killAutoTts(); if(liveRec){ try{ liveRec.stop(); }catch(e){} liveRec=null; } try{ micRecStop(); }catch(e){} ttsStop(); };
   const allPlain=()=>paras.map(p=>_htmlToText(_oralParaRaw(art,si,paOf(p),p.text))).join(" ");
   const bar=(step,count,extra)=>'<div class="v25rd-bar"><span class="v25rd-step">'+step+'</span><span class="v25rd-count">'+esc(count)+'</span><span class="v25rd-rule"></span>'+(extra||"")+'<button class="btn sm" data-v25now="1" type="button" style="margin-left:auto" title="跳过剩余环节，直接完成本节">✓ 完成本节</button></div>';
   /* 五步流程的「完成本节」：五步各自重建 host.innerHTML，事件委托挂在 host 上一直有效。
@@ -3233,6 +3217,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
         +'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'
           +'<button class="btn sm primary" id="v25say" type="button">🎙 开始说</button>'
           +'<button class="btn sm" id="v25cmp" type="button">查看对照</button>'
+          +'<button class="btn sm" id="v25rec" type="button">🔊 录音自评</button>'
         +'</div>'
         +'<div id="v25res2" style="margin-top:8px"></div>'
       +'</div>';
@@ -3252,6 +3237,8 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       };
       sayBtn.onpointerdown=()=>{
         try{SFX.tap();}catch(e){}
+        try{ micRecStop(); }catch(_){}   /* v125：点识别时先收掉录音，避免两个都占麦克风 */
+        { const rb=box.querySelector("#v25rec"); if(rb) rb.textContent="🔊 录音自评"; }
         if(liveRec){ finishSay(); return; }
         killAutoTts(); ttsStop();
         const st=box.querySelector("#v25sayst");
@@ -3290,6 +3277,33 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
               +"。常见原因：内置识别服务连不上（需联网/被网络屏蔽），或系统未授权麦克风。可直接在框里打字。";
           }
         }catch(_){} },6000);
+      };
+      /* v125：录音自评——只听自己的发音（不识别）。
+         识别走「开始说」、录音走这里，两者共用同一支麦克风、不能同时开。 */
+      const recBtn=box.querySelector("#v25rec");
+      let recOn=false;
+      recBtn.onpointerdown=()=>{
+        try{SFX.tap();}catch(e){}
+        const st=box.querySelector("#v25sayst");
+        if(recOn){
+          recOn=false; recBtn.textContent="🔊 录音自评";
+          micRecStop();
+          if(st) st.textContent="录音已停止——下面可回放你的发音，或点「开始说」做逐字对照";
+          return;
+        }
+        recOn=true; recBtn.textContent="■ 停止录音";
+        stopVoice();   /* 停识别，避免抢麦克风 */
+        micRecStart(url=>{
+          recOn=false; recBtn.textContent="🔊 录音自评";
+          if(st) st.innerHTML='<span style="opacity:.7">你的发音：</span>'
+            +'<button class="btn sm" id="v25pl" type="button" style="padding:0 8px;font-size:11px">▶ 回放</button> '
+            +'<button class="btn sm" id="v25cl" type="button" style="padding:0 8px;font-size:11px">清除</button>';
+          const pb=st.querySelector("#v25pl"), cl=st.querySelector("#v25cl");
+          if(pb) pb.onpointerdown=()=>{ try{ new Audio(url).play(); }catch(_){} };
+          if(cl) cl.onpointerdown=()=>{ micRecClear(); if(st) st.textContent="录音已清除"; };
+        },()=>{
+          if(st) st.textContent="录音中……跟读本句，说完点「■ 停止录音」听回放";
+        });
       };
     }
     function showDiff(){
@@ -3366,7 +3380,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     host.querySelector("#v25oskipone").onpointerdown=()=>{ try{SFX.tap();}catch(e){} advance(); };
     host.querySelector("#v25ook").onpointerdown=()=>{
       try{SFX.tap();}catch(e){}
-      if(mic&&mic.busy()){ toast("还在录音——先点「■ 停止」，等整段识别完再结算"); return; }
+      if(mic&&mic.busy()){ toast("还在识别——先点「■ 停止」，等整句识别完再结算"); return; }
       stopVoice();
       const said=(ta.value||"").trim();
       if(!said){ toast("还没有内容——可以直接打字，或点「下一句」先跳过"); return; }
@@ -3430,7 +3444,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     };
     host.querySelector("#v25ook").onpointerdown=()=>{
       try{SFX.tap();}catch(e){}
-      if(mic&&mic.busy()){ toast("还在录音——先点「■ 停止」，等整段识别完再结算"); return; }
+      if(mic&&mic.busy()){ toast("还在识别——先点「■ 停止」，等整句识别完再结算"); return; }
       stopVoice();
       const said=(ta.value||"").trim();
       if(!said){ toast("先复述本节，或点「偷看原文」"); return; }
