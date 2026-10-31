@@ -590,6 +590,24 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
   .hd .stats .gametime b{font-size:14px}
 }
 
+/* ===== v127：触屏优化（iPhone / iPad）——修复 iOS 聚焦自动放大、点按目标过小 ===== */
+@media(pointer:coarse){
+  /* iOS Safari 的老毛病：输入框字号 <16px 时一聚焦就强制放大整页，
+     放大后布局错位、按钮点不中——触屏设备一律 16px 起步（!important 压过各处内联 14px） */
+  input,textarea,select,[contenteditable="true"]{font-size:16px !important}
+  /* 点按目标加大：普通按钮 ≥40px、小按钮 ≥34px、主导航 ≥44px（Apple HIG 建议 44px，紧凑布局取折中） */
+  .btn{min-height:40px}
+  .btn.sm{min-height:34px;padding:6px 12px}
+  .v25rd-bar .btn.sm{min-height:34px;padding:6px 12px}
+  .navline button{min-height:44px}
+  /* 弹窗内滚动不再带动背景页面（防滚动穿透/橡皮筋） */
+  .dlg{overscroll-behavior:contain}
+  /* 点按无灰色高亮闪块 */
+  *{-webkit-tap-highlight-color:transparent}
+  /* 底部避让 iPhone Home 条：返回按钮不被系统手势条吞掉 */
+  .ov{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+}
+
 .journey{display:flex;flex-direction:column;gap:14px;margin:12px 0}
 .jrow{display:flex;align-items:center;gap:10px}
 .jact{width:46px;flex:none;text-align:center}
@@ -882,7 +900,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v67"></script>
 <script src="wd-planner.js?v32"></script>
-<script src="wd-v25.js?v126"></script>
+<script src="wd-v25.js?v127"></script>
 <script>
 
 "use strict";

@@ -2819,7 +2819,7 @@ function wdReciteStatHtml(){
 }
 function _fmtNum(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,","); }
 function _oralCover(bodyHtml){
-  return '<div class="v25rd-paper v25cover" style="max-height:none">'
+  return '<div class="v25rd-paper v25cover v25covbox" style="max-height:none">'
     +'<div class="v25cover-txt">'+bodyHtml+'</div>'
     +'<button class="btn sm v25cover-btn" type="button" id="v25reveal">👁 点击复原原文</button>'
     +'</div>';
@@ -2830,6 +2830,24 @@ function _bindOralCover(host){
     const c=b.parentElement; if(!c) return;
     /* v126：复原 ↔ 重新遮盖 来回切换，想再看一遍原文、或再遮回去重试同一句都可以 */
     const covered=c.classList.toggle("v25cover");
+    b.textContent=covered?"👁 点击复原原文":"🙈 重新遮盖";
+  };
+}
+/* v127：重新遮盖（「再试」共用）——加回模糊层、确保「复原原文」按钮在位可点。
+   整段复述的「偷看原文」会把复原按钮整个删掉，这里要能补回来。 */
+function _recoverCover(host){
+  const c=host.querySelector(".v25covbox"); if(!c) return;
+  c.classList.add("v25cover");
+  let b=c.querySelector("#v25reveal");
+  if(!b){
+    b=document.createElement("button");
+    b.type="button"; b.className="btn sm v25cover-btn"; b.id="v25reveal";
+    c.appendChild(b);
+  }
+  b.textContent="👁 点击复原原文";
+  b.onpointerdown=(e)=>{ try{ e.preventDefault(); e.stopPropagation(); SFX.tap(); }catch(x){}
+    const p=b.parentElement; if(!p) return;
+    const covered=p.classList.toggle("v25cover");
     b.textContent=covered?"👁 点击复原原文":"🙈 重新遮盖";
   };
 }
@@ -3407,6 +3425,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
         +'<div class="v25diffbox">'+_oralDiffHtml(sn.text, said, byVoice)+'</div>'
         +(dur>0.8?wdReciteInlineHtml(w,dur):'')
         +'<div class="v25rd-acts">'
+          +'<button class="btn sm" id="v25retry" type="button">🔄 再试本句</button>'
           +'<button class="btn sm" id="v25oprev2" type="button"'+(i>0?'':' disabled')+'>◀ 上一句</button>'
           +'<button class="btn sm primary" id="v25onext" type="button">'+(i+1>=sents.length?'进入整段重读 →':'下一句 →')+'</button>'
         +'</div>';
@@ -3414,6 +3433,17 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       const actMain=host.querySelector("#v25actsMain"); if(actMain) actMain.style.display="none";
       host.querySelector("#v25onext").onpointerdown=()=>{ try{SFX.tap();}catch(e){} advance(); };
       const p2=host.querySelector("#v25oprev2"); if(p2) p2.onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(i>0){ stopVoice(); idx=i-1; renderSentRetell(idx); } };
+      /* v127：再试本句——同一句可反复练：清对照结果、重新遮盖原文、恢复语音/完成按钮 */
+      const rt=host.querySelector("#v25retry");
+      if(rt) rt.onpointerdown=()=>{ try{SFX.tap();}catch(e){}
+        host.querySelector("#v25ores").innerHTML="";
+        const am=host.querySelector("#v25actsMain"); if(am) am.style.display="flex";
+        ta.value=""; reciteT0=null; speechDur=0;
+        if(stEl) stEl.textContent="";
+        const rs=host.querySelector("#v25rstat"); if(rs) rs.textContent="";
+        _recoverCover(host);
+        try{ ta.focus(); }catch(_){}
+      };
     };
   }
 
@@ -3475,8 +3505,21 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
           +(byVoice?'<span style="opacity:.6"> · 语音输入已按识别容错计</span>':'')+'</div>'
         +'<div class="v25diffbox">'+_oralDiffHtml(allPlain(), said, byVoice)+'</div>'
         +(dur>0.8?wdReciteInlineHtml(w,dur):'')
-        +'<div class="v25rd-acts"><button class="btn sm primary" id="v25ofin" type="button">完成本节 →</button></div>';
+        +'<div class="v25rd-acts">'
+          +'<button class="btn sm" id="v25retryW" type="button">🔄 再试整段</button>'
+          +'<button class="btn sm primary" id="v25ofin" type="button">完成本节 →</button>'
+        +'</div>';
       host.querySelector("#v25ofin").onpointerdown=()=>{ try{SFX.tap();}catch(e){} done(); };
+      /* v127：再试整段——整节可反复练：清对照、重新遮盖，语音/完成按钮本就可见 */
+      const rw=host.querySelector("#v25retryW");
+      if(rw) rw.onpointerdown=()=>{ try{SFX.tap();}catch(e){}
+        host.querySelector("#v25ores").innerHTML="";
+        ta.value=""; reciteT0=null; speechDur=0;
+        if(stEl) stEl.textContent="";
+        const rs=host.querySelector("#v25rstat"); if(rs) rs.textContent="";
+        _recoverCover(host);
+        try{ ta.focus(); }catch(_){}
+      };
     };
   }
 
