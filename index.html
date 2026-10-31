@@ -900,7 +900,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v67"></script>
 <script src="wd-planner.js?v32"></script>
-<script src="wd-v25.js?v129"></script>
+<script src="wd-v25.js?v130"></script>
 <script>
 
 "use strict";
@@ -944,7 +944,9 @@ function rich(s){
         const keep=(stl.match(/(?:^|;)\s*(?:width|height|float|margin[^:]*)\s*:[^;]+/gi)||[]).join(";");
         return '<img src="'+src.replace(/["'<>]/g,"")+'" class="'+cls.replace(/["'<>]/g,"")+'"'+(keep?' style="'+keep.replace(/["'<>]/g,"")+'"':"")+' alt="笔记配图">'; }
       if(name==="span"){ const stl=(tag.match(/style\s*=\s*(?:"([^"]*)"|'([^']*)')/i)||[]).slice(1).filter(Boolean)[0]||"";
-        const keep=(stl.match(/(?:^|;)\s*(?:color|background-color|background|font-weight|font-size|text-align|text-decoration(?:-color)?|letter-spacing)\s*:[^;]+/gi)||[]).join(";");
+        /* v130：span 白名单补 font-style——Chrome 开启 styleWithCSS 后斜体生成
+           <span style="font-style:italic">，旧正则漏了 font-style，斜体出编辑器就被剥掉 */
+        const keep=(stl.match(/(?:^|;)\s*(?:color|background-color|background|font-weight|font-style|font-size|text-align|text-decoration(?:-color)?|letter-spacing)\s*:[^;]+/gi)||[]).join(";");
         return close?'</span>':'<span style="'+keep.replace(/["'<>]/g,"")+'">'; }
       if(name==="font"){ /* Safari 未开 styleWithCSS 时 execCommand 生成 <font color/face>：转成 span 样式保住颜色 */
         if(close) return '</span>';
@@ -5979,7 +5981,13 @@ function syncLibText(id, text){
           else if(ps.length>1) s.paragraphs=ps.map((t,i)=>({n:i+1, text:t}));
           else if(ps.length===1&&s.paragraphs.length===1) s.paragraphs=[{n:1, text:ps[0]}];
         } } }
-    else if(parts[0]==="fullp"){ const o=(D.oralFull||[]).find(p=>p.id===parts[1]); const s=o&&o.sections[+parts[2]]; const p=s&&Array.isArray(s.paragraphs)&&s.paragraphs[+parts[3]]; if(p) p.text=text;
+    else if(parts[0]==="fullp"){ const o=(D.oralFull||[]).find(p=>p.id===parts[1]); const s=o&&o.sections[+parts[2]]; const p=s&&Array.isArray(s.paragraphs)&&s.paragraphs[+parts[3]];
+      /* v130：段级改文用存档原文（含图/斜体/字色）——saveEdit 传来的 text 已被 _htmlToText
+         剥成纯文本，图片和样式若写进 D.oralFull，藏经阁/修习室读 s.text 就看不到图、删不掉图。
+         存档原文在 saveEdit 里已先 unshift，这里从 st.edits 取回原样。 */
+      let richText=text;
+      try{ const a=(st.edits&&st.edits[id]); if(a&&a.length) richText=a[0].text; }catch(e){}
+      if(p) p.text=richText;
       /* 段级改文 → 回写整节 text（修习室/导出仍读 s.text） */
       if(s&&Array.isArray(s.paragraphs)){ const joined=s.paragraphs.map(x=>x.text||"").join("\n\n"); if(s.text!==undefined) s.text=joined; } }
     else if(parts[0]==="clue"){ const c=(D.clues||[]).find(x=>x.id===parts[1]); if(c) c.text=text; }

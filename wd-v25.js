@@ -3250,8 +3250,14 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       stopVoice();
       try{
         const eid="fullsec:"+art.id+":"+si;
-        /* 库里已有逐段改动（与快照原文不同）且尚无整片存档 → 先把当前稿存为首版，免得编辑器打开的是过期快照 */
-        try{ const curSer=_secSerialize(); if(!hasEdit(eid)&&curSer!==String(originalOf(eid)||"").trim()) saveEdit(eid,curSer); }catch(x){}
+        /* 库里已有逐段改动（与快照原文不同）且尚无整片存档 → 先把当前稿存为首版，免得编辑器打开的是过期快照
+           v130：有逐段(fullp)改动（如插图/斜体/字色）时，一律把实况刷新进 fullsec——
+           openEditor 读的是 st.edits[fullsec]，若不刷新，fullp 里后来插的图/样式在编辑器里看不到、也删不掉。 */
+        try{
+          const curSer=_secSerialize();
+          const hasFullp=Object.keys(st.edits||{}).some(k=>k.indexOf("fullp:"+art.id+":"+si+":")===0);
+          if(hasFullp || (!hasEdit(eid)&&curSer!==String(originalOf(eid)||"").trim())){ saveEdit(eid,curSer); }
+        }catch(x){}
         /* 编辑器正文取「当前生效稿」，但已有整片存档时先过一遍解析再重组：
            历史存档如果因为换行被折叠导致【小注】行与正文粘连，这里会顺手修好结构，
            用户直接保存即可把正确结构固化，不必自己重敲 */
