@@ -2316,11 +2316,26 @@ function drawReciteGroup(host, ps, next){
     return { p:p, oralId:null, text:t, disp:_pointDisp(p), body:zh, zh:"" };
   });
   const whole=en ? fulls.map(f=>f.body).join(" ") : fulls.map(f=>f.body).join("\n");
-  /* 合并分句（带所属卡下标） */
+  /* 合并分句（带所属卡下标）v129：句源优先富文本校订版（与全段阅读展示同一份稿），
+     纯文本坐标切句 + 按句切片还原样式；无校订/纯文本走原路径 */
   const sents=[];
   fulls.forEach((f,pi)=>{
-    (en ? _oralSplitSent(f.body) : f.body.split(/(?<=[。！？])/))
-      .map(s=>s.trim()).filter(s=>s.length>1).forEach(s=>sents.push({s:s, pi:pi}));
+    let sBody=f.body, sRich=null;
+    try{
+      if(f.disp&&/<[a-z][\s\S]*?>/i.test(String(f.disp))){
+        const rr=rich(f.disp);
+        const sp2=/<img/i.test(rr)&&typeof splitPointImgs==="function"? splitPointImgs(rr):{body:rr,imgs:[]};
+        sRich={html:sp2.body, plain:_htmlPlainAligned(sp2.body)};
+        sBody=sRich.plain;
+      }
+    }catch(e){}
+    const rawPieces=en? _oralSplitSent(sBody) : String(sBody).split(/(?<=[。！？])/);
+    let cursor=0;
+    rawPieces.map(s=>s.trim()).filter(s=>s.length>1).forEach(s=>{
+      let h="";
+      if(sRich){ let at=sRich.plain.indexOf(s,cursor); if(at<0) at=cursor; cursor=at+s.length; h=_htmlSlicePlain(sRich.html,at,at+s.length); }
+      sents.push({s:s, pi:pi, html:h});
+    });
   });
   /* 阶段① 全段阅读：全部段落一次铺开（含中文对照），打字机逐段连打，点击正文/按钮一键展开全文 —— 统一用 v25rd 卡片 + 图文分离 */
   function renderRead(){
@@ -2440,7 +2455,10 @@ function drawReciteGroup(host, ps, next){
         +'<div id="v25shost" style="margin-top:4px"></div>'
       +'</div>';
     const se=host.querySelector("#v25sent");
-    if(se){ const sk=_twType(se, it.s); se.style.cursor="pointer"; se.title="点击立即显示"; se.onpointerdown=(ev)=>{ try{ if(ev&&ev.target){ const t=ev.target; if(/BUTTON|INPUT|TEXTAREA|A|SELECT/i.test(t.tagName)) return; } SFX.tap();}catch(e){} sk&&sk(); }; }
+    /* v129：句子带样式显示——富文本切片净化后交给打字机（打纯文本、完成换带样式正文） */
+    if(se){ const itBody=it.html? rich(it.html):esc(it.s);
+      const sk=_oralType(se,{plain:it.s, body:itBody, isHtml:!!it.html});
+      se.style.cursor="pointer"; se.title="点击立即显示"; se.onpointerdown=(ev)=>{ try{ if(ev&&ev.target){ const t=ev.target; if(/BUTTON|INPUT|TEXTAREA|A|SELECT/i.test(t.tagName)) return; } SFX.tap();}catch(e){} sk&&sk(); }; }
     bindTtsCtl(host);
     host.querySelector("#v25stts").onpointerdown=()=>{ try{SFX.tap();}catch(e){} ttsSpeak(it.s, lang, se); };
     /* 自动朗读：进入句级页即播报本句（已切页时旧节点脱离，不再补播） */
@@ -2662,6 +2680,83 @@ function _oralSplitSent(text){
   }
   return merged;
 }
+/* ==================== v129：句子级富文本切片 ====================
+   分句精读/复述的句子是从「纯文本」切出来的，直接 esc 显示会把段落里的
+   加粗/字色丢掉。这里建立一套「纯文本坐标」：
+   - 行内标签不占坐标，样式跟着所在句子走
+   - 块级标签（br/div/p…）与连续空白折成 1 格
+   - 实体（&nbsp; 等）按 1 个字符计
+   切句（_oralSplitSent）与切片（_htmlSlicePlain）走同一套坐标，句子边界与样式范围一一对应。 */
+function _richWalk(body,cb){
+  body=String(body||"");
+  let i=0, lastSp=false;
+  while(i<body.length){
+    const ch=body[i];
+    if(ch==="<"){
+      const gt=body.indexOf(">",i);
+      if(gt<0){ cb("text",i,i+1); i++; continue; }
+      const tag=body.slice(i,gt+1);
+      const nm=((tag.match(/^<\s*\/?\s*([a-zA-Z0-9]+)/)||[])[1]||"").toLowerCase();
+      if(nm==="br"||/^(div|p|li|h[1-6]|blockquote)$/.test(nm)){
+        if(!lastSp){ cb("space",i,i); lastSp=true; }
+      } else {
+        cb("tag",i,gt+1,nm,/^<\s*\//.test(tag));
+        /* 行内标签不重置空白折叠：a </b> b 与 a  b 折叠一致 */
+      }
+      i=gt+1; continue;
+    }
+    if(ch==="&"){
+      const sc=body.indexOf(";",i);
+      if(sc>0&&sc-i<=8){ cb("text",i,sc+1); lastSp=false; i=sc+1; continue; }
+    }
+    if(/\s/.test(ch)){
+      if(!lastSp){ cb("space",i,i+1); lastSp=true; }
+      i++; continue;
+    }
+    cb("text",i,i+1); lastSp=false; i++;
+  }
+}
+/* 与切片同一坐标的纯文本（供分句用） */
+function _htmlPlainAligned(html){
+  const ENT={"&nbsp;":" ","&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&#39;":"'"};
+  let plain="";
+  _richWalk(html,(kind,a,b)=>{
+    if(kind==="text"){ const seg=html.slice(a,b); const d=ENT[seg]; plain+=(d!=null?d:seg[0]); }
+    else if(kind==="space") plain+=" ";
+  });
+  return plain;
+}
+/* 按纯文本区间 [from,to) 截取富文本片段：区间内标签保留，
+   句前开着未闭 → 片段头部重开；句内/句前带进来未闭 → 片段尾部补闭。
+   开/闭集合取自「from、to 两个坐标点的栈快照」——直接用走完后的栈会漏掉
+   「句后才闭合」的标签（走查时已被弹出），样式就丢了。 */
+function _htmlSlicePlain(html,from,to){
+  html=String(html||"");
+  from=Math.max(0,Math.floor(from||0)); to=Math.max(from,Math.floor(to||0));
+  let out="", pLen=0;
+  const stack=[];
+  let snapFrom=null, snapTo=null;
+  _richWalk(html,(kind,a,b,nm,closing)=>{
+    if(snapFrom===null&&pLen>=from) snapFrom=stack.slice();
+    if(snapTo===null&&pLen>=to) snapTo=stack.slice();
+    if(kind==="text"){ if(pLen>=from&&pLen<to) out+=html.slice(a,b); pLen++; return; }
+    if(kind==="space"){ if(pLen>=from&&pLen<to) out+=" "; pLen++; return; }
+    if(!closing){
+      stack.push({tag:html.slice(a,b),nm:nm,at:pLen});
+      if(pLen>=from&&pLen<to) out+=html.slice(a,b);
+    } else {
+      if(pLen>=from&&pLen<to) out+=html.slice(a,b);
+      for(let k=stack.length-1;k>=0;k--){
+        if(stack[k].nm===nm){ stack.splice(k,1); break; }
+      }
+    }
+  });
+  if(snapFrom===null) snapFrom=stack.slice();
+  if(snapTo===null) snapTo=stack.slice();
+  const pre=snapFrom.map(s=>s.tag).join("");
+  const post=snapTo.slice().reverse().map(s=>"</"+s.nm+">").join("");
+  return pre+out+post;
+}
 /* 逐词/逐字对照：LCS 求最长公共子序列，缺词=原文有而没说、多词=说了但原文没有
    kind：0=一致（黑字）｜1=漏掉的原文→蓝字 .v25diff-miss｜2=多说的内容→红底删除线 .v25diff-extra
    v102：比对前统一小写并丢弃标点——「Forbidden City.」与「forbidden city」视为完全一致，
@@ -2879,7 +2974,33 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
   const rebuildSents=()=>{
     sents.length=0;
     paras.forEach(p=>{
-      _oralSplitSent(_htmlToText(_oralParaRaw(art,si,paOf(p),p.text))).forEach(t=>sents.push({ n:sents.length+1, text:t, pa:paOf(p) }));
+      const paIdx=paOf(p);
+      const raw=String(_oralParaRaw(art,si,paIdx,p.text)||"");
+      const isHtml=/<[a-z][\s\S]*?>/i.test(raw);
+      if(!isHtml){
+        _oralSplitSent(raw).forEach(t=>sents.push({ n:sents.length+1, text:t, pa:paIdx, html:"", gal:"" }));
+        return;
+      }
+      /* v129：富文本段——图先抽离（图 URL 的句点会切碎分句），正文净化；
+         纯文本坐标切句，切片还原每句的加粗/字色；对照/评分仍用 sn.text 纯文本 */
+      let body=raw, gal="";
+      try{
+        const rr=rich(raw);
+        const sp=/<img/i.test(rr)&&typeof splitPointImgs==="function"? splitPointImgs(rr) : {body:rr,imgs:[]};
+        body=sp.body;
+        gal=(sp.imgs&&sp.imgs.length&&typeof pointGalleryHtml==="function")? pointGalleryHtml(sp.imgs) : "";
+      }catch(e){}
+      const plainSrc=_htmlPlainAligned(body);
+      const pieces=_oralSplitSent(plainSrc);
+      let cursor=0, first=true;
+      pieces.forEach(t=>{
+        let at=plainSrc.indexOf(t,cursor);
+        if(at<0) at=cursor;
+        sents.push({ n:sents.length+1, text:t, pa:paIdx,
+          html:_htmlSlicePlain(body,at,at+t.length), gal:first?(gal||""):"" });
+        first=false;
+        cursor=at+t.length;
+      });
     });
   };
   rebuildSents();
@@ -2952,10 +3073,14 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     });
     return lines.join("\n").trim();
   };
-  const _htmlLines=html=>_htmlToText(String(html||"")
+  /* v129：保标签版行切分——块级边界（br / div、p 等）转换行，行内标签（b/span/字色等）原地保留。
+     旧版最后过 _htmlToText 把标签全剥光：整体修订里加的粗体/字色/配图
+     在「序列化进编辑器 → 保存 → 写回段落 → 进页重套」整条链路上被拍平成纯文本，
+     用户看到的就是「样式没有显示」。行内标签跟着正文走，样式才能活下来。 */
+  const _htmlLines=html=>String(html||"")
     .replace(/<br\s*\/?>/gi,"\n")
     .replace(/<\/(?:div|p|li|h[1-6]|blockquote)\s*>/gi,"\n")
-    .replace(/<(?:div|p|li|h[1-6]|blockquote)(?:\s[^>]*)?>/gi,""))
+    .replace(/<(?:div|p|li|h[1-6]|blockquote)(?:\s[^>]*)?>/gi,"\n")
     .split("\n");
   const _parseSecText=text=>{
     const blocks=[]; let cur=null;
@@ -3006,11 +3131,12 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     sec.paragraphs=before.concat(np,after2);
     sec.text=sec.paragraphs.map(x=>x.text||"").join("\n\n");
     /* v124：整片修订镜像到 full:——藏经阁 / 修习室 / 通篇考核统一读 full:，
-       这里把修正后的整节纯文本同步过去，刷新后四处读到同一份稿，不再「改完就丢」 */
+       刷新后四处读到同一份稿，不再「改完就丢」。
+       v129：镜像保留内联样式标签（修习室/藏经阁 v128 起富文本感知；考核侧各自剥标签评分） */
     try{
       if(!st.edits) st.edits={};
       const fk="full:"+art.id+":"+si;
-      const joined=_htmlToText(sec.paragraphs.map(x=>x.text||"").join("\n\n")).trim();
+      const joined=sec.paragraphs.map(x=>x.text||"").join("\n\n").trim();
       if(joined){
         const farr=st.edits[fk]||(st.edits[fk]=[]);
         if(!farr.length||farr[0].text!==joined) farr.unshift({at:new Date().toISOString(), text:joined});
@@ -3180,7 +3306,9 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       +bar('导游词 · 分句精读',(i+1)+' / '+sents.length+' 句','<button class="btn sm" id="v25otts" type="button">🔊 重听本句</button>'+ttsCtlHtml())
       +head()
       +'<div class="v25sent-no">第 '+(i+1)+' 句 · 第 '+(pa+1)+' 段'+(p.head?' · '+esc(p.head):'')+'</div>'
-      +'<div class="v25rd-paper" id="v25osent" style="min-height:56px;font-size:clamp(16px,4.4vw,19px)"></div>'
+      +(sn.gal
+        ? '<div class="v25spread oral">'+sn.gal+'<div class="v25rd-paper" id="v25osent" style="min-height:56px;font-size:clamp(16px,4.4vw,19px)"></div></div>'
+        : '<div class="v25rd-paper" id="v25osent" style="min-height:56px;font-size:clamp(16px,4.4vw,19px)"></div>')
       +'<div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
         +'<span style="font-size:11.5px;color:var(--dim)">本句练习方式</span>'
         +'<button class="btn sm cur" id="v25mshadow" type="button">跟读 · 看原文</button>'
@@ -3198,7 +3326,9 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       +'</div></div>';
     bindTtsCtl(host);
     const se=host.querySelector("#v25osent");
-    const sk=_oralType(se,{plain:sn.text, body:esc(sn.text), isHtml:false});
+    /* v129：句子带样式显示——富文本切片净化后交给打字机（打纯文本、完成换带样式正文） */
+    const snBody=sn.html? rich(sn.html) : esc(sn.text);
+    const sk=_oralType(se,{plain:sn.text, body:snBody, isHtml:!!sn.html});
     se.style.cursor="pointer"; se.title="点击立即显示本句";
     se.onpointerdown=()=>{ try{SFX.tap();}catch(e){} killAutoTts(); sk&&sk(); };
 
@@ -3376,7 +3506,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       +head()
       +(prevTxt?'<details class="v25ctx" style="margin-bottom:6px"><summary>上下文 · 上一句</summary><div style="padding:6px 8px;font-size:12.5px;color:var(--dim)">'+esc(prevTxt)+'</div></details>':'')
       +'<div class="v25sent-no">第 '+(i+1)+' 句 · 先遮盖原文，复述完再点开对照</div>'
-      +_oralCover(esc(sn.text))
+      +_oralCover(sn.html? rich(sn.html):esc(sn.text))
       +'<textarea data-sp-patch="1" id="v25said" rows="3" placeholder="复述本句（点「🎙 语音输入」开口说，也可直接打字）" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;line-height:1.8;background:rgba(255,250,240,.5);resize:vertical"></textarea>'
       +'<div id="v25rstat" style="font-size:12px;color:var(--dim);margin:4px 0 0;min-height:16px"></div>'
       +'<div class="v25rd-acts" id="v25actsMain">'
