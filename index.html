@@ -900,7 +900,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v67"></script>
 <script src="wd-planner.js?v32"></script>
-<script src="wd-v25.js?v127"></script>
+<script src="wd-v25.js?v128"></script>
 <script>
 
 "use strict";
@@ -982,6 +982,9 @@ function pointGalleryHtml(imgs){
 /* 高亮/显示函数共用的富文本适配：含 HTML 标签的入参视为 rich() 已净化的校订文本，直接放行；
    纯文本照旧 esc 转义。防止「esc 把用户编辑的 <b>/<span> 变成字面字符」的样式丢失。 */
 function richAware(s){ return /<[a-z][\s\S]*?>/i.test(String(s||""))? String(s) : esc(s); }
+/* 存稿原文（未经净化）的安全显示：含 HTML 先过 rich() 白名单净化再输出，纯文本照旧 esc。
+   卡片/句行直接渲染存稿（st.edits 里的原始 HTML）必须用它——直接 esc 会把加粗/字色变成字面字符 */
+function _rtRich(x){ x=String(x==null?"":x); return /<[a-z][\s\S]*?>/i.test(x)? rich(x) : esc(x); }
 /* ================= 音效引擎（Web Audio 合成，无外部文件，离线可用） ================= */
 let _ac=null;
 function ac(){ if(!_ac){ try{ _ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(_ac&&_ac.state==="suspended") _ac.resume(); return _ac; }
@@ -4088,10 +4091,12 @@ function openQuest(qid){
       if(it.qa){
         const eff=/^S5-/.test(it.id) ? getEdit("point:"+it.id, it.qa.a) : it.qa.a;
         const edited=/^S5-/.test(it.id) && hasEdit("point:"+it.id) ? '<span style="color:var(--ok);font-size:10px;margin-left:3px" title="已采用藏经阁校订版">✎</span>' : "";
+        /* v128：校订答案可能含富文本——先净化再高亮，防标签被正则改坏 */
+        const _effHl=/<[a-z][\s\S]*?>/i.test(eff)? hlKeywords(rich(eff)) : hlKeywords(eff);
         return `<div class="pt" style="border:none">
           <span class="pid"><span class="${it.star==="3"?"s3":""}">${esc(it.id)}</span></span>
           <div style="color:var(--fg)">${hlKeywords(it.qa.q)}<span style="color:var(--ink2);font-size:11px">${"★".repeat(+it.star)}</span>${edited}</div>
-          <div class="qa-ans" hidden style="margin-top:5px;color:var(--fg2)">${hlKeywords(eff)}</div>
+          <div class="qa-ans" hidden style="margin-top:5px;color:var(--fg2)">${_effHl}</div>
           <button class="btn sm ghost qa-btn" type="button" style="margin-top:6px">揭示答案</button>
         </div>`;
       }
@@ -4101,13 +4106,15 @@ function openQuest(qid){
       const hasHtml=/<[a-z][\s\S]*?>/i.test(eff);
       const hasImg=/<img/i.test(eff);
       const _sp=(hasImg&&hasHtml)? splitPointImgs(rich(eff)) : null;
-      const t=_sp? hlKeywords(_sp.body) : hlKeywords(eff);
+      /* v128：未抽图的富文本也要先过 rich() 净化——hlKeywords 的数字/书名号正则会改写标签内部 */
+      const t=_sp? hlKeywords(_sp.body) : hlKeywords(hasHtml? rich(eff) : eff);
       const gal=_sp? pointGalleryHtml(_sp.imgs) : "";
       const edited=/^S[1-5]/.test(it.id) && hasEdit("point:"+it.id) ? '<span style="color:var(--ok);font-size:10px;margin-left:3px" title="已采用藏经阁校订版">✎</span>' : "";
       /* v25-65 插页式并排：有图=图左文右（.pt-spread），无图=保持原行内结构零影响 */
       const _inner=`<span class="pid"><span class="${it.star==="3"?"s3":""}">${esc(it.id)}</span></span>${t}<span style="color:var(--ink2);font-size:11px">${"★".repeat(+it.star)}</span>${edited}`;
-      return _sp && _gal
-        ? `<div class="pt pt-spread">${_gal}<div class="pt-body">${_inner}</div></div>`
+      /* v128：修 _gal 未定义笔误——原来编辑含图时直接 ReferenceError 崩页，图也永不显示 */
+      return (_sp && gal)
+        ? `<div class="pt pt-spread">${gal}<div class="pt-body">${_inner}</div></div>`
         : `<div class="pt">${_inner}</div>`;
     }).join("");
     if(p.oral) body=renderOralBlock(p);
@@ -4467,7 +4474,7 @@ function openQuest(qid){
       </div>
     </div>`;
     return `<div class="oralrow"><div class="oralkit">${kitbar}
-      <div class="oraltxt" id="oralTxt"><span class="en" id="oralEn" style="font-size:15px">${esc(p.oral.en)}</span><span class="zh">${esc(p.oral.zh)}</span><div class="maskhint">原文已遮蔽 · 凭记忆出声复述</div></div>
+      <div class="oraltxt" id="oralTxt"><span class="en" id="oralEn" style="font-size:15px">${_rtRich(p.oral.en)}</span><span class="zh">${esc(p.oral.zh)}</span><div class="maskhint">原文已遮蔽 · 凭记忆出声复述</div></div>
       <canvas class="wave" id="waveCv"></canvas>
       <div id="recZone"><button class="btn primary recbig" id="recBtnBig" type="button">🎙️ 按住此处开始录音复述</button>
         <div class="kitbar"><button class="btn sm primary" id="recBtn" type="button">● 开始录音</button><button class="btn sm ghost" id="pauseBtn" type="button" disabled>暂停</button><button class="btn sm ghost" id="redoBtn" type="button" disabled>重录</button><span class="rectimer" id="recTimer">00:00</span></div>
@@ -6102,8 +6109,8 @@ function renderLib(){
     return `<div class="qcard3d ${cls}">
       <div class="ccat">${esc(c.catLabel)}${edited?' <span style="color:var(--ok)">· 已校订</span>':""}${msTag}${newTag}</div>
       <div class="cid">${esc(c.title)}</div>
-      <div class="cen">${esc(c.body)}</div>
-      ${c.extra?`<div class="czh">${esc(c.extra)}</div>`:""}
+      <div class="cen">${_rtRich(c.body)}</div>
+      ${c.extra?`<div class="czh">${_rtRich(c.extra)}</div>`:""}
     </div>`;
   }
   // 卡堆：当前 + 后两张预览
@@ -11547,7 +11554,7 @@ function openOralStudy(aid){
   const ov=document.createElement("div"); ov.className="ov";
   function sentenceHtml(sentences, zhMap){
     return sentences.map((sn,i)=>`<div class="osent" data-sent="${i}">
-      <div class="osent-en">${esc(sn)}</div>
+      <div class="osent-en">${richAware(sn)}</div>
       <div class="osent-zh">${esc((zhMap&&zhMap[i])||"")}</div>
       <div class="osent-act">
         <button class="btn sm ghost" data-speak="${i}" type="button">🔊 点读</button>
@@ -11572,11 +11579,17 @@ function openOralStudy(aid){
       </div>
       <div id="osSecs" style="max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
         ${o.sections.map((s,si)=>{
-          /* v58：分句导游词与校订同源——玩家改过此段则以最新校订版分句（对照/点读/遮英一致） */
-          const en=getEdit("full:"+o.id+":"+si,String(s.text||s.en||""));
+          /* v58：分句导游词与校订同源——玩家改过此段则以最新校订版分句（对照/点读/遮英一致）
+             v128：校订可能是富文本（加粗/字色）——先过 rich() 净化再显示；
+             配图先抽离（图里 URL 的句点会切碎分句），评分/关键词另用纯文本底本 */
+          const enRaw=String(getEdit("full:"+o.id+":"+si,String(s.text||s.en||"")));
+          const enHas=/<[a-z][\s\S]*?>/i.test(enRaw);
+          const en=enHas? rich(enRaw) : enRaw;
+          const sp=enHas&&/<img/i.test(en)&&typeof splitPointImgs==="function"? splitPointImgs(en) : {body:en,imgs:[]};
+          const sens=oralSplitSentences(sp.body);
+          const secGal=(sp.imgs&&sp.imgs.length&&typeof pointGalleryHtml==="function")? pointGalleryHtml(sp.imgs) : "";
           const zh=String(s.zh||"");
           const zhs=zh?zh.split(/(?<=[。！？])/).filter(Boolean):[];
-          const sens=oralSplitSentences(en);
           const passed=oralSecDone(o.aid,si);
           return `<div class="osec${passed?" passed":""}" data-sec="${si}">
             <div class="osec-head" data-sechead="${si}">
@@ -11590,6 +11603,7 @@ function openOralStudy(aid){
                 <button class="btn sm ghost" data-sectest="${si}" type="button">🎙️ 分站背诵考核</button>
                 <button class="btn sm ghost" data-secedit="${si}" type="button">✎ 校订本节</button>
               </div>
+              ${secGal}
               <div class="osents" data-sents="${si}">${sentenceHtml(sens,zhs)}</div>
               <div class="osectest" data-osectest="${si}" style="display:none"></div>
             </div></div>`;
@@ -11634,8 +11648,10 @@ function openOralStudy(aid){
       b.onpointerdown=()=>{
         const si=+b.dataset.sectest;
         const s=o.sections[si];
-        /* v58：分站考核基准同样取校订版，避免"背的是新版、考的是旧版" */
-        const en=getEdit("full:"+o.id+":"+si,String(s.text||s.en||""));
+        /* v58：分站考核基准同样取校订版，避免"背的是新版、考的是旧版"
+           v128：评分/关键词一律用纯文本——富文本标签混进 oralScore/oralKeywords 会把样式词当关键词 */
+        const enRaw=String(getEdit("full:"+o.id+":"+si,String(s.text||s.en||"")));
+        const en=/<[a-z][\s\S]*?>/i.test(enRaw)? _htmlToText(enRaw).replace(/\s+/g," ").trim() : enRaw;
         const kws=oralKeywords(en,5);
         const box=ov.querySelector('[data-osectest="'+si+'"]');
         box.style.display="block";
@@ -11737,8 +11753,8 @@ function openOralStudy(aid){
       };
     };
   }
-  /* v58：通篇考核基准=各节最新校订版逐段拼接 */
-  function en0(x){ return x.sections.map((s,si)=>getEdit("full:"+x.id+":"+si,String(s.text||s.en||""))).join(" "); }
+  /* v58：通篇考核基准=各节最新校订版逐段拼接；v128：剥掉富文本标签再评分 */
+  function en0(x){ const t=x.sections.map((s,si)=>getEdit("full:"+x.id+":"+si,String(s.text||s.en||""))).join(" "); return /<[a-z][\s\S]*?>/i.test(t)? _htmlToText(t) : t; }
   document.body.appendChild(ov); render();
 }
 function renderOralLine(){
