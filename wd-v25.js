@@ -2827,7 +2827,11 @@ function _oralCover(bodyHtml){
 function _bindOralCover(host){
   const b=host.querySelector("#v25reveal"); if(!b) return;
   b.onpointerdown=(e)=>{ try{ e.preventDefault(); e.stopPropagation(); SFX.tap(); }catch(x){}
-    const c=b.parentElement; if(c){ c.classList.remove("v25cover"); b.remove(); } };
+    const c=b.parentElement; if(!c) return;
+    /* v126：复原 ↔ 重新遮盖 来回切换，想再看一遍原文、或再遮回去重试同一句都可以 */
+    const covered=c.classList.toggle("v25cover");
+    b.textContent=covered?"👁 点击复原原文":"🙈 重新遮盖";
+  };
 }
 /* 节级任务入口：1 个单元 = 1 个节片（超长节按段落均分为 (1/n)…(n/n) 子任务） */
 function runOralSectionUnit(u){
@@ -3009,6 +3013,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
      - 计时：从按下那一刻开始，停止时冻结语音时长交给语速统计（比「首次按键」更贴近真实语速） */
   const _bindReciteMic=(ta,asrBtn,stEl,lang,onDur,alive)=>{
     let rec=null, t0=0;
+    const dft=(typeof asrDraftBinder==="function")?asrDraftBinder(ta):null;
     const say=t=>{ if(stEl) stEl.textContent=String(t||""); };
     const stopRec=()=>{
       if(!rec) return false;
@@ -3021,24 +3026,25 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     asrBtn.onpointerdown=()=>{
       try{SFX.tap();}catch(e){}
       if(stopRec()) return;
-      ta.value=""; t0=Date.now(); reciteT0=null;   /* v124：清空即重置计时——识别不出字就不走表，避免 0 词却一直计时 */
+      ta.value=""; t0=Date.now(); reciteT0=null;
+      if(dft&&dft.reset) dft.reset();
       asrBtn.textContent="■ 停止";
-      say("正在听……整句说完再点「■ 停止」");
+      say("正在听……你说的词会边听边实时上屏");
       try{ ta.focus(); }catch(_){}
-      /* v125：只做识别，不再同时开录音（MediaRecorder 回放）。
-         MediaRecorder 与 SpeechRecognition 会抢同一个麦克风：录音在跑时识别拿不到音频，
-         于是「录到了、却没识别成文字」。两者不能同时用——复述环节以逐字对照为主，故只识别。 */
-      rec=asrSingleShot(lang,txt=>{
-        ta.value=String(txt||"").trim();
-        if(!reciteT0&&String(ta.value||"").trim()) reciteT0=Date.now();   /* v124：真识别到内容才开始计时 */
-        say("已识别——对照一下，漏词/多词会标色");
+      /* v126：改用 asrOnce 实时识别（同分句阅读）——一边说一边逐词上屏，
+         不再是「说完整句才一次性出结果」，也不再「没说完就停」。
+         实时草稿上屏会触发 input 事件，计时从第一个词落地就开始，而不是等输入结束才打点。 */
+      rec=asrOnce(lang,(fin,inter)=>{
+        if(dft) dft.feed(fin,inter);
+        if(String(ta.value||"").trim() && !reciteT0) reciteT0=Date.now();
+        const cur=String(ta.value||"").trim();
+        say(cur?("已听到："+cur.slice(-40)):"正在听……");
       },e=>{ rec=null; asrBtn.textContent="🎙 语音输入"; say(e); },
-      got=>{ if(!got&&!String(ta.value||"").trim()) say("没听清——可再试一次，或直接在框里改写"); },
       alive||(()=>ta.isConnected));
       if(!rec){ asrBtn.textContent="🎙 语音输入"; return; }
       try{ rec.start(); }catch(e){ rec=null; asrBtn.textContent="🎙 语音输入"; say("启动失败——可直接打字"); }
     };
-    /* 结算前调用：还在识别就拦一下，避免「识别终稿」晚到覆盖对照结果 */
+    /* 结算前调用：还在识别就拦一下，避免「识别草稿」晚到覆盖对照结果 */
     return { busy:()=>!!rec, stop:stopRec };
   };
   const killAutoTts=()=>{ if(autoTtsT){ clearTimeout(autoTtsT); autoTtsT=null; } };
@@ -3346,14 +3352,17 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     const sn=sents[i];
     stopVoice();   /* 切到复述页先收麦停朗读，免得盖住口述 */
     reciteT0=null; /* 每句重新计时，避免上一句没结算就把时间带过来 */
+    const prevTxt=i>0?(sents[i-1]?sents[i-1].text:""):"";
     host.innerHTML='<div class="v25rd">'
       +bar('导游词 · 分句复述',(i+1)+' / '+sents.length+' 句','')
       +head()
+      +(prevTxt?'<details class="v25ctx" style="margin-bottom:6px"><summary>上下文 · 上一句</summary><div style="padding:6px 8px;font-size:12.5px;color:var(--dim)">'+esc(prevTxt)+'</div></details>':'')
       +'<div class="v25sent-no">第 '+(i+1)+' 句 · 先遮盖原文，复述完再点开对照</div>'
       +_oralCover(esc(sn.text))
       +'<textarea data-sp-patch="1" id="v25said" rows="3" placeholder="复述本句（点「🎙 语音输入」开口说，也可直接打字）" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;line-height:1.8;background:rgba(255,250,240,.5);resize:vertical"></textarea>'
       +'<div id="v25rstat" style="font-size:12px;color:var(--dim);margin:4px 0 0;min-height:16px"></div>'
-      +'<div class="v25rd-acts">'
+      +'<div class="v25rd-acts" id="v25actsMain">'
+        +'<button class="btn sm" id="v25oprev" type="button"'+(i>0?'':' disabled')+'>◀ 上一句</button>'
         +'<button class="btn sm" id="v25oasr" type="button">🎙 语音输入</button>'
         +'<button class="btn sm primary" id="v25ook" type="button">完成本句，查看对照</button>'
         +'<button class="btn sm" id="v25oskipone" type="button">下一句 ⏭</button>'
@@ -3378,6 +3387,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     let speechDur=0;
     const mic=_bindReciteMic(ta,asrBtn,stEl,'en-US',d=>{ speechDur=d; },()=>ta.isConnected&&host.isConnected);
     host.querySelector("#v25oskipone").onpointerdown=()=>{ try{SFX.tap();}catch(e){} advance(); };
+    host.querySelector("#v25oprev").onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(i>0){ stopVoice(); idx=i-1; renderSentRetell(idx); } };
     host.querySelector("#v25ook").onpointerdown=()=>{
       try{SFX.tap();}catch(e){}
       if(mic&&mic.busy()){ toast("还在识别——先点「■ 停止」，等整句识别完再结算"); return; }
@@ -3396,8 +3406,14 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
           +(byVoice?'<span style="opacity:.6"> · 语音输入已按识别容错计</span>':'')+'</div>'
         +'<div class="v25diffbox">'+_oralDiffHtml(sn.text, said, byVoice)+'</div>'
         +(dur>0.8?wdReciteInlineHtml(w,dur):'')
-        +'<div class="v25rd-acts"><button class="btn sm primary" id="v25onext" type="button">'+(i+1>=sents.length?'进入整段重读 →':'下一句 →')+'</button></div>';
+        +'<div class="v25rd-acts">'
+          +'<button class="btn sm" id="v25oprev2" type="button"'+(i>0?'':' disabled')+'>◀ 上一句</button>'
+          +'<button class="btn sm primary" id="v25onext" type="button">'+(i+1>=sents.length?'进入整段重读 →':'下一句 →')+'</button>'
+        +'</div>';
+      /* v126：结算后收起中排按钮（语音/完成/下一句），避免出现两个「下一句」挤在一起 */
+      const actMain=host.querySelector("#v25actsMain"); if(actMain) actMain.style.display="none";
       host.querySelector("#v25onext").onpointerdown=()=>{ try{SFX.tap();}catch(e){} advance(); };
+      const p2=host.querySelector("#v25oprev2"); if(p2) p2.onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(i>0){ stopVoice(); idx=i-1; renderSentRetell(idx); } };
     };
   }
 
