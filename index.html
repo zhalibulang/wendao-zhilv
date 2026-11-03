@@ -896,7 +896,7 @@ body.ov-open #oralFab{display:none}
 <body>
 <div id="game"></div>
 <div class="toasts" id="toasts"></div>
-<script src="game-data.js?v53"></script>
+<script src="game-data.js?v54"></script>
 <script src="oral-full-gug.js?v4"></script>
 <script src="exam-2026-data.js?v54"></script>
 <script src="exam-2026-data-ext.js?v2"></script>
@@ -1389,7 +1389,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v85";
+const BUILD_VERSION="v86";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -3726,8 +3726,8 @@ function twBindGlossary(host){
    - 一处开关：把 WD_GLOSS_AUTO 改成 false，即回到「只认手写 .gl」的旧行为（日后要改手动只改这一处）。 */
 const WD_GLOSS_AUTO=true;
 const WD_GLOSS_MAX=5;
-const WD_GLOSS_SCOPE=".book,.osec-body,.cen,.czh";
-const WD_GLOSS_SKIP="button,a,h1,h2,h3,h4,h5,h6,input,textarea,select,label,summary,nav,.bp,.osec-head,.kitbar,.ccat,.cid,.pager,.cardpos,.fliphint,.tstate,.gl,.gcard,.navline,.hd";
+const WD_GLOSS_SCOPE=".book,.osec-body,.cen,.czh,.qbub";
+const WD_GLOSS_SKIP="button,a,h1,h2,h3,h4,h5,h6,input,textarea,select,label,summary,nav,.bp,.osec-head,.kitbar,.ccat,.cid,.pager,.cardpos,.fliphint,.tstate,.gl,.gcard,.navline,.hd,.qname,.qav,.qz,.fb";
 function _glossTerms(){
   try{ return Object.keys(D.glossary||{}).filter(k=>k&&k.length>1).sort((a,b)=>b.length-a.length); }
   catch(e){ return []; }
@@ -3751,12 +3751,15 @@ function glossifyDom(root,opts){
     let n; while((n=walker.nextNode())) items.push({node:n,scope:sc});
   });
   if(!items.length) return 0;
-  const state=new Map();   /* 每个正文容器独立计数（= 每节最多 5 个） */
+  const state=new Map();   /* 计数分组：同一张卡/同一节的多个正文容器共用 5 个名额 */
   let total=0;
   items.forEach(item=>{
     const sc=item.scope;
-    let s=state.get(sc);
-    if(!s){ s={used:new Set(),n:0}; state.set(sc,s); }
+    /* v142：一张藏经阁卡有 .cen+.czh 两个正文容器、试炼气泡分 .qreplwrap，
+       按「最近的卡片/小节容器」合并计数，保证一卡/一节仍是 5 个，而不是每个容器各 5 个 */
+    const group=(opts&&opts.shared)?root:(sc.closest(".qcard3d,.osec,.qreplwrap")||sc);
+    let s=state.get(group);
+    if(!s){ s={used:new Set(),n:0}; state.set(group,s); }
     if(s.n>=max) return;
     let node=item.node;
     while(node&&s.n<max){
@@ -5660,6 +5663,13 @@ function openQuest(qid){
       if(fb&&fb.parentNode) fb.parentNode.insertBefore(wrap,fb.nextSibling);
       else host.appendChild(wrap);
     }
+    /* v142：角色对白气泡也参与术语自动匹配（只扫对白正文，.qname/.qav 等界面文案已跳过）；
+       预算按「整屏」算：先数屏上已有几处，再用剩余名额，保证一屏不超过 WD_GLOSS_MAX 个 */
+    try{
+      const used=host.querySelectorAll(".gl").length;
+      glossifyDom(wrap,{max:Math.max(0,WD_GLOSS_MAX-used)});
+      twBindGlossary(wrap);
+    }catch(e){}
     return wrap;
   }
   function praiseReply(){
@@ -5750,6 +5760,15 @@ function openQuest(qid){
         const html=quizMdLite(txt);
         if(el) el.innerHTML=html;
         saveAiExplain(z,html,"wrong");
+        /* v142：AI 讲评替换气泡正文后，术语标记已随之清空，这里按整屏剩余名额重标一次
+           （保存的是纯 html，不带 .gl 标记，回看时再按渲染规则重标） */
+        try{
+          if(wrap&&wrap.isConnected){
+            const used=host.querySelectorAll(".gl").length;
+            glossifyDom(wrap,{max:Math.max(0,WD_GLOSS_MAX-used)});
+            twBindGlossary(wrap);
+          }
+        }catch(_){}
       } else if(el&&txt){ console.warn("[aiWrongReply] 讲解无实质内容，保留本地版",txt.slice(0,60)); }
     }).catch(()=>{ /* 本地回复已在，静默 */ });
   }
@@ -5809,6 +5828,17 @@ function openQuest(qid){
     fb.appendChild(document.createTextNode(" ")); fb.appendChild(next);
     save();
   }
+
+  /* v142：试炼每屏渲染完后统一做一次术语匹配（对白气泡 .qbub 在屏上可能不止一个，
+     所以按整屏共用 5 个名额；题目/选项/按钮等界面文案不在匹配范围内） */
+  const _drawQuiz0=drawQuiz;
+  drawQuiz=function(){
+    _drawQuiz0.apply(this,arguments);
+    try{
+      glossifyDom(host,{max:WD_GLOSS_MAX,shared:true});
+      twBindGlossary(host);
+    }catch(e){}
+  };
 
   openQuestInit();
   const closeQuest=()=>{
