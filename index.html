@@ -900,7 +900,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v67"></script>
 <script src="wd-planner.js?v32"></script>
-<script src="wd-v25.js?v131"></script>
+<script src="wd-v25.js?v132"></script>
 <script>
 
 "use strict";
@@ -11088,7 +11088,26 @@ function renderSave(){
   };
   $("#imp",ov).onpointerdown=()=>$("#impF",ov).click();
   $("#impF",ov).onchange=e=>{ const f=e.target.files[0]; if(!f) return;
-    const r=new FileReader(); r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o.player) throw 0; delete o.dsKey; delete o.clauseLog; st=o; save(); toast("存档已导入"); ov.remove(); render(); }catch(err){ toast("导入失败：无效存档"); } }; r.readAsText(f); };
+    const r=new FileReader(); r.onload=()=>{
+      let o;
+      try{ o=JSON.parse(r.result); }catch(_){ toast("导入失败：不是有效 JSON 存档"); return; }
+      /* v131：校验收紧为 player 必须是字符串（拒极简/脏档），并接入与正常启动一致的 reconcile/迁移链 */
+      if(typeof o.player!=="string"){ toast("导入失败：存档已损坏或格式不符，已放弃"); return; }
+      delete o.dsKey; delete o.clauseLog;
+      let prev=null; try{ prev=JSON.parse(JSON.stringify(st)); }catch(_){ prev=null; }   /* 快照当前 state 供失败回滚 */
+      try{
+        st=o;
+        if(!st.shop||!st.shop.length) st.shop=[...D.shop];
+        reconcile(); st.day=Math.min(st.day||1,25); save();   /* 补齐新字段 + 时钟上限 */
+        migrateV25();                                          /* v25 迁移（幂等，保资产清进度） */
+        ensureClocks(); advanceNaturalDay();                   /* 单时钟对齐（离线按自然日推进） */
+        toast("存档已导入"); ov.remove(); render(); checkAch();
+      }catch(err){
+        if(prev){ try{ st=prev; save(); }catch(_){} }          /* 失败回滚，不破坏当前进度 */
+        console.warn("[import]",err);
+        toast("导入失败：存档无法正常迁移，已保留当前进度");
+      }
+    }; r.readAsText(f); };
   $("#rst",ov).onpointerdown=()=>{ if(confirm("确定重置旅程？将清空进度、NPC 记忆与错题统计（头像/称呼/密钥保留）。此操作不可撤销。")){
     /* v29（重置失效修复）：清主存档 + 全部旁路存档（NPC 记忆/错题/备份/日志），并 reload 归零各模块内存态 */
     if(window.WDMem&&WDMem.resetAll) WDMem.resetAll(); /* v29：取消防抖+内存清零，消除写回竞态 */

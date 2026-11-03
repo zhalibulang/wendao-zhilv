@@ -15,7 +15,7 @@ const PUSH_MIN_GAP=15000, PUSH_DEBOUNCE=25000, MAX_BUNDLE=950000;
 
 /* ---------- 小工具 ---------- */
 function lsGet(k){ try{return localStorage.getItem(k);}catch(e){return null;} }
-function lsSet(k,v){ try{localStorage.setItem(k,v);}catch(e){} }
+function lsSet(k,v){ try{localStorage.setItem(k,v); return true; }catch(e){ return false; } }
 function clone(o){ return o===undefined?undefined:JSON.parse(JSON.stringify(o)); }
 function b64url(buf){ const bytes=new Uint8Array(buf);
   /* 分块处理——apply 全量传参在数据较大时栈溢出（Maximum call stack size exceeded） */
@@ -325,6 +325,8 @@ const WDSync={
     const now=new Date().getTime();
     if(this._lastPushAt&&now-this._lastPushAt<PUSH_MIN_GAP) return {skipped:true};
     this._lastPushAt=now;
+    /* v131：推送前先拉取合并——弱网下上次 pull 失败会携带旧本地档，直接 PATCH 会覆盖云端真最新档 */
+    try{ await this.pullNow(); }catch(e){ /* 云端为空/超时/异常：静默继续，用本地档尽力上传 */ }
     const b=bundleFromLS();
     const ts=new Date().toISOString();
     if(b.save) b.save._syncAt=ts;
@@ -352,8 +354,10 @@ const WDSync={
     if(!remote||(!remote.save&&!remote.cfg)) throw new Error("云端档案格式异常");
     const local=bundleFromLS();
     const merged=mergeBundle(local,remote);
-    if(merged.save) lsSet(SAVE_KEY,JSON.stringify(merged.save));
-    if(merged.cfg) lsSet(CFG_KEY,JSON.stringify(merged.cfg));
+    let okW=true;
+    if(merged.save) okW=lsSet(SAVE_KEY,JSON.stringify(merged.save))&&okW;
+    if(merged.cfg) okW=lsSet(CFG_KEY,JSON.stringify(merged.cfg))&&okW;
+    if(!okW) throw new Error("本地存储写入失败（可能空间不足），合并未生效");
     /* API key：本地优先，仅当本地为空时才从远端恢复 */
     if(merged.dsKey){ const oldKey=lsGet("wdzx.dskey")||""; if(!oldKey) lsSet("wdzx.dskey",merged.dsKey); }
     c.lastPull=new Date().toISOString(); saveSyncCfg(c);

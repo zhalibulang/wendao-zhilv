@@ -1235,7 +1235,10 @@ function ensurePlan25(day, sh, stream){
                  : Promise.resolve(mockDaily25(day));
   }
   Promise.resolve(job).then(()=>{ v._planning=false; save();
-    try{ if(stream&&stream.isConnected&&typeof view!=="undefined"&&view==="v25") renderBoard(); }catch(e){} });
+    try{ if(stream&&stream.isConnected&&typeof view!=="undefined"&&view==="v25") renderBoard(); }catch(e){} })
+    .catch(e=>{ /* v131：外层兜底——内部兜底函数再抛也不卡死规划器 */
+      v._planning=false; save(); console.warn("[plan25] 排期链未捕获异常：",e);
+      try{ if(stream&&stream.isConnected&&typeof view!=="undefined"&&view==="v25") renderBoard(); }catch(_){} });
 }
 
 /* ==================== [6a] 语音朗读（TTS）——系统 TTS 三层优化 ==================== */
