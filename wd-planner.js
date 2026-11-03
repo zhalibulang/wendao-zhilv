@@ -147,7 +147,7 @@ function adaptiveInterval(tier, opts){
   return base;
 }
 /* 判断某单元今天是否到期（= 应进入今日候选池） */
-function isDueToday(unitN, done, todayDay, srsGet){
+function isDueToday(unitN, done, todayDay, srsGet, todayStr){
   /* unitN 可以是 number（单元编号） 或 unit 对象（带 n+items）—— 两种形态都支持 */
   const u=(typeof unitN==="object" && unitN!==null)?unitN:null;
   const key=u ? unitN.n : unitN;
@@ -161,7 +161,18 @@ function isDueToday(unitN, done, todayDay, srsGet){
       const r=srsGet?.(it.id);
       if(r){
         if(r.tier>maxTier) maxTier=r.tier;
-        if(r.pending||((r.lapses||0)>0 && (todayDay-(r.lastAt||last))<=2)) lapse=true;
+        /* v135：SRS lastAt 是日期串（srsToday），todayDay 是游戏日数字，两者直接相减得 NaN，
+           「近期犯错 2 日内回潮」永不生效——按日期串统一比 todayStr 与 lastAt 的天数差 */
+        const recentLapse=(()=>{
+          const la=r.lastAt;
+          if(typeof la==="string"&&la){
+            if(typeof todayStr==="string"&&todayStr) return Math.round((new Date(todayStr)-new Date(la))/864e5)<=2;
+            return false;
+          }
+          const n=(typeof la==="number"&&!isNaN(la))?la:last;
+          return (todayDay-n)<=2;
+        })();
+        if(r.pending||((r.lapses||0)>0 && recentLapse)) lapse=true;
         sumG += r.tier>=3?2:r.tier>=2?1:0; cnt++;
       }
     });
@@ -296,9 +307,11 @@ return {
     const subjs=opts.quizStats||{};
     const srsGet=opts.srsGet;
     const masters=subjMastery(allUnits, done, { srsGet, quizStats:subjs });
+    const _masterTot=Object.values(masters).reduce((a,x)=>a+(x.tot||0),0);
+    const _masterAvg=_masterTot>0? Object.values(masters).reduce((a,x)=>a+(x.rate||0)*(x.tot||0),0)/_masterTot : 0;
     const lagging=Object.keys(masters).filter(k=>{
-      const m=masters[k]; const avg=Object.values(masters).reduce((a,x)=>a+(x.rate||0)*x.tot,0)/Object.values(masters).reduce((a,x)=>a+x.tot,1);
-      return (m.rate||0)<=avg-0.12 && m.done<m.tot;
+      const m=masters[k];
+      return (m.rate||0)<=_masterAvg-0.12 && m.done<m.tot;
     });
     return { masters, lagging };
   }

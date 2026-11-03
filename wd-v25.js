@@ -829,7 +829,7 @@ function sheet(day){
       let due=false;
       if(PLAN){
         /* WD_PLANNER：自适应间隔——与 SRS 档位对齐，表现差压缩、表现好拉长 */
-        if(PLAN.isDueToday(u0, done, day, _srsGet)) due=true;
+        if(PLAN.isDueToday(u0, done, day, _srsGet, todayStr())) due=true;
         else if(dt>=15) due=true;  /* >15 天强制到期 */
       } else {
         due=[1,2,4,7,15].includes(dt)||dt>15;  /* 无 planner 回落旧硬编码 */
@@ -1089,7 +1089,7 @@ async function aiPlanDaily25(day){
     if(inItems.has(u.n)||!done[u.n]) return;
     const rec=done[u.n], last=rec.lastRev||rec.day||cur, dt=cur-last;
     let due=false;
-    if(PLAN){ due=PLAN.isDueToday(u, done, cur, (typeof srsGet==="function")?srsGet:()=>null) || dt>=15; }
+    if(PLAN){ due=PLAN.isDueToday(u, done, cur, (typeof srsGet==="function")?srsGet:()=>null, todayStr()) || dt>=15; }
     else { due=[1,2,4,7,15].includes(dt)||dt>15; }
     if(due) cand.push({u:u.n, kind:((rec.revs||0)>0&&unitKind(u)==="quiz")?"test":"rev", dt, revs:rec.revs||0, subj:_subjKey(u.subj)});
   });
@@ -1218,7 +1218,7 @@ function ensurePlan25(day, sh, stream){
     ||(v.plan&&v.plan.ver!==PLAN_VER)                            /* 排期算法版本升级 → 本地骨架直接重排，不耗 R1 */
     ||(v.plan&&!v.plan.mock&&v.plan.stale&&dsReady()&&(v.plan.gens||1)<2)  /* 账目结算：删卡/增卡后重排 */
     ||(v.plan&&!v.plan.mock&&dsReady()&&((v.plan.gens||1)<2)&&behind>lagCrit); /* 滞后≥4 日触发全局重算 */
-  const needDaily=!needPlan&&day<=25&&sh.items.length&&!v.dailyOv[dk];
+  const needDaily=!needPlan&&day<=planHorizon().N2&&sh.items.length&&!v.dailyOv[dk];   /* v135：动态周期上限 */
   if(!needPlan&&!needDaily) return;
   v._planning=true;
   let job;
@@ -1685,7 +1685,7 @@ async function _ttsHdPlay(inst, text, el){
 /* ==================== [6] 进度记录 ==================== */
 function unitDone(n, ok, all){
   const v=v25st(); v.done=v.done||{};
-  const day=Math.min(25, st.day||1);
+  const day=Math.min(planHorizon().N2, st.day||1);   /* v135：周期上限取自 planHorizon（N2 动态，旧档 startDate 早时可达 70+） */
   /* v109：虚拟「每日口译新题」单元（90000+day）不进进度账——
      它不在 TASK_UNITS25 里，写进 done 会让「完成数 / 放号分析 / 剩余分钟」全部虚高。
      这里只标当日打卡 + 给奖励，完成状态仍落在日卡 s.done 上。 */
@@ -3772,7 +3772,7 @@ function renderBoard(){
   const doneMap=v.done||{}, doneN=U.filter(u=>doneMap[u.n]).length;
   const pct=U.length?Math.round(100*doneN/U.length):0;
   const dueN=(function(){ try{ return srsDueKeys().length; }catch(e){ return 0; } })();
-  if(day>25){
+  if(day>planHorizon().N2){
     stream.innerHTML='<div style="padding:10px 4px"><div style="font-size:20px;color:var(--gold)">25 日周期已圆满</div>'
       +'<div class="note" style="margin-top:8px">全部 '+U.length+' 个单元完成 '+doneN+' 个。可随时到「演界」做全真演练保持手感，星盘错题会继续按回潮节奏到期。</div>'
       +'<div style="margin-top:10px"><button class="btn primary" id="v25arena" type="button">进入演界 · 全真演练</button></div></div>';
@@ -3785,14 +3785,14 @@ function renderBoard(){
   const doneToday=sh.items.filter(it=>sh.done&&sh.done[it.u]).length;
   let h='<div style="padding:8px 4px">'
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline">'
-    +'<span style="font-size:22px;color:var(--neon);font-weight:700">第 '+day+' 日 / 25</span>'
+    +'<span style="font-size:22px;color:var(--neon);font-weight:700">第 '+day+' 日 / '+planHorizon().N2+'</span>'
     +'<span>今日 <b>'+doneToday+'/'+sh.items.length+'</b> 单元 · 约 '+Math.round(estMins)+' 分钟</span>'
     +'<span title="'+U.length+' = 全库任务单元总数（把要背的全部考点按每单元约 25 分钟打包；你自己新增的训练卡并入或新增单元后会随之上浮，例如 97→98）">总进度 <b>'+doneN+'/'+U.length+'</b> 单元（'+pct+'%）</span></div>'
     +'<div style="height:8px;background:var(--bg3);border-radius:4px;margin:10px 0"><div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,var(--neon),var(--cyber));border-radius:4px"></div></div>';
   /* 25 日周期热力格：全完成=neon / 部分=gold / 今日=描边 / 未来=暗，悬停看日期 */
   const d0=v.startDate?new Date(v.startDate+"T00:00:00"):null;
   let cells="";
-  for(let d=1;d<=25;d++){
+  for(let d=1;d<=planHorizon().N2;d++){
     const s=(v.sheets||{})["d"+d];
     let bg="var(--bg3)", st2="";
     if(s&&s.items&&s.items.length){

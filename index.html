@@ -913,8 +913,8 @@ body.ov-open #oralFab{display:none}
 <script src="wd-fx.js"></script>
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v67"></script>
-<script src="wd-planner.js?v32"></script>
-<script src="wd-v25.js?v133"></script>
+<script src="wd-planner.js?v33"></script>
+<script src="wd-v25.js?v134"></script>
 <script>
 
 "use strict";
@@ -1455,7 +1455,7 @@ function advanceNaturalDay(){
   /* v50 修正：1 现实日 = 1 自然日推进（旧版错误地 +5 导致跳过任务） */
   const natAdv=elapsed;
   const oldDay=st.day||1;
-  st.day=Math.min(25, oldDay+natAdv);            /* v25：上限 25 自然日 */
+  st.day=Math.min((window.V25&&V25.planHorizon)?V25.planHorizon().N2:25, oldDay+natAdv);            /* v135：上限取自动态 N2 */
   st.fogDay=Math.max(1, 26-st.day);              /* v25：由自然日派生，不再独立倒计时 */
   /* v25：纪日/解锁机制已废——自然日只随现实日期推进，任务放号由 V25.sheet 自管 */
   /* 离线恢复：心气+30%、灵力全额恢复 */
@@ -2782,7 +2782,14 @@ function streak(){
   try{ const dn=(st.v25&&st.v25.done)||{};
     ds=[...new Set(Object.values(dn).map(r=>String((r&&r.at)||"").slice(0,10)).filter(Boolean))];
   }catch(e){}
-  ds.sort(); let s=0;
+  ds.sort();
+  /* v135：连击只认「今天/昨天」结尾的连续——最后练习日距今 >1 天即已断签，归零（之前停练一个月连击数照旧，虚高成就） */
+  if(ds.length){
+    const lastMs=new Date(ds[ds.length-1]+"T00:00:00Z").getTime();
+    const now=new Date(); const todayMs=Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate());
+    if(todayMs-lastMs>864e5) return 0;
+  }
+  let s=0;
   for(let i=ds.length-1;i>=0;i--){ if(i===ds.length-1||Math.round((new Date(ds[i+1])-new Date(ds[i]))/864e5)===1) s++; else break; }
   return s;
 }
@@ -3270,7 +3277,7 @@ function _renderGame(){
 function renderSidePanel(){
   const el=document.getElementById("sidePanel"); if(!el) return;
   if(!window.V25||!V25.sheet){ el.innerHTML=`<div class="sphd">📜 修行任务单</div><div class="spempty">任务引擎加载中…</div>`; return; }
-  const v=V25.v25st(); const cur=Math.min(25,st.day||1);
+  const v=V25.v25st(); const cur=Math.min((V25.planHorizon?V25.planHorizon().N2:25),st.day||1);
   const start=v.startDate?new Date(v.startDate+"T00:00:00"):new Date();
   const dayLabel=d=>{
     const dt=new Date(start.getTime()+(d-1)*864e5);
@@ -5954,7 +5961,7 @@ function checkAch(){
       case "streak7": ok=c>=7; break;
       case "streak14": ok=c>=14; break;
       case "clueall": ok=(st.libSearches||0)>=10; break;
-      case "end": ok=U.length>0&&doneN>=U.length&&(st.day||1)>=25; break;
+      case "end": ok=U.length>0&&doneN>=U.length&&(st.day||1)>=(window.V25&&V25.planHorizon)?V25.planHorizon().N2:25; break;
     }
     if(ok){ st.ach[a.id]=new Date().toISOString(); record("成就解锁", a.name); toast("成就解锁 · "+a.name,"gold"); }
   });
@@ -11140,7 +11147,7 @@ function renderSave(){
       try{
         st=o;
         if(!st.shop||!st.shop.length) st.shop=[...D.shop];
-        reconcile(); st.day=Math.min(st.day||1,25); save();   /* 补齐新字段 + 时钟上限 */
+        reconcile(); st.day=Math.min(st.day||1,(window.V25&&V25.planHorizon)?V25.planHorizon().N2:25); save();   /* 补齐新字段 + 时钟上限 */
         migrateV25();                                          /* v25 迁移（幂等，保资产清进度） */
         ensureClocks(); advanceNaturalDay();                   /* 单时钟对齐（离线按自然日推进） */
         toast("存档已导入"); ov.remove(); render(); checkAch();
@@ -11327,7 +11334,7 @@ async function boot(){
   const has=load();
   if(!has){ st=defState(); reconcile(); save(); intro(); }
   else{
-    if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,25); save();
+    if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,(window.V25&&V25.planHorizon)?V25.planHorizon().N2:25); save();
     /* v25 大版本迁移：旧 45 日/974 任务存档在此单轨化（幂等，保资产清进度） */
     const migrated=migrateV25();
     /* v25：旧运行时排程（installRuntimePlan）与纪日对齐（syncGameDay）已废，
