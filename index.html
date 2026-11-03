@@ -1383,7 +1383,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v81";
+const BUILD_VERSION="v82";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -1462,7 +1462,8 @@ if(window.EXAM_2026_DATA && Array.isArray(EXAM_2026_DATA) && EXAM_2026_DATA.leng
 function ensureClocks(){
   if(!st.day||isNaN(st.day)||st.day<1) st.day=1;
   const _N2=(window.V25&&V25.planHorizon)?V25.planHorizon().N2:25;
-  if(st.day>_N2) st.day=_N2;                     /* 周期上限：按 11/20 最终截止日动态计算 */
+  /* 不再在这里把 day 压到 _N2：V25 未就绪时 _N2 只是兜底 25，会把早档（day>25）永久压回 25。
+     day 的真实上限只在渲染/排期取值时用 Math.min(N2, day) 处理。 */
   if(!st.lastNaturalDay) st.lastNaturalDay=new Date().toISOString().slice(0,10);
   st.fogDay=Math.max(1,_N2+1-st.day);            /* v25：仅存为兼容字段，UI 不再展示 */
   st.gameDay=st.day;                             /* v25：纪日=自然日，废除 ×5 */
@@ -1477,7 +1478,7 @@ function advanceNaturalDay(){
   /* v50 修正：1 现实日 = 1 自然日推进（旧版错误地 +5 导致跳过任务） */
   const natAdv=elapsed;
   const oldDay=st.day||1;
-  st.day=Math.min((window.V25&&V25.planHorizon)?V25.planHorizon().N2:25, oldDay+natAdv);            /* v135：上限取自动态 N2 */
+  st.day=Math.min((window.V25&&V25.planHorizon)?V25.planHorizon().N2:Infinity, oldDay+natAdv);            /* v135：上限取自动态 N2；V25 未就绪时不设 25 的假上限 */
   st.fogDay=Math.max(1, 26-st.day);              /* v25：由自然日派生，不再独立倒计时 */
   /* v25：纪日/解锁机制已废——自然日只随现实日期推进，任务放号由 V25.sheet 自管 */
   /* 离线恢复：心气+30%、灵力全额恢复 */
@@ -3674,8 +3675,13 @@ function twBindGlossary(host){
         +'<div class="gs"><b>为什么</b>'+esc(g.why)+'</div>';
       document.body.appendChild(gc);
       placeGcard(gc, sp);
-      setTimeout(()=>{ try{gc.remove();}catch(e){} },6000);
-      gc.onpointerdown=()=>gc.remove();
+      /* 点卡片外部也能收起（此前只能点卡片本身或等 6 秒）；延迟挂载避免被同一次点击立即关掉 */
+      let _gcClosed=false;
+      const _closeG=()=>{ if(_gcClosed) return; _gcClosed=true; try{gc.remove();}catch(e){} document.removeEventListener("pointerdown",_onDoc,true); clearTimeout(_gcTimer); };
+      const _onDoc=(ev)=>{ if(!gc.contains(ev.target)) _closeG(); };
+      const _gcTimer=setTimeout(_closeG,6000);
+      setTimeout(()=>{ if(!_gcClosed) document.addEventListener("pointerdown",_onDoc,true); },0);
+      gc.onpointerdown=(ev)=>{ ev.stopPropagation(); _closeG(); };
     };
   });
 }
@@ -5167,8 +5173,13 @@ function openQuest(qid){
       gc.innerHTML='<div class="gw">'+esc(gl.dataset.g)+'</div><div class="gs"><b>是什么</b>'+esc(g.what)+'</div><div class="gs"><b>装到哪</b>'+esc(g.where)+'</div><div class="gs"><b>为什么</b>'+esc(g.why)+'</div>';
       document.body.appendChild(gc);
       placeGcard(gc, gl);
-      setTimeout(()=>{ try{gc.remove();}catch(err){} },6000);
-      gc.onpointerdown=()=>gc.remove();
+      /* 点卡片外部也能收起（此前只能点卡片本身或等 6 秒）；延迟挂载避免被同一次点击立即关掉 */
+      let _gcClosed=false;
+      const _closeG=()=>{ if(_gcClosed) return; _gcClosed=true; try{gc.remove();}catch(err){} document.removeEventListener("pointerdown",_onDoc,true); clearTimeout(_gcTimer); };
+      const _onDoc=(ev)=>{ if(!gc.contains(ev.target)) _closeG(); };
+      const _gcTimer=setTimeout(_closeG,6000);
+      setTimeout(()=>{ if(!_gcClosed) document.addEventListener("pointerdown",_onDoc,true); },0);
+      gc.onpointerdown=(ev)=>{ ev.stopPropagation(); _closeG(); };
       return;
     }
     if(isEditableTarget(e.target)||(e.target.closest&&e.target.closest(STAGE_NO_ADVANCE))) return;
@@ -11169,7 +11180,7 @@ function renderSave(){
       try{
         st=o;
         if(!st.shop||!st.shop.length) st.shop=[...D.shop];
-        reconcile(); st.day=Math.min(st.day||1,(window.V25&&V25.planHorizon)?V25.planHorizon().N2:25); save();   /* 补齐新字段 + 时钟上限 */
+        reconcile(); save();   /* 补齐新字段；不在读档阶段封顶 day（V25 排期可能还没就绪，会把早档压回 25） */
         migrateV25();                                          /* v25 迁移（幂等，保资产清进度） */
         ensureClocks(); advanceNaturalDay();                   /* 单时钟对齐（离线按自然日推进） */
         toast("存档已导入"); ov.remove(); render(); checkAch();
@@ -11356,7 +11367,7 @@ async function boot(){
   const has=load();
   if(!has){ st=defState(); reconcile(); save(); intro(); }
   else{
-    if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); st.day=Math.min(st.day||1,(window.V25&&V25.planHorizon)?V25.planHorizon().N2:25); save();
+    if(!st.shop||!st.shop.length) st.shop=[...D.shop]; reconcile(); save();
     /* v25 大版本迁移：旧 45 日/974 任务存档在此单轨化（幂等，保资产清进度） */
     const migrated=migrateV25();
     /* v25：旧运行时排程（installRuntimePlan）与纪日对齐（syncGameDay）已废，
