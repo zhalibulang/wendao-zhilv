@@ -570,7 +570,7 @@ function injectCards(){
 }
 function allUnits(){
   const del=_delPids();
-  const U=(window.TASK_UNITS25||[]).concat(window.TASK_UNITS25_EXT||[]).map(u=>({ n:u.n, subj:u.subj, mods:(u.mods||[]).slice(),
+  const U=(window.TASK_UNITS25||[]).concat(window.TASK_UNITS25_EXT||[]).concat(window.TASK_UNITS25_ORAL||[]).map(u=>({ n:u.n, subj:u.subj, mods:(u.mods||[]).slice(),
     items:(u.items||[]).filter(it=>!del.has(it.id)&&!(V25_TOUR_SECTION_MODE&&_isTourPid(it.id)))
       .map(it=>({ id:it.id, title:it.title, mins:it.mins,
         p0:it.p0, p1:it.p1, parts:it.parts, part:it.part,   /* 导游词节片：段落切片 + 子任务序号 */

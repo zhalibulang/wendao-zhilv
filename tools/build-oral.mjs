@@ -5,7 +5,7 @@
 
    产出：
    1) oral-full-gug.js   —— window.ORAL_FULL_GUG，并替换 GAME_DATA.oralFull 中的故宫篇
-   2) task-units-oral.js —— window.TASK_UNITS25_EXT，6 篇导游词按「1 节 = 1 个 quest」建单元
+   2) task-units-oral.js —— window.TASK_UNITS25_ORAL，6 篇导游词按「1 节 = 1 个 quest」建单元
 
    时长模型（五步流程：整段读 → 分句读&修订 → 分句复述 → 整段重读 → 整段复述）：
      朗读 110 词/分 × 3 遍 + 复述 90 词/分 × 2 遍 + 每句 0.25 分钟修订/复述开销
@@ -260,7 +260,7 @@ for (const art of arts) {
   });
 }
 const unitsJs = "/* 本文件由 tools/build-oral.mjs 自动生成，请勿手改；1 节 = 1 个 quest（超长节按段落均分为 a/b/c 子任务） */\n"
-  + "window.TASK_UNITS25_EXT=" + JSON.stringify(units) + ";\n";
+  + "window.TASK_UNITS25_ORAL=" + JSON.stringify(units) + ";\n";
 fs.writeFileSync(path.join(ROOT, "task-units-oral.js"), unitsJs);
 
 const total = units.reduce((a, u) => a + u.mins, 0);

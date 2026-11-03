@@ -30,7 +30,7 @@ vm.createContext(ctx);
 const W = ctx.window;
 const D = W.GAME_DATA || {};
 const BANK = W.INTERP_BANK || { vocab: [], numbers: [], methods: [] };
-const UNITS = (W.TASK_UNITS25 || []).concat(W.TASK_UNITS25_EXT || []);
+const UNITS = (W.TASK_UNITS25 || []).concat(W.TASK_UNITS25_EXT || []).concat(W.TASK_UNITS25_ORAL || []);
 
 /* ---------- 分句（与运行时 _oralSplitSent 一致） ---------- */
 const splitEnd = ch => ch === "." || ch === "!" || ch === "?" || ch === "。" || ch === "！" || ch === "？";
