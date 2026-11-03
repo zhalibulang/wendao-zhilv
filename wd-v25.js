@@ -2949,8 +2949,11 @@ function _recoverCover(host){
     b.textContent=covered?"👁 点击复原原文":"🙈 重新遮盖";
   };
 }
-/* 节级任务入口：1 个单元 = 1 个节片（超长节按段落均分为 (1/n)…(n/n) 子任务） */
-function runOralSectionUnit(u){
+/* 节级任务入口：1 个单元 = 1 个节片（超长节按段落均分为 (1/n)…(n/n) 子任务）
+   opts.noChain=true：只练这一片（「只重练第 n 片」入口），走完不自动接下一片、
+   不动整节完成标记与其它片进度 */
+function runOralSectionUnit(u,opts){
+  const noChain=!!(opts&&opts.noChain);
   const it0=u.items[0];
   const ref0=_oralSecParse(it0);
   if(!ref0){ toast("该节导游词未找到"); return; }
@@ -2969,7 +2972,7 @@ function runOralSectionUnit(u){
       let pr={total:1,done:1};
       try{ pr=oralSecMarkPart(ref.art.aid, ref.idx, ref.part); }catch(e){}
       const parts=ref.parts||1, part=ref.part||0;
-      if(part+1<parts){
+      if(!noChain&&part+1<parts){
         let nu=null;
         try{ nu=allUnits().find(x=>(x.items||[]).some(i=>i.id==="ORAL:"+ref.art.aid+":"+(ref.idx+1)+":"+(part+1))); }catch(e){}
         if(nu){
@@ -2983,7 +2986,7 @@ function runOralSectionUnit(u){
         }
       }
       _finBtn(host, ov, unit, 1, 1,
-        '<div class="v25qz"><div class="v25res v25res-ok"><div class="v25res-hd">✦ '+(parts>1?("整节完成 ("+parts+"/"+parts+" 段)"):"本节完成")+'</div>'
+        '<div class="v25qz"><div class="v25res v25res-ok"><div class="v25res-hd">✦ '+(noChain?("第 "+(part+1)+"/"+parts+" 段重练完成"):(parts>1?("整节完成 ("+parts+"/"+parts+" 段)"):"本节完成"))+'</div>'
         +esc(it.title||(ref.art.name+' 第'+(ref.idx+1)+'节'))+' 已走完五步：整段读 → 分句精读 → 分句复述 → 整段重读 → 整段复述。</div></div>');
     });
   };
@@ -2991,18 +2994,22 @@ function runOralSectionUnit(u){
 }
 /* v136：修习室直达——按篇 aid + 节下标 si 直接进入该节五步流程（跳过开篇预告，
    修习室各节「进入本节练习」一步即达；无对应单元则提示，不弹二次确认）
-   v139：从修习室进入时优先落到「第一片未完成」的片，避免每次从 a 片重来 */
-function startOralSectionFlow(aid, si){
-  let part=0;
+   v139：从修习室进入时优先落到「第一片未完成」的片，避免每次从 a 片重来
+   v139b：forcePart 指定片号时=「只重练第 n 片」，只走该片五步、不自动接片 */
+function startOralSectionFlow(aid, si, forcePart){
+  let part=0, retry=false;
   try{
     const parts=oralSecParts(aid,si), doneArr=(oralProg(aid).parts||{})[si]||[];
-    const nxt=parts.find(k=>doneArr.indexOf(k)<0);
-    if(nxt!=null) part=nxt;
+    if(forcePart!=null&&+forcePart>=0&&parts.indexOf(+forcePart)>=0){ part=+forcePart; retry=true; }
+    else{
+      const nxt=parts.find(k=>doneArr.indexOf(k)<0);
+      if(nxt!=null) part=nxt;
+    }
   }catch(e){}
   const target="ORAL:"+aid+":"+(+si+1)+":"+part;
   const u=allUnits().find(x=>(x.items||[]).some(it=>it.id===target));
   if(!u){ try{ toast("未找到该节任务单元（可能已从任务单移除）"); }catch(e){} return; }
-  try{ runOralSectionUnit(u); }catch(e){ console.warn("[oralsec]",e); try{ toast("进入本节练习失败"); }catch(_){} }
+  try{ runOralSectionUnit(u,retry?{noChain:true}:null); }catch(e){ console.warn("[oralsec]",e); try{ toast("进入本节练习失败"); }catch(_){} }
 }
 function drawOralFlow(host, art, sec, si, p0, p1, done){
   const allParas=_oralParas(sec);
@@ -3884,11 +3891,15 @@ function renderBoard(){
         const isCur=(idx===0&&!c.dn);
         const isOralU=/^ORAL:/.test(String((u.items[0]||{}).id||""));
         const oTitle=(u.items[0]||{}).title||"";
-        /* v139：超长节分片时显示本节进度（如 1/3），与修习室分站灯同口径 */
+        /* v139：超长节分片时显示本节进度（如 1/3），与修习室分站灯同口径；
+           v139b：只在「当前片」那张卡显示，其它片卡不显示 */
         let secPr=null;
         if(isOralU){ try{
-          const m=/^ORAL:([A-Za-z]{3}):(\d+)/.exec(String((u.items[0]||{}).id||""));
-          if(m){ const z=oralSecProgress(m[1],+m[2]-1); if(z.total>1) secPr=z; }
+          const _id=String((u.items[0]||{}).id||"");
+          const m=/^ORAL:([A-Za-z]{3}):(\d+)(?::(\d+))?$/.exec(_id);
+          if(m){ const si=+m[2]-1, pi=m[3]!=null?+m[3]:0, z=oralSecProgress(m[1],si);
+            const cur=(typeof oralSecCurrentPart==="function")?oralSecCurrentPart(m[1],si):-2;
+            if(z.total>1&&cur!==-2&&pi===cur) secPr=z; }
         }catch(e){} }
         /* 标题统一：内容在前、编号后置。导游词=「篇 · 第N节「章节名」」；笔试=模块链 */
         const content=isOralU?oTitle:((u.mods||[]).join(" / ")||u.title||("单元 #"+u.n));

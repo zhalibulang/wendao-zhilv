@@ -918,9 +918,9 @@ body.ov-open #oralFab{display:none}
 <script src="wd-avatar.js"></script>
 <script src="wd-fx.js"></script>
 <script src="qrcode.js"></script>
-<script src="wd-sync.js?v68"></script>
+<script src="wd-sync.js?v69"></script>
 <script src="wd-planner.js?v33"></script>
-<script src="wd-v25.js?v137"></script>
+<script src="wd-v25.js?v139"></script>
 <script>
 
 "use strict";
@@ -1389,7 +1389,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v84";
+const BUILD_VERSION="v85";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -3365,11 +3365,14 @@ function renderSidePanel(){
         const oTitle=(u.items[0]||{}).title||"";
         const theme=isOralU?oTitle:((u.mods||[]).join(" / ")||u.title||"");
         const t1Html=`<div class="spct1" title="${esc(theme)}" style="white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${esc(theme)} <span style="color:var(--dim);font-size:10px">#${u.n}</span></div>`;
-        /* v139：分片长节在侧栏显示本节进度（1/3、2/3），与修习室分站灯一致 */
+        /* v139：分片长节在侧栏显示本节进度（1/3、2/3），与修习室分站灯一致；
+           v139b：只在「当前片」那张卡显示，其它片卡不显示，避免三张卡都挂同一句 */
         let secPr=null;
         if(isOralU){ try{
-          const m=/^ORAL:([A-Za-z]{3}):(\d+)/.exec(String((u.items[0]||{}).id||""));
-          if(m){ const z=oralSecProgress(m[1],+m[2]-1); if(z.total>1) secPr=z; }
+          const _id=String((u.items[0]||{}).id||"");
+          const m=/^ORAL:([A-Za-z]{3}):(\d+)(?::(\d+))?$/.exec(_id);
+          if(m){ const si=+m[2]-1, pi=m[3]!=null?+m[3]:0, z=oralSecProgress(m[1],si);
+            if(z.total>1&&pi===oralSecCurrentPart(m[1],si)) secPr=z; }
         }catch(e){} }
         return `<div class="spcrow${isDone?" done":""}" data-spu="${u.n}" role="button">
           <span class="spcc" style="background:${c}"></span>
@@ -3714,6 +3717,65 @@ function twBindGlossary(host){
       gc.onpointerdown=(ev)=>{ ev.stopPropagation(); _closeG(); };
     };
   });
+}
+/* ==================== v141：术语卡自动接线（渲染期匹配） ====================
+   用户选定「折中自动匹配」：正文出现 D.glossary 词条即自动可点，但每节最多 5 个、
+   同一词只标首次出现。做法是「渲染完成后再扫文本节点」，不往存储里写标记：
+   - 编辑器保存的富文本不会被清洗掉标记，因为压根不存 .gl（只改显示层）；
+   - 只处理正文容器的文本节点，标题/按钮/导航/工具条整块跳过；已有 <b>/<span style> 原样保留；
+   - 一处开关：把 WD_GLOSS_AUTO 改成 false，即回到「只认手写 .gl」的旧行为（日后要改手动只改这一处）。 */
+const WD_GLOSS_AUTO=true;
+const WD_GLOSS_MAX=5;
+const WD_GLOSS_SCOPE=".book,.osec-body,.cen,.czh";
+const WD_GLOSS_SKIP="button,a,h1,h2,h3,h4,h5,h6,input,textarea,select,label,summary,nav,.bp,.osec-head,.kitbar,.ccat,.cid,.pager,.cardpos,.fliphint,.tstate,.gl,.gcard,.navline,.hd";
+function _glossTerms(){
+  try{ return Object.keys(D.glossary||{}).filter(k=>k&&k.length>1).sort((a,b)=>b.length-a.length); }
+  catch(e){ return []; }
+}
+/* 在每个正文容器内标最多 max 个术语（同词只标首次）；返回标了几处 */
+function glossifyDom(root,opts){
+  if(!WD_GLOSS_AUTO||!root||typeof root.querySelectorAll!=="function") return 0;
+  const max=(opts&&opts.max)||WD_GLOSS_MAX;
+  const terms=_glossTerms(); if(!terms.length) return 0;
+  const NF=window.NodeFilter||{SHOW_TEXT:4,FILTER_ACCEPT:1,FILTER_REJECT:2};
+  const items=[];
+  root.querySelectorAll(WD_GLOSS_SCOPE).forEach(sc=>{
+    const walker=document.createTreeWalker(sc,NF.SHOW_TEXT,{
+      acceptNode(n){
+        if(!n.nodeValue||!n.nodeValue.trim()) return NF.FILTER_REJECT;
+        const p=n.parentElement; if(!p) return NF.FILTER_REJECT;
+        if(p.closest(WD_GLOSS_SKIP)) return NF.FILTER_REJECT;
+        return NF.FILTER_ACCEPT;
+      }
+    });
+    let n; while((n=walker.nextNode())) items.push({node:n,scope:sc});
+  });
+  if(!items.length) return 0;
+  const state=new Map();   /* 每个正文容器独立计数（= 每节最多 5 个） */
+  let total=0;
+  items.forEach(item=>{
+    const sc=item.scope;
+    let s=state.get(sc);
+    if(!s){ s={used:new Set(),n:0}; state.set(sc,s); }
+    if(s.n>=max) return;
+    let node=item.node;
+    while(node&&s.n<max){
+      const text=node.nodeValue||"";
+      let best=null;
+      terms.forEach(t=>{ if(s.used.has(t)) return; const at=text.indexOf(t); if(at>=0&&(!best||at<best.at)) best={at,t}; });
+      if(!best) break;
+      const parent=node.parentNode; if(!parent) break;
+      s.used.add(best.t); s.n++; total++;
+      const before=text.slice(0,best.at), after=text.slice(best.at+best.t.length);
+      const span=document.createElement("span");
+      span.className="gl"; span.dataset.g=best.t; span.textContent=best.t;
+      if(before) parent.insertBefore(document.createTextNode(before),node);
+      parent.insertBefore(span,node);
+      node.nodeValue=after;                 /* 复用原文本节点作为「后半段」，继续找下一个词 */
+      if(!after){ parent.removeChild(node); node=null; }
+    }
+  });
+  return total;
 }
 
 /* ---------- v44+N1：试炼 NPC 串场词与答后回复池（新版 5 角色口癖化）---------- */
@@ -4254,6 +4316,8 @@ function openQuest(qid){
       ${pgNav}
       ${hintHtml()}
     </div>`;
+    /* v141：书页正文自动接术语卡（渲染期扫描；标题 .bp / 按钮 / 工具条不标） */
+    try{ glossifyDom(stageHost); }catch(e){}
     /* v62 Task11：问契问答分离——事件委托到 stageHost。
        打字机会重建 .pt 内部节点（逐字/展开均会重写 innerHTML），逐节点绑定会失效，
        委托监听对重建后的节点同样有效；stageHost 随 ov 销毁，无残留。 */
@@ -5820,6 +5884,20 @@ async function _settleQuestInner(q,quizPerfect,ov){
     const _skipped=!!st.skipped[q.id];
     (st.rtPlan[q.id].cards||[]).forEach(k=>{ try{ if(_skipped) srsSkipKey(k); else if(srsGet(k).tier===0) srsMark(k); }catch(ce){ console.error('[srs mark fail]',k,ce); } });
   }
+  /* v139：线索卡随任务交割「触达即入档」——只登记未入档的 key，已有档位不重置；跳过任务不算读到 */
+  try{
+    if(!st.skipped[q.id]){
+      const _doneK=new Set((q.cards||[]).concat((st.rtPlan&&st.rtPlan[q.id]&&st.rtPlan[q.id].cards)||[]));
+      _doneK.forEach(k=>{ if(/^CL-/.test(k)){ try{ srsMark(k); }catch(ce){ console.error('[srs clue mark fail]',k,ce); } } });
+      /* 线索卡的 covers（关联考点）随本任务交割到齐 → 也算「读到」，登记一次 */
+      (D.clues||[]).forEach(c=>{
+        if(!c||!c.id||!/^CL-/.test(c.id)) return;
+        if((c.covers||[]).some(k=>_doneK.has(k))){
+          try{ srsMark(c.id); }catch(ce){ console.error('[srs clue cover fail]',c.id,ce); }
+        }
+      });
+    }
+  }catch(e){}
   /* v29（FIX-B/D-6）：主动触发器埋点——任务结算即学习行为，刷新学习时间戳（供未复习关怀规则） */
   st.lastStudyAt=new Date().toISOString();
   /* NPC 记忆：任务完成——通关时长由进入时间戳自动算出，首通且全对记一次性通关 */
@@ -6251,6 +6329,9 @@ function renderLib(){
     </div>
     <div class="fliphint">点「翻下一张」从卡堆顶部依次取出 · 「随机抽」从全部卡片中抽取 · 校订内容会自动存档并可回退版本</div>
   </div>`;
+  /* v141：藏经阁正文自动接术语卡；v139：线索卡读到即入 SRS（srsMark 幂等，已有档位不重置） */
+  try{ glossifyDom(stream); twBindGlossary(stream); }catch(e){}
+  if(cur&&cur.cat==="clue"&&cur.key){ try{ srsMark(cur.key); }catch(e){} }
 
   const goto=(n)=>{ st._libIdx=Math.max(0,Math.min(n,pool.length-1)); save(); renderLib(); };
   $("#cPrev",stream).onpointerdown=()=>{ SFX.tap(); goto(idx-1); };
@@ -11534,6 +11615,17 @@ function oralSecProgress(aid,sec){
   if(oralSecDone(aid,sec)) done=parts.length;
   return { total:parts.length, done:done };
 }
+/* 当前片 = 第一个还没练完的片；全练完/整节完成返回 -1。
+   侧栏与任务单只给「当前片那张卡」显示「本节 n/m」，其它片卡不显示（v139 用户口径）。 */
+function oralSecCurrentPart(aid,sec){
+  const parts=oralSecParts(aid,sec);
+  if(!parts.length) return -1;
+  if(oralSecDone(aid,sec)) return -1;
+  const p=oralProg(aid);
+  const doneArr=(p.parts&&p.parts[sec])||[];
+  for(let i=0;i<parts.length;i++){ if(doneArr.indexOf(parts[i])<0) return parts[i]; }
+  return -1;
+}
 /* 记一片完成；只有全部片都完成才把整节写进 sectionDone（节点灯不再被单片提前点亮） */
 function oralSecMarkPart(aid,sec,part){
   const p=oralProg(aid);
@@ -11827,6 +11919,9 @@ function openOralStudy(aid){
           const zhs=zh?zh.split(/(?<=[。！？])/).filter(Boolean):[];
           const passed=oralSecDone(o.aid,si);
           const pr=oralSecProgress(o.aid,si);
+          const pts=oralSecParts(o.aid,si);
+          /* v139：分片节操作区加「只重练第 n 片」——进入后只走该片五步，不影响整节完成标记与其它片进度 */
+          const retryBtns=pts.length>1?pts.map(k=>`<button class="btn sm ghost" data-secretry="${si}" data-part="${k}" type="button">↻ 只重练 ${k+1}/${pts.length}</button>`).join(""):"";
           const partTxt=pr.total>1?(passed?"":(pr.done>0?"已练 "+pr.done+"/"+pr.total:"未考核")):(passed?"✓ 分站达标":"未考核");
           return `<div class="osec${passed?" passed":""}" data-sec="${si}">
             <div class="osec-head" data-sechead="${si}">
@@ -11839,7 +11934,7 @@ function openOralStudy(aid){
                 <button class="btn sm primary" data-secflow="${si}" type="button">▶ 进入本节练习</button>
                 <button class="btn sm ghost" data-secread="${si}" type="button">📖 阅读（中英对照）</button>
                 <button class="btn sm ghost" data-sectest="${si}" type="button">🎙️ 分站背诵考核</button>
-                <button class="btn sm ghost" data-secedit="${si}" type="button">✎ 校订本节</button>
+                <button class="btn sm ghost" data-secedit="${si}" type="button">✎ 校订本节</button>${retryBtns}
               </div>
               <div class="osents" data-sents="${si}">${sentenceHtml(sensHtml||sens,zhs,sp.imgs)}</div>
               <div class="osectest" data-osectest="${si}" style="display:none"></div>
@@ -11847,6 +11942,16 @@ function openOralStudy(aid){
         }).join("")}
       </div></div>`;
     ov.querySelector(".close").onpointerdown=()=>{ ov.remove(); renderOralLine(); };
+    /* v141：正文自动接术语卡（每节 .osec-body 最多 5 个；标题/按钮/工具条不标，加粗/字色原样保留） */
+    try{ glossifyDom(ov); twBindGlossary(ov); }catch(e){}
+    /* v139：分片节「只重练第 n 片」 */
+    ov.querySelectorAll("[data-secretry]").forEach(b=>{
+      b.onpointerdown=()=>{
+        const si=+b.dataset.secretry, part=+b.dataset.part;
+        ov.remove();
+        try{ V25.startOralSectionFlow(o.aid,si,part); }catch(e){ toast("练习入口暂不可用"); }
+      };
+    });
     /* 段折叠 */
     ov.querySelectorAll("[data-sechead]").forEach(h=>{
       h.onpointerdown=()=>{
