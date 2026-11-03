@@ -3985,6 +3985,7 @@ window.V25={ v25st, V25_TIERS, aiGenInterp25, mockInterp25, aiGenQuiz25, mockQui
   allUnits, unitByN, sheet, runUnit, renderBoard, refreshBoard, unitDone, engineBoot,
   planOrder, aiPlan25, mockPlan25, aiPlanDaily25, mockDaily25, ensurePlan25,
   planHorizon, planFloor, startOralSectionFlow,
+  _htmlPlainAligned, _htmlSlicePlain,   /* v136：修习室富文本按纯文本坐标分句，需复用这套切片 */
   subjColor, SUBJ_COLORS, s5Cat, S5_CATS,
   VER:"v29",
   ttsSpeak, ttsStop, ttsPause, ttsResume, ttsCtlHtml, bindTtsCtl, ttsPickVoice, ttsHdOn, ttsHdSet, ttsHdStatus, ttsHdEnsure, ttsHdPct,
