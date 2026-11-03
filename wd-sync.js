@@ -440,7 +440,6 @@ const WDSync={
   exportFile(){
     const b=bundleFromLS();
     b.at=new Date().toISOString();
-    delete b.dsKey;   /* 备份为明文 JSON：不随文件带出 API 密钥（与 index.html 修行录导出同口径），换机密钥走加密同步通道 */
     const blob=new Blob([JSON.stringify(b,null,1)],{type:"application/json"});
     const a=document.createElement("a");
     a.href=URL.createObjectURL(blob);

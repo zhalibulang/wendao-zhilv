@@ -900,7 +900,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v67"></script>
 <script src="wd-planner.js?v32"></script>
-<script src="wd-v25.js?v132"></script>
+<script src="wd-v25.js?v133"></script>
 <script>
 
 "use strict";
@@ -10388,7 +10388,12 @@ function _backoffMs(attempt){ return Math.min(8000,600*Math.pow(2,attempt))+Math
    - opts.tools 传入时启用 function calling（agent loop 由 WDChat.respondWithTools 驱动）
    - 流式：kind=chat/polish 且未传 tools 且提供 onDelta 回调时 stream:true（含 include_usage）
    返回：普通文本 / 流式完整文本；带 tools 时返回 {content,toolCalls} */
+let _aiInflight=0, _aiQueue=[];
 async function dsChat(messages, opts, onDelta){
+  /* v132：全局并发闸——进行中 ≥3 排队，避免任务交割 4-6 路并发打爆限流；队列按先到先得放行 */
+  if(_aiInflight>=3) await new Promise(r=>{ _aiQueue.push(r); });
+  _aiInflight++;
+  try{
   const o=(opts===true)?{kind:"evolve"}:((opts&&typeof opts==="object")?opts:{});
   const kind=o.kind||"chat";
   const ch=o.ch||kind;
@@ -10436,6 +10441,9 @@ async function dsChat(messages, opts, onDelta){
         body:JSON.stringify(body),
         signal:ctrl.signal});
       clearTimeout(t);
+      /* v132：body 读取阶段 idle 超时——流式每块 20s、非流式整段 30s，挂起即 abort 走重试 */
+      const bodyTO=wantStream?20000:30000;
+      const raceTO=ms=>new Promise((_,rej)=>setTimeout(()=>{ try{ctrl.abort();}catch(_){} rej(Object.assign(new Error("读流超时"),{name:"AbortError"})); },ms));
       if(r.status===401){ aiHealth="error"; callLog({ch,kind,err:401,ms:Date.now()-t0}); throw new Error("密钥无效(401)"); }
       if(r.status===402||r.status===403){ aiHealth="error"; callLog({ch,kind,err:r.status,ms:Date.now()-t0}); throw new Error("额度不足或禁止("+r.status+")"); }
       if(_retryable(r.status)){ throw Object.assign(new Error("可重试("+r.status+")"),{status:r.status}); }
@@ -10446,7 +10454,7 @@ async function dsChat(messages, opts, onDelta){
         let full="", usage=null;
         const reader=r.body.getReader(); const dec=new TextDecoder(); let buf="";
         while(true){
-          const {done,value}=await reader.read();
+          const {done,value}=await Promise.race([reader.read(), raceTO(bodyTO)]);
           if(done) break;
           buf+=dec.decode(value,{stream:true});
           const lines=buf.split("\n"); buf=lines.pop();
@@ -10476,7 +10484,7 @@ async function dsChat(messages, opts, onDelta){
         return c;
       }
       /* ===== 非流式 ===== */
-      const j=await r.json();
+      const j=await Promise.race([r.json(), raceTO(bodyTO)]);
       callLog({ch,kind,ms:Date.now()-t0,cached:j.usage&&j.usage.prompt_cache_hit_tokens||0,retry:attempt>0});
       const msg=j.choices&&j.choices[0]&&j.choices[0].message;
       if(!msg) throw new Error("返回为空");
@@ -10520,6 +10528,10 @@ async function dsChat(messages, opts, onDelta){
     }
   }
   throw lastErr||new Error("未知错误");
+  } finally {
+    _aiInflight--;
+    const _n=_aiQueue.shift(); if(_n) _n();
+  }
 }
 
 /* 结构化游戏背景信息文件（供 DeepSeek 读取世界观/机制/NPC 基础）——正文装配在 wd-chat.js */
@@ -11092,7 +11104,7 @@ function renderSave(){
       let o;
       try{ o=JSON.parse(r.result); }catch(_){ toast("导入失败：不是有效 JSON 存档"); return; }
       /* v131：校验收紧为 player 必须是字符串（拒极简/脏档），并接入与正常启动一致的 reconcile/迁移链 */
-      if(typeof o.player!=="string"){ toast("导入失败：存档已损坏或格式不符，已放弃"); return; }
+      if(typeof o.player!=="string"||!String(o.player).trim()){ toast("导入失败：存档已损坏或格式不符，已放弃"); return; }
       delete o.dsKey; delete o.clauseLog;
       let prev=null; try{ prev=JSON.parse(JSON.stringify(st)); }catch(_){ prev=null; }   /* 快照当前 state 供失败回滚 */
       try{

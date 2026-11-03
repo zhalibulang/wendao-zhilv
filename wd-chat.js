@@ -764,8 +764,8 @@ const WDChat={
               const raw2=await this._chatWithRetry(npcId,messages,true);
               const t2=(raw2||"").trim();
               const chk2=t2?this.clauseCheck(t2,npcId,hasCustomWorld):null;
-              text=(chk2&&chk2.pass)?t2:(p1?this.sanitize(text):text);
-            }catch(e){ text=this.sanitize(text); }
+              text=(chk2&&chk2.pass)?t2:"";      /* v132：P0 硬禁则——重试仍不过即清空，不放行自曝AI/旧概念原文 */
+            }catch(e){ text=""; }                /* 同样清空，宁缺毋滥 */
           }else if(p1){
             text=this.sanitize(text);
           }else{
