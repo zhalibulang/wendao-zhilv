@@ -242,7 +242,9 @@ for (const art of arts) {
     const partLabel = k => chunks.length > 1 ? " (" + (k + 1) + "/" + chunks.length + ")" : "";
     chunks.forEach((ch, k) => {
       const words = enWords(ch.paras.map(p => p.text).join(" "));
-      const sents = splitSentences(ch.paras.map(p => p.text).join(" ")).length;
+      /* v139：句数与运行期同口径——逐段切句后累加，不能把整片 join 后再切。
+         跨段拼接会把「段尾无句号 + 下段首字母」粘成一句，长节任务预告的「本次覆盖 X 句」会偏小。 */
+      const sents = ch.paras.reduce((a, p) => a + splitSentences(p.text).length, 0);
       units.push({
         n: n++,
         subj: "科目五 导游服务能力（现场考试）",

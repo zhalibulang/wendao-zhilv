@@ -144,6 +144,11 @@ function mergeSave(ra,rb){
       const t=op[aid];
       t.read=t.read||s.read;
       t.sectionDone=Array.from(new Set([...(t.sectionDone||[]),...(s.sectionDone||[])]));
+      /* v139：分片进度按节并集，避免两台设备各走一片后合并只剩一边 */
+      t.parts=t.parts||{};
+      Object.keys(s.parts||{}).forEach(sec=>{
+        t.parts[sec]=Array.from(new Set([...(t.parts[sec]||[]),...(s.parts[sec]||[])]));
+      });
       if((s.fullAt||"")>(t.fullAt||"")){ t.fullAt=s.fullAt; t.fullCert=s.fullCert; }
       else if(!t.fullCert&&s.fullCert){ t.fullCert=true; if(!t.fullAt) t.fullAt=s.fullAt; }
     }); });

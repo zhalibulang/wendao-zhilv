@@ -811,6 +811,7 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
 .qcard3d.c2{z-index:1;transform:translate(12px,12px);opacity:.35;border-color:var(--border)}
 .qcard3d .ccat{font-size:11px;color:var(--neon);letter-spacing:.12em;margin-bottom:6px}
 .qcard3d .cid{font-weight:600;color:var(--cyber);font-size:13px;margin-bottom:6px}
+.qcard3d .cid .csub{font-weight:400;font-size:11px;color:var(--dim);letter-spacing:0;margin-left:8px}
 .qcard3d .cen{font-size:14px;line-height:1.7;color:var(--fg);white-space:pre-wrap}
 .qcard3d .czh{font-size:13px;color:var(--fg2);margin-top:10px;line-height:1.7;white-space:pre-wrap}
 .qcard3d .canchor{margin-top:10px;font-size:12.5px;background:var(--bg3);border-left:3px solid var(--gold);padding:6px 9px;color:var(--fg2)}
@@ -917,9 +918,9 @@ body.ov-open #oralFab{display:none}
 <script src="wd-avatar.js"></script>
 <script src="wd-fx.js"></script>
 <script src="qrcode.js"></script>
-<script src="wd-sync.js?v67"></script>
+<script src="wd-sync.js?v68"></script>
 <script src="wd-planner.js?v33"></script>
-<script src="wd-v25.js?v136"></script>
+<script src="wd-v25.js?v137"></script>
 <script>
 
 "use strict";
@@ -1388,7 +1389,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v83";
+const BUILD_VERSION="v84";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -3364,11 +3365,17 @@ function renderSidePanel(){
         const oTitle=(u.items[0]||{}).title||"";
         const theme=isOralU?oTitle:((u.mods||[]).join(" / ")||u.title||"");
         const t1Html=`<div class="spct1" title="${esc(theme)}" style="white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${esc(theme)} <span style="color:var(--dim);font-size:10px">#${u.n}</span></div>`;
+        /* v139：分片长节在侧栏显示本节进度（1/3、2/3），与修习室分站灯一致 */
+        let secPr=null;
+        if(isOralU){ try{
+          const m=/^ORAL:([A-Za-z]{3}):(\d+)/.exec(String((u.items[0]||{}).id||""));
+          if(m){ const z=oralSecProgress(m[1],+m[2]-1); if(z.total>1) secPr=z; }
+        }catch(e){} }
         return `<div class="spcrow${isDone?" done":""}" data-spu="${u.n}" role="button">
           <span class="spcc" style="background:${c}"></span>
           <div class="spcbody">
             ${t1Html}
-            <div class="spct2"><em style="color:${c}">${esc(subj)}</em>${catTag} · ${u.items.length} 条目 · ${u.mins}分
+            <div class="spct2"><em style="color:${c}">${esc(subj)}</em>${catTag} · ${u.items.length} 条目 · ${u.mins}分${secPr?' · 本节 '+secPr.done+'/'+secPr.total:''}
               <i class="spctag ${relCls[kIdx]}">${relTag[kIdx]}</i>${isDone?'<i class="spctag kdone">已完成</i>':""}</div>
           </div>
           <span class="spcdot">${dot}</span>
@@ -6147,7 +6154,7 @@ function buildCardPool(){
   });
   D.clues.forEach(x=>{
     if(_delUids.has("clue:"+x.id)) return;
-    cards.push({uid:"clue:"+x.id, cat:"clue", catLabel:"线索册", id:x.id,
+    cards.push({uid:"clue:"+x.id, cat:"clue", catLabel:"线索册", id:x.id, key:x.id,   /* v139：补 SRS key，线索卡与其它卡同规则进复习 */
       title:x.id+" "+x.title, body:getEdit("clue:"+x.id, mdClean(x.text)),
       extra:"关联考点："+(x.covers||[]).join(" · "), editable:true, editId:"clue:"+x.id});
   });
@@ -6209,7 +6216,7 @@ function renderLib(){
     const newTag=isNew(c)?' <span style="color:var(--gold)">✦新到</span>':"";
     return `<div class="qcard3d ${cls}">
       <div class="ccat">${esc(c.catLabel)}${edited?' <span style="color:var(--ok)">· 已校订</span>':""}${msTag}${newTag}</div>
-      <div class="cid">${esc(c.title)}</div>
+      <div class="cid">${esc(c.title)}${(c.sub&&(c.cat==="pts"||c.cat==="qoff"))?`<span class="csub">${esc(c.sub)}</span>`:""}</div>
       <div class="cen">${_rtRich(c.body)}</div>
       ${c.extra?`<div class="czh">${_rtRich(c.extra)}</div>`:""}
     </div>`;
@@ -6938,6 +6945,8 @@ function rtCardOf(key){
   if(/^S5-/.test(key)){ const p=D.pointsLib.find(x=>x.id===key); return p?{key,id:key,text:mdClean(getEdit("point:"+key,p.text)),star:+p.star||2,cat:"b",subj:"S5",mod:mdClean(p.module||p.title||""),title:mdClean(p.title||"")}:null; }
   /* b2-1：自录问契（定稿后才进入调度/复习链） */
   if(/^QM-/.test(key)){ const m=(st.myOral||[]).find(x=>x.id===key&&x.status==="final"); return m?{key,id:key,text:m.a,star:2,cat:"b",subj:"QM",mod:"自录",title:m.q}:null; }
+  /* v139：线索册（CL-xx）——补 key 后与普通卡同规则进 SRS，夜巡用它回忆线索 */
+  if(/^CL-/.test(key)){ const c=(D.clues||[]).find(x=>x.id===key); return c?{key,id:key,text:mdClean(getEdit("clue:"+key,c.text)),star:1,cat:"clue",subj:"CL",mod:"线索册",title:mdClean(c.title||"")}:null; }
   if(/^ORB-/.test(key)){ const o=rtOralOf(key); return o?{key,id:key,text:rtOralText(key),star:2,cat:"c",oral:o}:null; }
   const t=D.oralLib.find(x=>x.id===key); return t?{key,id:key,en:getEdit("oral:"+key+":en",t.en),zh:getEdit("oral:"+key+":zh",t.zh),topic:t.topic,text:t.en,star:1,cat:"d"}:null;
 }
@@ -7614,9 +7623,9 @@ function renderNight(){
   const due=[], later=[], pre=[];
   const today=srsToday();
   /* v138：记下每张到期卡的 due 日期——用于「逾期 N 天」标记；待来日/预习卡不带 */
-  srsDueKeys().forEach(k=>{ if(!/^S[1-5]-|^QM-/.test(k)) return; const c=rtCardOf(k); if(c){ c.__due=((st.srs&&st.srs[k])||{}).due||""; due.push(c); } });
+  srsDueKeys().forEach(k=>{ if(!/^S[1-5]-|^QM-|^CL-/.test(k)) return; const c=rtCardOf(k); if(c){ c.__due=((st.srs&&st.srs[k])||{}).due||""; due.push(c); } });
   Object.keys(st.srs||{}).forEach(k=>{ const r=st.srs[k];
-    if(!r||r.tier<1||r.pending||r.due<=today) return; if(!/^S[1-5]-|^QM-/.test(k)) return;
+    if(!r||r.tier<1||r.pending||r.due<=today) return; if(!/^S[1-5]-|^QM-|^CL-/.test(k)) return;
     const c=rtCardOf(k); if(c) later.push(c); });
   for(let day=1;day<=st.unlocked;day++){ const dd=byDay[day]; if(!dd) continue;
     (dd.quests||[]).forEach(q=>{ if(q.rtCat!=="a"&&q.rtCat!=="b") return; if(qDone(q.id)) return;
@@ -7670,6 +7679,27 @@ function renderNight(){
           <div style="font-size:11px;color:var(--dim);margin-bottom:6px">对照参考，给自己评一档——断续或未想起都会进入回潮名册。</div>
           <div class="jbtns"><button class="btn" data-gr="2">✓ 清晰记得</button><button class="btn" data-gr="1">◐ 模模糊糊</button><button class="btn" data-gr="0">✗ 没想起来</button></div>`;
         $("#qmBtns",host).style.display="none";
+        fb.querySelectorAll("[data-gr]").forEach(b=>b.onpointerdown=()=>{
+          SFX.tap(); srsReview(it.key,+b.dataset.gr); i++; draw();
+        });
+      };
+      return;
+    }
+    /* v139：线索册到期卡——线索不适合出选择题，走「回忆 → 揭示 → 三档自评」，
+       与问契同规则：清晰进档、模糊/没想起退档并回潮 */
+    if(/^CL-/.test(it.id)){
+      host.innerHTML=`<div class="flashcard"><div class="fc-id">${esc(it.id)} · 线索册 · ${i+1}/${deck.length}${_odTag(it)}</div>
+        <div class="qz"><span class="kk">巡夜 · 这条线索指向什么？</span>${esc(it.title||"")}</div>
+        <div class="fb" id="fb" style="display:none"></div>
+        <div class="jbtns" id="clBtns"><button class="btn sm primary" id="fRev">揭示线索</button></div></div>
+        <div class="tstate">${i+1} / ${deck.length}</div>`;
+      $("#fRev",host).onpointerdown=()=>{
+        SFX.tap();
+        const fb=$("#fb",host); fb.style.display="";
+        fb.innerHTML=`<div style="font-size:13px;line-height:1.7;margin-bottom:8px">${esc(it.text)}</div>
+          <div style="font-size:11px;color:var(--dim);margin-bottom:6px">对照线索，给自己评一档——断续或未想起都会进入回潮名册。</div>
+          <div class="jbtns"><button class="btn" data-gr="2">✓ 清晰记得</button><button class="btn" data-gr="1">◐ 模模糊糊</button><button class="btn" data-gr="0">✗ 没想起来</button></div>`;
+        $("#clBtns",host).style.display="none";
         fb.querySelectorAll("[data-gr]").forEach(b=>b.onpointerdown=()=>{
           SFX.tap(); srsReview(it.key,+b.dataset.gr); i++; draw();
         });
@@ -11457,7 +11487,10 @@ function auditOralCoverage(){
 function oralProg(aid){
   st.oralProgress=st.oralProgress||{};
   if(!st.oralProgress[aid]) st.oralProgress[aid]={read:false,sectionDone:[],fullCert:false,fullAt:null};
-  return st.oralProgress[aid];
+  const p=st.oralProgress[aid];
+  /* v139：分片进度 {节下标:[已完成片号]}——超长节拆 a/b/c 后，单走一片不再点亮整节 */
+  if(!p.parts||typeof p.parts!=="object") p.parts={};
+  return p;
 }
 /* v64 修诵融合：节级进度唯一口径=修习室分站考核 ∪ 任务页交割（ORB 节反查运行时任务） */
 function oralSecQuest(aid,sec){
@@ -11477,6 +11510,45 @@ function oralSecDoneCount(o){
   let n=0;
   for(let i=0;i<o.sections.length;i++){ if(oralSecDone(o.aid,i)) n++; }
   return n;
+}
+/* v139：某节被拆成几片——从运行时任务单元反查（单片节返回 [0]）。
+   与 build-oral.mjs 产出保持同源，避免另存一份片数表后不同步。 */
+function oralSecParts(aid,sec){
+  const out=[];
+  ((window.TASK_UNITS25_ORAL)||[]).forEach(u=>{
+    const it=(u.items||[])[0]; if(!it) return;
+    const m=/^ORAL:([A-Za-z]{3}):(\d+)(?::(\d+))?$/.exec(String(it.id||""));
+    if(!m||m[1]!==aid||+m[2]!==(+sec+1)) return;
+    const k=(m[3]!=null)?+m[3]:0;
+    if(out.indexOf(k)<0) out.push(k);
+  });
+  return out.sort((a,b)=>a-b);
+}
+/* 返回 {total,done}：total=片数，done=已完成片数（整节考核通过视作全片完成） */
+function oralSecProgress(aid,sec){
+  const parts=oralSecParts(aid,sec);
+  const p=oralProg(aid);
+  const doneArr=(p.parts&&p.parts[sec])||[];
+  if(!parts.length) return { total:1, done:oralSecDone(aid,sec)?1:0 };
+  let done=parts.filter(k=>doneArr.indexOf(k)>=0).length;
+  if(oralSecDone(aid,sec)) done=parts.length;
+  return { total:parts.length, done:done };
+}
+/* 记一片完成；只有全部片都完成才把整节写进 sectionDone（节点灯不再被单片提前点亮） */
+function oralSecMarkPart(aid,sec,part){
+  const p=oralProg(aid);
+  p.parts=p.parts||{};
+  const arr=p.parts[sec]=p.parts[sec]||[];
+  let changed=false;
+  if(arr.indexOf(part)<0){ arr.push(part); changed=true; }
+  const pr=oralSecProgress(aid,sec);
+  if(pr.done>=pr.total&&p.sectionDone.indexOf(sec)<0){ p.sectionDone.push(sec); changed=true; }
+  if(changed){
+    try{ save(); }catch(e){}
+    /* v140：单片完成后侧栏/任务单要立刻从「本节 0/3」变「1/3」，否则与节点灯不一致 */
+    try{ if(typeof renderSidePanel==="function") renderSidePanel(); }catch(e){}
+  }
+  return { total:pr.total, done:pr.done };
 }
 /* 分句（与 wd-v25.js 的 _oralSplitSent、tools/build-oral.mjs 完全一致）：
    ① 句末标点后可能先跟右引号/右括号（如 “Purple Forbidden City.”），只看 .!? 后是否跟空格会切不开；
@@ -11754,11 +11826,13 @@ function openOralStudy(aid){
           const zh=String(s.zh||"");
           const zhs=zh?zh.split(/(?<=[。！？])/).filter(Boolean):[];
           const passed=oralSecDone(o.aid,si);
+          const pr=oralSecProgress(o.aid,si);
+          const partTxt=pr.total>1?(passed?"":(pr.done>0?"已练 "+pr.done+"/"+pr.total:"未考核")):(passed?"✓ 分站达标":"未考核");
           return `<div class="osec${passed?" passed":""}" data-sec="${si}">
             <div class="osec-head" data-sechead="${si}">
               <span class="fcar">▸</span><b>${si+1}. ${esc(s.h||("Section "+(si+1)))}</b>
               <span style="font-size:11px;color:var(--dim)">${sens.length} 句</span>
-              <span class="osec-badge">${passed?"✓ 分站达标":"未考核"}</span>
+              <span class="osec-badge">${passed?"✓ 分站达标":partTxt}</span>
             </div>
             <div class="osec-body" style="display:none">
               <div class="kitbar" style="margin:4px 0">
