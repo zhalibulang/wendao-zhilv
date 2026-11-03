@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <meta name="theme-color" content="#f6efe4">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -10,6 +10,18 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
 <title>问道之旅 · 二十五日</title>
+<script>
+/* v134：iOS 软键盘弹起时把聚焦输入框滚进可视区（visualViewport；桌面/安卓无副作用） */
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", function () {
+    try {
+      if (window.visualViewport.height >= window.innerHeight - 40) return;
+      var a = document.activeElement;
+      if (a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT")) a.scrollIntoView({ block: "nearest" });
+    } catch (e) {}
+  });
+}
+</script>
 <style>
 :root{
   --bg:#f6efe4; --bg2:#efe5d2; --bg3:#e5d8bf;
@@ -600,6 +612,8 @@ footer{color:var(--border);text-align:center;font-size:10.5px;letter-spacing:.2e
   .btn.sm{min-height:34px;padding:6px 12px}
   .v25rd-bar .btn.sm{min-height:34px;padding:6px 12px}
   .navline button{min-height:44px}
+  /* v134：头部「配置/存档」文字按钮补足 ≥44px 可点区（原 padding:0 仅 ~25px 高，手机难命中） */
+  .hd .stats button{min-height:44px;padding:0 10px}
   /* 弹窗内滚动不再带动背景页面（防滚动穿透/橡皮筋） */
   .dlg{overscroll-behavior:contain}
   /* 点按无灰色高亮闪块 */
@@ -3603,6 +3617,20 @@ function typewriterExpand(){
   }
 }
 /* 术语点击绑定（独立函数，typewriter 完成后可重新调用） */
+/* v134：术语卡定位——.gcard 为 position:fixed 且无 top/left 时，append 到 body 末尾
+   会取静态位置（= #game 的 100dvh 底缘），整张卡片落在视口下缘之外不可见。
+   按触发术语位置贴到其下方；下方放不下则翻到上方，并钳制在视口内。 */
+function placeGcard(gc, anchor){
+  try{
+    const r=anchor.getBoundingClientRect();
+    const w=gc.offsetWidth||320, h=gc.offsetHeight||96;
+    const vw=window.innerWidth, vh=window.innerHeight;
+    let top=r.bottom+8, left=Math.min(r.left, vw-w-8);
+    if(top+h>vh-8) top=Math.max(8, r.top-h-8);
+    left=Math.max(8, left);
+    gc.style.top=top+'px'; gc.style.left=left+'px';
+  }catch(e){}
+}
 function twBindGlossary(host){
   if(!host||typeof host.querySelectorAll!=='function') return;
   host.querySelectorAll('.gl').forEach(sp=>{
@@ -3616,6 +3644,7 @@ function twBindGlossary(host){
         +'<div class="gs"><b>装到哪</b>'+esc(g.where)+'</div>'
         +'<div class="gs"><b>为什么</b>'+esc(g.why)+'</div>';
       document.body.appendChild(gc);
+      placeGcard(gc, sp);
       setTimeout(()=>{ try{gc.remove();}catch(e){} },6000);
       gc.onpointerdown=()=>gc.remove();
     };
@@ -5108,6 +5137,7 @@ function openQuest(qid){
       const gc=document.createElement('div'); gc.className='gcard';
       gc.innerHTML='<div class="gw">'+esc(gl.dataset.g)+'</div><div class="gs"><b>是什么</b>'+esc(g.what)+'</div><div class="gs"><b>装到哪</b>'+esc(g.where)+'</div><div class="gs"><b>为什么</b>'+esc(g.why)+'</div>';
       document.body.appendChild(gc);
+      placeGcard(gc, gl);
       setTimeout(()=>{ try{gc.remove();}catch(err){} },6000);
       gc.onpointerdown=()=>gc.remove();
       return;
