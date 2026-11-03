@@ -892,7 +892,7 @@ body.ov-open #oralFab{display:none}
 <div class="toasts" id="toasts"></div>
 <script src="game-data.js?v53"></script>
 <script src="oral-full-gug.js?v4"></script>
-<script src="exam-2026-data.js?v53"></script>
+<script src="exam-2026-data.js?v54"></script>
 <script src="exam-2026-data-ext.js?v2"></script>
 <script src="exam-2026-enrich.js?v1"></script>
 <script src="exam-2026-text-enrich.js?v1"></script>
@@ -914,7 +914,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v67"></script>
 <script src="wd-planner.js?v33"></script>
-<script src="wd-v25.js?v134"></script>
+<script src="wd-v25.js?v135"></script>
 <script>
 
 "use strict";
@@ -11675,6 +11675,7 @@ function openOralStudy(aid){
             </div>
             <div class="osec-body" style="display:none">
               <div class="kitbar" style="margin:4px 0">
+                <button class="btn sm primary" data-secflow="${si}" type="button">▶ 进入本节练习</button>
                 <button class="btn sm ghost" data-secread="${si}" type="button">📖 阅读（中英对照）</button>
                 <button class="btn sm ghost" data-sectest="${si}" type="button">🎙️ 分站背诵考核</button>
                 <button class="btn sm ghost" data-secedit="${si}" type="button">✎ 校订本节</button>
@@ -11763,6 +11764,16 @@ function openOralStudy(aid){
         openEditor({id:eid, catLabel:"修诵卷 · "+o.name, title:o.name+" · 第"+(si+1)+"节"+(s.h?" · "+s.h:""),
           body:getEdit(eid, String(s.text||s.en||"")), editable:true, editId:eid,
           onSaved:()=>render()});
+      };
+    });
+    /* v136：进入本节练习——一步直达该节五步流程（整段读→分句精读→分句复述→整段重读→整段复述），关修习室后直接进，无二次确认 */
+    ov.querySelectorAll("[data-secflow]").forEach(b=>{
+      b.onpointerdown=()=>{
+        const si=+b.dataset.secflow;
+        try{ SFX.tap(); }catch(e){}
+        ov.remove();
+        if(window.V25&&V25.startOralSectionFlow){ V25.startOralSectionFlow(o.aid, si); }
+        else{ try{ toast("任务引擎未就绪"); }catch(_){} }
       };
     });
     /* 通篇背诵考核：遮全篇 + 打字对照整篇关键词，覆盖 ≥70 达标 → fullCert */

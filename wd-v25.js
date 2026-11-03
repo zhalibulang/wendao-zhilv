@@ -2967,6 +2967,14 @@ function runOralSectionUnit(u){
       +esc(it.title||(ref.art.name+' 第'+(ref.idx+1)+'节'))+' 已走完五步：整段读 → 分句精读 → 分句复述 → 整段重读 → 整段复述。</div></div>');
   });
 }
+/* v136：修习室直达——按篇 aid + 节下标 si 直接进入该节五步流程（跳过开篇预告，
+   修习室各节「进入本节练习」一步即达；无对应单元则提示，不弹二次确认） */
+function startOralSectionFlow(aid, si){
+  const target="ORAL:"+aid+":"+(+si+1)+":0";
+  const u=allUnits().find(x=>(x.items||[]).some(it=>it.id===target));
+  if(!u){ try{ toast("未找到该节任务单元（可能已从任务单移除）"); }catch(e){} return; }
+  try{ runOralSectionUnit(u); }catch(e){ console.warn("[oralsec]",e); try{ toast("进入本节练习失败"); }catch(_){} }
+}
 function drawOralFlow(host, art, sec, si, p0, p1, done){
   const allParas=_oralParas(sec);
   const paras=allParas.slice(p0,p1);              /* 本子任务覆盖的段落（节内绝对段号 p.n 不变） */
@@ -3976,7 +3984,7 @@ function refreshBoard(){
 window.V25={ v25st, V25_TIERS, aiGenInterp25, mockInterp25, aiGenQuiz25, mockQuiz25, _sig,
   allUnits, unitByN, sheet, runUnit, renderBoard, refreshBoard, unitDone, engineBoot,
   planOrder, aiPlan25, mockPlan25, aiPlanDaily25, mockDaily25, ensurePlan25,
-  planHorizon, planFloor,
+  planHorizon, planFloor, startOralSectionFlow,
   subjColor, SUBJ_COLORS, s5Cat, S5_CATS,
   VER:"v29",
   ttsSpeak, ttsStop, ttsPause, ttsResume, ttsCtlHtml, bindTtsCtl, ttsPickVoice, ttsHdOn, ttsHdSet, ttsHdStatus, ttsHdEnsure, ttsHdPct,
