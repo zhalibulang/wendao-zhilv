@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>问道之旅 · 二十五日</title>
+<title>问道之旅</title>
 <script>
 /* v134：iOS 软键盘弹起时把聚焦输入框滚进可视区（visualViewport；桌面/安卓无副作用） */
 if (window.visualViewport) {
@@ -264,6 +264,9 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
    独立显示区域：不与文字混排；多图横向排列自动换行；单图也有尺寸上下限、按原比例自适应 */
 .v25gallery{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin:2px 0 12px;padding:10px;background:rgba(255,255,255,.4);border:1px solid var(--border);border-radius:12px;max-width:100%;box-sizing:border-box}
 .v25gal-img{display:block;height:auto;width:auto;max-width:100%;max-height:230px;object-fit:contain;border-radius:9px;border:1px solid var(--border);background:#fff;cursor:zoom-in;flex-shrink:0}
+/* v138：整段阅读的图区居中——旧版 flex 默认左对齐，单图会缩在整条图区的左边；
+   只作用于五步阅读页（.osent），任务书页/考点弹窗维持原样，尺寸约束不变 */
+.osent .v25gallery{justify-content:center}
 /* v25-67 图区大图预览：轻量全屏遮罩，复用项目 panel() + 遮罩关闭语义 */
 .v25img-zoom .dlg{background:transparent;border:none;padding:0;box-shadow:none}
 .v25img-zoom .close{position:fixed;top:14px;right:14px;font-size:26px;width:36px;height:36px;border-radius:18px;background:rgba(0,0,0,.55);color:#fff;border:1px solid rgba(255,255,255,.25);z-index:10;cursor:pointer;display:flex;align-items:center;justify-content:center}
@@ -579,6 +582,8 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .pchat-typing{font-size:12px;color:var(--dim);padding:2px 4px}
 .flashcard{border:2px solid var(--border-lit);padding:22px 18px;text-align:center;margin:12px 0;min-height:150px;background:var(--bg3);box-shadow:0 3px 0 rgba(60,45,25,.15)}
 .flashcard .fc-id{font-size:12px;color:var(--dim);letter-spacing:.1em}
+/* v138：巡夜逾期标记——到期未逾期的卡不显示，只有真拖过日子的才红底提示 */
+.odtag{display:inline-block;margin-left:6px;padding:0 6px;border-radius:8px;font-size:10.5px;font-style:normal;letter-spacing:0;color:#fff;background:var(--danger);vertical-align:1px}
 .flashcard .fc-main{font-size:16px;margin-top:10px;color:var(--fg);white-space:pre-wrap}
 .flashcard .fc-rev{margin-top:12px;font-size:13px;color:var(--cyber);border-top:1px dashed var(--border);padding-top:10px}
 .wrongrow{border-bottom:1px solid var(--border);padding:7px 2px;font-size:13.5px;display:flex;gap:10px;align-items:center}
@@ -1383,7 +1388,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v82";
+const BUILD_VERSION="v83";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -3269,7 +3274,25 @@ function render(){
     }catch(e2){ console.error('[render] fallback failed',e2); }
   }
 }
+/* v138：天数不再写死「二十五日」——总天数取自 V25.planHorizon().N2（起始日到最终截止日的真实间隔）。
+   常规档（25 天）照旧显示「二十五日」，提前开档/跨期档显示真实总数（如「七十四日」）。 */
+function _cnNum(n){
+  n=Math.max(1,Math.floor(+n||25));
+  if(n>999) return String(n);
+  const D="零一二三四五六七八九", U=["","十","百"], s=String(n), out=[];
+  let zero=false;
+  for(let i=0;i<s.length;i++){
+    const v=+s[i], pos=s.length-1-i;
+    if(v===0){ zero=true; continue; }
+    if(zero&&out.length) out.push("零");
+    zero=false; out.push(D[v]+U[pos]);
+  }
+  return (out.join("")||"一").replace(/^一十/,"十");
+}
+function gameDaysN(){ try{ const N2=(window.V25&&V25.planHorizon)?V25.planHorizon().N2:25; return (N2>0)?N2:25; }catch(e){ return 25; } }
+function gameDaysLabel(){ return _cnNum(gameDaysN())+"日"; }
 function _renderGame(){
+  try{ document.title="问道之旅 · "+gameDaysLabel(); }catch(e){}
   const d=byDay[st.day]||byDay[1];
   const lv=level(), total=totals();
   game.innerHTML=`
@@ -3289,7 +3312,7 @@ function _renderGame(){
   <aside id="sidePanel" aria-label="今日任务面板"></aside>
   <div class="stream" id="stream"></div>
   <button class="fab" id="oralFab" title="修诵 · 英文导游词线" type="button">🎙️</button>
-  <footer>问道之旅 · 二十五日 · 金榜台于 ${D.examDate} · 构建 ${BUILD_VERSION} · 引擎 <b id="v25ver">${(typeof V25!=="undefined"&&V25.VER)?V25.VER:"…"}</b></footer>`;
+  <footer>问道之旅 · ${gameDaysLabel()} · 金榜台于 ${D.examDate} · 构建 ${BUILD_VERSION} · 引擎 <b id="v25ver">${(typeof V25!=="undefined"&&V25.VER)?V25.VER:"…"}</b></footer>`;
   bindNav(); switchView(view);
   renderSidePanel();
   $("#oralFab").onpointerdown=()=>{ SFX.tap(); switchView("oral"); };
@@ -7590,7 +7613,8 @@ function renderNight(){
      去掉翻面闪卡与 AI 提示词；预习卡保留翻面但去掉提示词。 */
   const due=[], later=[], pre=[];
   const today=srsToday();
-  srsDueKeys().forEach(k=>{ if(!/^S[1-5]-|^QM-/.test(k)) return; const c=rtCardOf(k); if(c) due.push(c); });
+  /* v138：记下每张到期卡的 due 日期——用于「逾期 N 天」标记；待来日/预习卡不带 */
+  srsDueKeys().forEach(k=>{ if(!/^S[1-5]-|^QM-/.test(k)) return; const c=rtCardOf(k); if(c){ c.__due=((st.srs&&st.srs[k])||{}).due||""; due.push(c); } });
   Object.keys(st.srs||{}).forEach(k=>{ const r=st.srs[k];
     if(!r||r.tier<1||r.pending||r.due<=today) return; if(!/^S[1-5]-|^QM-/.test(k)) return;
     const c=rtCardOf(k); if(c) later.push(c); });
@@ -7601,7 +7625,11 @@ function renderNight(){
     });
   }
   const consolidated=Object.values(st.srs||{}).filter(r=>r&&r.tier>=2).length;
-  const ov=panel(`<h2>巡夜 · 记忆卡匣</h2><div class="mt">到期复习 ${due.length} 张 · 待来日 ${later.length} 张 · 预习 ${pre.length} 张 · 已巩固 ${consolidated} 张</div>
+  /* v138：逾期天数 = 今天 - 该卡 due 日；到期当天=0 不标 */
+  const _overDays=d=>{ if(!d) return 0; try{ const a=new Date(String(d)+"T00:00:00"), b=new Date(today+"T00:00:00"); if(isNaN(a)||isNaN(b)) return 0; return Math.max(0,Math.round((b-a)/864e5)); }catch(e){ return 0; } };
+  const _odTag=it=>{ const n=_overDays(it&&it.__due); return n>0?`<span class="odtag">逾期 ${n} 天</span>`:""; };
+  const overN=due.filter(it=>_overDays(it&&it.__due)>0).length;
+  const ov=panel(`<h2>巡夜 · 记忆卡匣</h2><div class="mt">到期复习 ${due.length} 张${overN?`（其中逾期 ${overN} 张）`:""} · 待来日 ${later.length} 张 · 预习 ${pre.length} 张 · 已巩固 ${consolidated} 张</div>
     <div id="fcHost"></div>`);
   const host=$("#fcHost",ov);
   /* 到期复习：按知识点随机换题型出题（judge/blank/choice 轮换），答题驱动 SRS 档位 */
@@ -7630,7 +7658,7 @@ function renderNight(){
     }
     /* QM 自录问契：到期复习=凭记忆作答→揭示参考→三档自评（与任务链 b 类同构） */
     if(/^QM-/.test(it.id)){
-      host.innerHTML=`<div class="flashcard"><div class="fc-id">${esc(it.id)} · 问契 · ${i+1}/${deck.length}</div>
+      host.innerHTML=`<div class="flashcard"><div class="fc-id">${esc(it.id)} · 问契 · ${i+1}/${deck.length}${_odTag(it)}</div>
         <div class="qz"><span class="kk">巡夜 · 凭记忆作答</span>${esc(it.title)}</div>
         <div class="fb" id="fb" style="display:none"></div>
         <div class="jbtns" id="qmBtns"><button class="btn sm primary" id="fRev">揭示参考答</button></div></div>
@@ -7650,7 +7678,9 @@ function renderNight(){
     }
     /* 到期复习：答题模式——随机换题型（judge/blank/choice），答对进档/答错退档 */
     answered=false;
-    const forms=["judge","blank","choice","multi","wrongone"];
+    /* v138：只出巡夜 UI 支持的三种题型。旧表单还含 multi/wrongone，但这段渲染没有多选/选错项，
+       会掉进填空分支，点「作答」时读 z.accept.some 直接抛错——该卡无反馈、也无法继续，等于卡死 */
+    const forms=["judge","blank","choice"];
     const form=forms[(i + (it.id||"").split("").reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,0)) % forms.length];
     const pt=D.pointsLib.find(p=>p.id===it.id);
     if(!pt){ i++; draw(); return; }
@@ -7675,7 +7705,7 @@ function renderNight(){
         <div class="jbtns" style="margin-top:8px"><button class="btn sm primary" id="fSub">作答</button></div>
         <div class="fb" id="fb"></div>`;
     }
-    host.innerHTML=`<div class="flashcard"><div class="fc-id">${esc(it.id)} · ${"★".repeat(+it.star)} · ${kindLabel}</div>${qHtml}</div>
+    host.innerHTML=`<div class="flashcard"><div class="fc-id">${esc(it.id)} · ${"★".repeat(+it.star)} · ${kindLabel}${_odTag(it)}</div>${qHtml}</div>
       <div class="tstate">${i+1} / ${deck.length}</div>`;
     const fb=$("#fb",host);
     function answerNight(ok){
@@ -11279,13 +11309,14 @@ function intro(){
      这里不能再 defState()——否则会把刚装好的 st.rtPlan 槽位快照清空，
      导致首批任务完成后触发计划重建时，已交付槽位因无快照从当日列表消失。 */
   if(!st) st=defState();
+  try{ document.title="问道之旅 · "+gameDaysLabel(); }catch(e){}
   const ov=document.createElement("div"); ov.className="ov";
   ov.innerHTML=`<div class="dlg" style="max-width:540px;text-align:center">
     <div class="mt" style="letter-spacing:.3em">序 章 · 降 临</div>
-    <h2 style="font-size:24px;letter-spacing:.2em">问道之旅 · 二十五日</h2>
+    <h2 style="font-size:24px;letter-spacing:.2em">问道之旅 · ${gameDaysLabel()}</h2>
     <div class="sec" style="text-align:left;font-size:14.5px">
       <p>这是一个被遗忘之雾入侵的残破世界。你是来自次元之外的唯一力量，与圣女云汀立下契约，成为她的契约者。</p>
-      <p>你的目标：25 日内完成五科备考修行，踏上金榜台。</p>
+      <p>你的目标：<b>${gameDaysN()}</b> 日内完成五科备考修行，踏上金榜台。</p>
       <div style="margin-top:2px">
         <label for="pidName" style="display:block;text-align:left;font-size:13px;color:var(--neon);margin-bottom:6px;letter-spacing:.15em">域外之名 · 请写下你的代号</label>
         <input id="pidName" type="text" inputmode="text" maxlength="12" value="${esc(st.player)}" placeholder="为自己取一个名字吧" autocomplete="off" autocapitalize="none" spellcheck="false"
