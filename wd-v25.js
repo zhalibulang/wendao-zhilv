@@ -2661,7 +2661,17 @@ function _oralSplit(raw){
   let plain;
   try{ plain=(typeof mdPlain==="function")? mdPlain(String(raw||"")) : _htmlToText(String(raw||"").replace(/<\/(?:p|div|li|h[1-6])>|<br\s*\/?>/gi," ")).replace(/\s+/g," ").trim(); }
   catch(e){ plain=_htmlToText(String(raw||"").replace(/<\/(?:p|div|li|h[1-6])>|<br\s*\/?>/gi," ")).replace(/\s+/g," ").trim(); }
-  return { body:sp.body, gal:typeof pointGalleryHtml==="function"?pointGalleryHtml(sp.imgs):"", plain:plain, isHtml:safeIsHtml };
+  /* v145：练习句 / 朗读口径——剔除标题、列表、引用、分隔线；打字机仍用全文 plain */
+  let speak=plain, practice=sp.body;
+  try{
+    if(safeIsHtml&&typeof mdPracticeSegments==="function"){
+      const segs=mdPracticeSegments(sp.body);
+      const prose=segs.filter(s=>s.kind==="prose");
+      practice=prose.map(s=>s.html).join("<br>");
+      speak=prose.map(s=>s.plain).join(" ");
+    }
+  }catch(e){}
+  return { body:sp.body, gal:typeof pointGalleryHtml==="function"?pointGalleryHtml(sp.imgs):"", plain:plain, speak:speak||plain, practice:practice, isHtml:safeIsHtml };
 }
 /* 打字机：纯文本逐字揭示；富文本先打纯文本，打完换成带样式的正文 */
 function _oralType(el, v, onDone, opts){
@@ -3057,30 +3067,43 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     paras.forEach(p=>{
       const paIdx=paOf(p);
       const raw=String(_oralParaRaw(art,si,paIdx,p.text)||"");
-      const isHtml=/<[a-z][\s\S]*?>/i.test(raw);
+      /* v145：先走统一 Markdown 入口把 # / - / > / --- 变成真排版，再按「正文 / 块级」分段 */
+      let rendered=raw;
+      try{ if(typeof mdDocRender==="function") rendered=mdDocRender(raw,true); }catch(e){ rendered=raw; }
+      const isHtml=/<[a-z][\s\S]*?>/i.test(rendered);
       if(!isHtml){
         _oralSplitSent(raw).forEach(t=>sents.push({ n:sents.length+1, text:t, pa:paIdx, html:"", gal:"" }));
         return;
       }
-      /* v129：富文本段——图先抽离（图 URL 的句点会切碎分句），正文净化；
-         纯文本坐标切句，切片还原每句的加粗/字色；对照/评分仍用 sn.text 纯文本 */
-      let body=raw, gal="";
-      try{
-        const rr=rich(raw);
-        const sp=/<img/i.test(rr)&&typeof splitPointImgs==="function"? splitPointImgs(rr) : {body:rr,imgs:[]};
-        body=sp.body;
-        gal=(sp.imgs&&sp.imgs.length&&typeof pointGalleryHtml==="function")? pointGalleryHtml(sp.imgs) : "";
-      }catch(e){}
-      const plainSrc=_htmlPlainAligned(body);
-      const pieces=_oralSplitSent(plainSrc);
-      let cursor=0, first=true;
-      pieces.forEach(t=>{
-        let at=plainSrc.indexOf(t,cursor);
-        if(at<0) at=cursor;
-        sents.push({ n:sents.length+1, text:t, pa:paIdx,
-          html:_htmlSlicePlain(body,at,at+t.length), gal:first?(gal||""):"" });
-        first=false;
-        cursor=at+t.length;
+      /* v129：图先抽离（图 URL 的句点会切碎分句）；
+         v145：标题/列表/引用/分隔线不产出练习句，只保留正文段落 */
+      let segs=[{kind:"prose",html:rendered}];
+      try{ if(typeof mdPracticeSegments==="function") segs=mdPracticeSegments(rendered); }catch(e){}
+      const bodies=[], galImgs=[];
+      segs.forEach(seg=>{
+        if(seg.kind!=="prose") return;
+        let body=seg.html;
+        try{
+          if(/<img/i.test(body)&&typeof splitPointImgs==="function"){
+            const sp=splitPointImgs(body); body=sp.body||body; (sp.imgs||[]).forEach(s=>galImgs.push(s));
+          }
+        }catch(e){}
+        bodies.push(body);
+      });
+      const gal=(galImgs.length&&typeof pointGalleryHtml==="function")? pointGalleryHtml(galImgs) : "";
+      let first=true;
+      bodies.forEach(body=>{
+        const plainSrc=_htmlPlainAligned(body);
+        const pieces=_oralSplitSent(plainSrc);
+        let cursor=0;
+        pieces.forEach(t=>{
+          let at=plainSrc.indexOf(t,cursor);
+          if(at<0) at=cursor;
+          sents.push({ n:sents.length+1, text:t, pa:paIdx,
+            html:_htmlSlicePlain(body,at,at+t.length), gal:first?(gal||""):"" });
+          first=false;
+          cursor=at+t.length;
+        });
       });
     });
   };
@@ -3274,7 +3297,15 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
   };
   const killAutoTts=()=>{ if(autoTtsT){ clearTimeout(autoTtsT); autoTtsT=null; } };
   const stopVoice=()=>{ killAutoTts(); if(liveRec){ try{ liveRec.stop(); }catch(e){} liveRec=null; } try{ micRecStop(); }catch(e){} ttsStop(); };
-  const allPlain=()=>paras.map(p=>_htmlToText(_oralParaRaw(art,si,paOf(p),p.text))).join(" ");
+  /* v145：朗读/评分统一只送正文句子——标题/列表/引用/分隔线不念、不计入覆盖度 */
+  const allPlain=()=>paras.map(p=>{
+    const raw=_oralParaRaw(art,si,paOf(p),p.text);
+    try{
+      const rendered=(typeof mdDocRender==="function")?mdDocRender(String(raw||""),true):String(raw||"");
+      if(typeof mdPracticePlain==="function") return mdPracticePlain(rendered);
+    }catch(e){}
+    try{ return _htmlToText(String(raw||"")); }catch(e){ return ""; }
+  }).join(" ");
   const bar=(step,count,extra)=>'<div class="v25rd-bar"><span class="v25rd-step">'+step+'</span><span class="v25rd-count">'+esc(count)+'</span><span class="v25rd-rule"></span>'+(extra||"")+'<button class="btn sm" data-v25now="1" type="button" style="margin-left:auto" title="跳过剩余环节，直接完成本节">✓ 完成本节</button></div>';
   /* 五步流程的「完成本节」：五步各自重建 host.innerHTML，事件委托挂在 host 上一直有效。
      语音识别不可用或不想逐句走完时，一键收尾，不必被流程卡死。 */
@@ -3670,7 +3701,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     reciteT0=null;  /* 整段复述重新计时 */
     const fullHtml=paras.map(p=>{
       const v=_oralSplit(_oralParaRaw(art,si,paOf(p),p.text));
-      return (p.head?'<div class="v25subhead">'+esc(p.head)+'</div>':'')+v.body;
+      return (p.head?'<div class="v25subhead">'+esc(p.head)+'</div>':'')+(v.practice||v.body);
     }).join('<br><br>');
     host.innerHTML='<div class="v25rd">'
       +bar('导游词 · 整段复述','第 '+(si+1)+' 节 · 第 5 步','')

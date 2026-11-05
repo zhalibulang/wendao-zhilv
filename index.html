@@ -195,6 +195,11 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
 .osec.passed .osec-badge{color:var(--ok)}
 .osec-body{padding:4px 10px 10px;border-top:1px dashed var(--border)}
 .osent{padding:6px 4px;border-bottom:1px dotted var(--border)}
+/* v145：标题/列表/引用/分隔线在修习室里照常排版显示，但只是「版面元素」：
+   无点读/遮英、不计句数、不参与精读与复述 */
+.osent-blk{padding:4px 4px 2px;border-bottom:none;background:transparent}
+.osent-blk hr{border:0;border-top:1px solid var(--border);margin:8px 0}
+.osent-blk div{line-height:1.6}
 .osent-en{font-size:14px;line-height:1.7;color:var(--fg)}
 .osent-zh{font-size:12px;color:var(--dim);line-height:1.6;margin-top:2px}
 .osent-act{margin-top:3px;display:flex;gap:6px}
@@ -275,6 +280,9 @@ body{background:var(--bg);color:var(--fg);font-family:var(--pixel);font-size:cla
    有图：图左文右，图列是「册页裱边」（米白衬底+细框+内衬高光），图片撑满图列不再缩角落；
    无图：单列纯文页，图列整个不渲染，绝无空壳。窄屏（≤640px）退化为上图下文。 */
 .v25spread{display:grid;grid-template-columns:minmax(0,240px) 1fr;gap:12px;align-items:stretch;min-width:0}
+/* v145：图列自愈后（坏图/极小占位图被撤）不留半屏空白，正文独占整宽 */
+.v25spread.noimg{grid-template-columns:minmax(0,1fr)}
+.v25spread.noimg .v25gallery{display:none}
 .v25spread .v25gallery{flex-direction:column;justify-content:center;align-items:center;margin:0;padding:9px;background:linear-gradient(180deg,rgba(255,253,246,.9),rgba(255,250,240,.65));border:1px solid var(--border);border-radius:12px;box-shadow:inset 0 0 0 3px rgba(255,255,255,.5);max-width:100%;width:100%;box-sizing:border-box}
 .v25spread .v25gal-img{max-width:100%;max-height:280px;width:auto;height:auto;object-fit:contain;box-shadow:0 1px 3px rgba(60,45,25,.08)}
 .v25spread .v25rd-paper{min-width:0;overflow-wrap:break-word;word-break:break-word}
@@ -986,7 +994,9 @@ function mdToHtmlEx(src){
     let m;
     if((m=/^[ \t]*(#{1,6})[ \t]+(.+)$/.exec(raw))){
       st.changed=true;
-      const fs=[1.6,1.45,1.3,1.17,1.06,.96][m[1].length-1];
+      /* v145：六级标题拉开档差（相邻 ≥10%），且六级与正文同号（1em）靠加粗区分，
+         不再出现「六级比正文还小」；小字号卡片/修习室里也能一眼分开 */
+      const fs=[1.9,1.67,1.47,1.29,1.13,1][m[1].length-1];
       return '<div><span style="font-size:'+fs+'em;font-weight:bold">'+mdInline(m[2],st)+'</span></div>';
     }
     if(/^[ \t]*[=\-]{3,}[ \t]*$/.test(raw)){ st.changed=true; return '<hr>'; }
@@ -1072,6 +1082,59 @@ function mdDocRender(x, sanitize){
   if(!/<[a-z][\s\S]*?>/i.test(x)) return looksMd(x)? mdToHtml(x) : esc(x);
   const html=_mdBook(x).html;
   return sanitize===false ? html : rich(html);
+}
+/* v145：把渲染后的正文按「练习句 / 块级元素」分开。
+   块级元素（1-6 级标题、列表项、引用、分隔线）照常排版，但不进练习句库：
+   不给点读/遮英、不计入「本节 N 句」、不参与五步逐句精读与整段复述。
+   判定基于渲染结构（标题=单个 span 带 font-size+font-weight；列表=• 开头；引用=▎ 开头），
+   因此对 contenteditable 存下来的 <div>/<h1>/<li> 同样有效。 */
+function mdPracticeSegments(html){
+  const src=String(html==null?"":html);
+  const out=[];
+  if(!/<[a-z][\s\S]*?>/i.test(src)){ return [{kind:"prose",html:esc(src),plain:src}]; }
+  const tpl=document.createElement("template"); tpl.innerHTML=src;
+  const plainOf=h=>{ try{ return (typeof V25!=="undefined"&&V25._htmlPlainAligned)?V25._htmlPlainAligned(h):h.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); }catch(e){ return h.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); } };
+  const isHeadingDiv=node=>{
+    const kids=[...node.childNodes].filter(n=>n.nodeType===1||(n.nodeType===3&&n.nodeValue.trim()));
+    if(kids.length!==1||kids[0].nodeType!==1) return false;
+    const k=kids[0];
+    if(!/^(span|font)$/i.test(k.tagName||"")) return false;
+    const st=String(k.getAttribute("style")||"");
+    return /font-size\s*:/i.test(st)&&/font-weight\s*:\s*(bold|600|700|800|900)/i.test(st);
+  };
+  const push=(kind,nodeHtml,nodePlain)=>out.push({kind,html:nodeHtml,plain:nodePlain!=null?nodePlain:plainOf(nodeHtml)});
+  [...tpl.content.childNodes].forEach(node=>{
+    if(node.nodeType===3){
+      const s=node.nodeValue;
+      if(s.trim()) push("prose",esc(s),s);
+      return;
+    }
+    if(node.nodeType!==1) return;
+    const tag=(node.tagName||"").toLowerCase();
+    const h=node.outerHTML||"";
+    if(tag==="hr"){ push("block",h); return; }
+    if(/^(h[1-6]|li|blockquote|ul|ol|pre)$/.test(tag)){ push("block",h); return; }
+    if(tag==="br"){ return; }
+    const txt=node.textContent||"";
+    /* 列表项 / 引用：mdToHtmlEx 输出以 • / ▎ 开头；已有 HTML 的 li/blockquote 已在上面分流 */
+    if(/^[ \t]*[•▎]/.test(txt)){ push("block",h); return; }
+    if(isHeadingDiv(node)){ push("block",h); return; }
+    if(!txt.trim()&&!/<img/i.test(h)) return;   /* 空占位行不产出 */
+    push("prose",h);
+  });
+  return out;
+}
+/* 只用正文段落拼成的纯文本（朗读/复述评分/对照统一口径） */
+function mdPracticePlain(html){
+  try{
+    return mdPracticeSegments(html).filter(s=>s.kind==="prose").map(s=>s.plain).join(" ");
+  }catch(e){ return mdPlain(html); }
+}
+/* 只用正文段落拼成的显示 HTML（整段复述遮盖/对照用，块级元素不参与） */
+function mdPracticeHtml(html){
+  try{
+    return mdPracticeSegments(html).filter(s=>s.kind==="prose").map(s=>s.html).join("<br>");
+  }catch(e){ return String(html==null?"":html); }
 }
 /* 富文本里混着 Markdown 时做混合转换，否则原样返回（编辑器预览用，不做白名单净化） */
 function mdMaybeMixed(html){
@@ -1189,11 +1252,33 @@ function splitPointImgs(html){
 }
 function pointGalleryHtml(imgs){
   if(!imgs||!imgs.length) return "";
-  /* v25-67：直接挂 inline onpointerdown → _v25Zoom(src)，零事件委托复杂度 */
+  /* v25-67：直接挂 inline onpointerdown → _v25Zoom(src)，零事件委托复杂度
+     v145：图加载后按真实尺寸判活——过小/坏图（如 1×1 占位）直接撤掉整列，
+     避免「有图列却没内容」的半屏空白；正常图自适应列宽。 */
   return '<div class="v25gallery">'+imgs.map(src=>{
     const safeSrc=String(src).replace(/["'<>]/g,"");
-    return '<img class="v25gal-img" src="'+safeSrc+'" alt="配图" loading="lazy" onpointerdown="try{SFX&&SFX.tap();}catch(_){}_v25Zoom&&_v25Zoom(\''+safeSrc.replace(/\\'/g,"\\\\'")+'\');event.preventDefault();event.stopPropagation();">';
+    return '<img class="v25gal-img" src="'+safeSrc+'" alt="配图" loading="lazy" onload="try{window._v25GalFit&&_v25GalFit(this)}catch(_){}" onerror="try{window._v25GalDrop&&_v25GalDrop(this)}catch(_){}" onpointerdown="try{SFX&&SFX.tap();}catch(_){}_v25Zoom&&_v25Zoom(\''+safeSrc.replace(/\\'/g,"\\\\'")+'\');event.preventDefault();event.stopPropagation();">';
   }).join("")+'</div>';
+}
+/* 图列自愈：坏图/极小占位图 → 撤图；图全撤光 → 拆掉图列，正文独占整宽 */
+function _v25GalDrop(img){
+  try{
+    if(!img||!img.parentElement) return;
+    const gal=img.parentElement; img.remove();
+    if(!gal.querySelector("img")){
+      const spread=gal.closest(".v25spread");
+      if(spread) spread.classList.add("noimg");
+      gal.remove();
+    }
+  }catch(e){}
+}
+function _v25GalFit(img){
+  try{
+    if(!img) return;
+    /* 1×1 / 2×2 这类占位图在页面上等于空白：按无图处理 */
+    if((img.naturalWidth||0)<16||(img.naturalHeight||0)<16){ _v25GalDrop(img); return; }
+    img.style.maxWidth="100%"; img.style.height="auto";
+  }catch(e){}
 }
 /* 高亮/显示函数共用的富文本适配：含 HTML 标签的入参视为 rich() 已净化的校订文本，直接放行；
    纯文本照旧 esc 转义。防止「esc 把用户编辑的 <b>/<span> 变成字面字符」的样式丢失。 */
@@ -1583,7 +1668,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v90";
+const BUILD_VERSION="v91";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -12140,9 +12225,13 @@ function openOralStudy(aid){
   const ov=document.createElement("div"); ov.className="ov";
   /* v137：句内占位符按原位置还原成图区——图跟在它原本所在的那一句后面，
      不再被统一搬到节顶（旧行为会让图中插句后的图片跑到整节最上面） */
-  function sentenceHtml(sentences, zhMap, imgs){
-    return sentences.map((sn,i)=>{
-      const mk=takeImgMarkers(sn);
+  /* v145：rows 里混着「练习句」与「块级版面元素」。
+     块级元素（标题/列表/引用/分隔线）只显示、不给点读/遮英、不计句数。 */
+  function sentenceHtml(rows, zhMap, imgs){
+    return rows.map(r=>{
+      if(r.block!=null) return `<div class="osent osent-blk">${r.block}</div>`;
+      const i=r.idx;
+      const mk=takeImgMarkers(r.sent);
       const gal=(mk.pics.length&&imgs&&typeof pointGalleryHtml==="function")
         ? pointGalleryHtml(mk.pics.map(k=>imgs[k]).filter(Boolean)) : "";
       const main=mk.text?`<div class="osent-en">${richAware(mk.text)}</div>
@@ -12187,18 +12276,46 @@ function openOralStudy(aid){
           /* v137：富文本按「纯文本坐标」分句（块级标签算一个空格），再按同一坐标切回带样式的 HTML。
              原来直接在 HTML 上切句：</div><div> 不被认作句界，整节会被并成 1 句，
              点读/遮英/句数统计全部失真（用户校订后尤甚）。 */
-          let sens=[], sensHtml=null;
+          /* v145：按「块级版面元素 / 正文句」分段——标题、列表、引用、分隔线照常排版，
+             但不给点读遮英、不计入本节句数、不参与精读与复述 */
+          let rows=[], sens=[], practiceN=0;
           const _hp=(window.V25&&V25._htmlPlainAligned)||null;
           const _hs=(window.V25&&V25._htmlSlicePlain)||null;
-          if(enIsHtml&&_hp&&_hs){
-            const plain=_hp(sp.body);
-            sens=oralSplitSentences(plain);
-            let cursor=0;
-            sensHtml=sens.map(t=>{
-              let at=plain.indexOf(t,cursor); if(at<0) at=cursor; cursor=at+t.length;
-              try{ return _hs(sp.body,at,at+t.length)||esc(t); }catch(e){ return esc(t); }
+          if(enIsHtml){
+            const segs=(typeof mdPracticeSegments==="function")?mdPracticeSegments(sp.body):[{kind:"prose",html:sp.body}];
+            segs.forEach(seg=>{
+              if(seg.kind==="block"){ rows.push({block:seg.html}); return; }
+              const plain=_hp?_hp(seg.html):seg.plain;
+              const ss=oralSplitSentences(plain);
+              if(!ss.length){
+                /* 纯图段：把图并到上一句（没有上一句就单独成行但不计句） */
+                if(/\uE000\d+\uE001/.test(seg.html)){
+                  const last=rows.length&&rows[rows.length-1].sent?rows[rows.length-1]:null;
+                  if(last) last.sent=last.sent+seg.html;
+                  else rows.push({sent:seg.html,idx:practiceN,imgOnly:true});
+                }
+                return;
+              }
+              let cursor=0;
+              ss.forEach(t=>{
+                /* v145：只有图片占位符、没有文字的「句」不算练习句——图并入上一句 */
+                if(t.replace(/\uE000\d+\uE001/g,"").trim()===""){
+                  const last=rows.length&&rows[rows.length-1].sent?rows[rows.length-1]:null;
+                  if(last) last.sent=last.sent+t;
+                  else rows.push({sent:t,idx:practiceN,imgOnly:true});
+                  return;
+                }
+                let at=plain.indexOf(t,cursor); if(at<0) at=cursor; cursor=at+t.length;
+                let h=""; try{ h=_hs?(_hs(seg.html,at,at+t.length)||esc(t)):esc(t); }catch(e){ h=esc(t); }
+                rows.push({sent:h, idx:practiceN}); sens.push(t); practiceN++;
+              });
             });
-          } else { sens=oralSplitSentences(sp.body); }
+          } else {
+            sens=oralSplitSentences(sp.body);
+            rows=sens.map((t,i)=>({sent:esc(t), idx:i}));
+            practiceN=sens.length;
+          }
+          const sensCount=practiceN;
           const zh=String(s.zh||"");
           const zhs=zh?zh.split(/(?<=[。！？])/).filter(Boolean):[];
           const passed=oralSecDone(o.aid,si);
@@ -12210,7 +12327,7 @@ function openOralStudy(aid){
           return `<div class="osec${passed?" passed":""}" data-sec="${si}">
             <div class="osec-head" data-sechead="${si}">
               <span class="fcar">▸</span><b>${si+1}. ${esc(s.h||("Section "+(si+1)))}</b>
-              <span style="font-size:11px;color:var(--dim)">${sens.length} 句</span>
+              <span style="font-size:11px;color:var(--dim)">${sensCount} 句</span>
               <span class="osec-badge">${passed?"✓ 分站达标":partTxt}</span>
             </div>
             <div class="osec-body" style="display:none">
@@ -12220,7 +12337,7 @@ function openOralStudy(aid){
                 <button class="btn sm ghost" data-sectest="${si}" type="button">🎙️ 分站背诵考核</button>
                 <button class="btn sm ghost" data-secedit="${si}" type="button">✎ 校订本节</button>${retryBtns}
               </div>
-              <div class="osents" data-sents="${si}">${sentenceHtml(sensHtml||sens,zhs,sp.imgs)}</div>
+              <div class="osents" data-sents="${si}">${sentenceHtml(rows,zhs,sp.imgs)}</div>
               <div class="osectest" data-osectest="${si}" style="display:none"></div>
             </div></div>`;
         }).join("")}
