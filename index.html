@@ -943,6 +943,55 @@ const $ = (s,el=document)=>el.querySelector(s);
 })();
 const esc = s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const mdClean = s=>String(s).replace(/\*\*/g,"").replace(/^#{1,6}\s+/gm,"").replace(/^[-*]\s+/gm,"· ").replace(/`/g,"");
+/* ================= Markdown → 富文本（编辑器与正文显示共用） =================
+   支持：**加粗** / __加粗__ / *斜体* / _斜体_ / ~~删除线~~ / ==高亮== / `代码`
+        # 标题（1-6 级）/ - * + 列表 / > 引用 / --- 分隔线
+        [文字](链接) / ![说明](图片地址)
+   做法：逐行先识别块级语法（# - > ---），再 esc() 转义行内文字、解析行内标记，
+   只产出白名单标签，不修改纯文本原文；已是富文本（含 HTML 标签）的字符串不会被二次解析，
+   原有加粗/字色/图片不受影响。 */
+function looksMd(s){
+  s=String(s==null?"":s);
+  if(/<[a-z][\s\S]*?>/i.test(s)) return false;          /* 富文本不再当 Markdown 解析 */
+  return /(\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|==[^=\n]+==|`[^`\n]+`|^#{1,6}[ \t]+|^[ \t]*[-*+][ \t]+|^[ \t]*>[ \t]?|!\[[^\]]*\]\(|\[[^\]]+\]\([^)]+\)|(^|[^*])\*([^*\n]+)\*(?!\*)|(^|[^_])_([^_\n]+)_(?!_))/m.test(s);
+}
+function mdInline(s){
+  const T=[]; const put=html=>"\uE200"+(T.push(html)-1)+"\uE201";
+  s=String(s||"");
+  s=s.replace(/`([^`\n]+)`/g,(m,t)=>put('<span style="background-color:rgba(120,104,78,.12);font-size:.94em">'+t+'</span>'));
+  s=s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g,(m,alt,url)=>/^(https?:|data:image\/)/i.test(url)?put('<img class="vimg" src="'+url.replace(/["<>]/g,"")+'" alt="'+alt.replace(/["<>]/g,"")+'">'):m);
+  s=s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(m,txt,url)=>/^(https?:|\/|#)/i.test(url)?put('<span style="color:#3498db;text-decoration:underline">'+txt+'</span>'):m);
+  s=s.replace(/==([^=\n]+)==/g,(m,t)=>put('<mark>'+t+'</mark>'));
+  s=s.replace(/~~([^~\n]+)~~/g,(m,t)=>put('<span style="text-decoration:line-through">'+t+'</span>'));
+  s=s.replace(/\*\*([^*\n]+)\*\*/g,(m,t)=>put('<b>'+t+'</b>'));
+  s=s.replace(/__([^_\n]+)__/g,(m,t)=>put('<b>'+t+'</b>'));
+  s=s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g,(m,p,t)=>/^\d+$/.test(t)?m:p+put('<i>'+t+'</i>'));
+  s=s.replace(/(^|[^_])_([^_\n]+)_(?!_)/g,(m,p,t)=>p+put('<i>'+t+'</i>'));
+  s=s.replace(/\uE200(\d+)\uE201/g,(m,i)=>T[+i]||"");
+  return s;
+}
+function mdToHtml(s){
+  s=String(s==null?"":s);
+  /* 注意：块级语法（# - > ---）必须在 esc 之前判断，否则 > 会先变成 &gt; 认不出来 */
+  const lines=s.replace(/\r\n?/g,"\n").split("\n");
+  const body=lines.map(line=>{
+    const raw=line.replace(/[ \t]+$/,"");
+    if(/^[ \t]*```/.test(raw)) return "";
+    let m;
+    if((m=/^[ \t]*(#{1,6})[ \t]+(.+)$/.exec(raw))){
+      const lv=m[1].length, fs=lv<=2?1.28:(lv===3?1.14:1);
+      return '<div><span style="font-size:'+fs+'em;font-weight:bold">'+mdInline(esc(m[2]))+'</span></div>';
+    }
+    if(/^[ \t]*[=\-]{3,}[ \t]*$/.test(raw)) return '<hr>';
+    if((m=/^[ \t]*[-*+][ \t]+(.+)$/.exec(raw))) return '<div>• '+mdInline(esc(m[1]))+'</div>';
+    if((m=/^[ \t]*>[ \t]?(.*)$/.exec(raw))) return '<div>▎'+mdInline(esc(m[1]))+'</div>';
+    if(!raw.trim()) return '<div><br></div>';
+    return '<div>'+mdInline(esc(raw))+'</div>';
+  }).join("");
+  return body||"<div><br></div>";
+}
+/* 纯文本 →（需要时）Markdown 解析；富文本原样返回 */
+function mdMaybe(x){ x=String(x==null?"":x); return looksMd(x)?mdToHtml(x):x; }
 /* —— 富文本渲染：纯文本转义、含 HTML 时白名单净化（加粗/斜体/下划线/高亮/标色/背景色）—— */
 function rich(s){
   s=String(s==null?"":s);
@@ -1028,7 +1077,7 @@ function takeImgMarkers(s){
 }
 /* 存稿原文（未经净化）的安全显示：含 HTML 先过 rich() 白名单净化再输出，纯文本照旧 esc。
    卡片/句行直接渲染存稿（st.edits 里的原始 HTML）必须用它——直接 esc 会把加粗/字色变成字面字符 */
-function _rtRich(x){ x=String(x==null?"":x); return /<[a-z][\s\S]*?>/i.test(x)? rich(x) : esc(x); }
+function _rtRich(x){ x=String(x==null?"":x); if(looksMd(x)) return mdToHtml(x); return /<[a-z][\s\S]*?>/i.test(x)? rich(x) : esc(x); }
 /* ================= 音效引擎（Web Audio 合成，无外部文件，离线可用） ================= */
 let _ac=null;
 function ac(){ if(!_ac){ try{ _ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(_ac&&_ac.state==="suspended") _ac.resume(); return _ac; }
@@ -1389,7 +1438,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v86";
+const BUILD_VERSION="v87";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -6468,12 +6517,16 @@ function openEditor(card){
           <label style="font-size:10.5px;color:var(--dim)">字色</label><input type="color" id="edColor" value="#e6a23c" title="文字颜色">
           <label style="font-size:10.5px;color:var(--dim);margin-left:8px">底色</label><input type="color" id="edBg" value="#ffffaa" title="背景颜色">
         </div>
+        <button class="btn sm ghost" id="edMd" type="button" title="把正文里的 Markdown 语法转成排版：**加粗** *斜体* ~~删除线~~ ==高亮== &#96;代码&#96; # 标题 - 列表 > 引用 [文字](链接) ![图](地址)">M↓ Markdown 排版</button>
         <button class="btn sm ghost" id="edClearFmt" type="button" title="清除选中文字的全部格式（加粗/划线/颜色/背景，一并退回）">🧹 清格式</button>
         <button class="btn sm ghost" id="edImg" type="button" title="插入图片：本地上传（自动压缩）或粘贴图片链接">🖼 图</button>
         <input type="file" id="edImgFile" accept="image/*" style="display:none">
       </div>
       <div class="kitbar" style="flex-wrap:wrap;border-top:0;padding-top:0">
         <span style="font-size:11px;color:var(--dim)">快捷键：<b>⌘/Ctrl+B</b> 加粗 · <b>⌘/Ctrl+I</b> 斜体 · <b>⌘/Ctrl+U</b> 下划线 · <b>⌘/Ctrl+K</b> 标字色 · <b>⌘/Ctrl+H</b> 标背景（颜色用上次设置的值）</span>
+      </div>
+      <div class="kitbar" style="flex-wrap:wrap;border-top:0;padding-top:0">
+        <span style="font-size:11px;color:var(--dim)">Markdown 直接写：<b>**加粗**</b> · <b>*斜体*</b> · <b>~~删除线~~</b> · <b>==高亮==</b> · <b>&#96;代码&#96;</b> · <b># 标题</b> · <b>- 列表</b> · <b>&gt; 引用</b> · <b>[文字](链接)</b> · <b>![图](地址)</b>；保存时会自动转排版，也可先点「M↓ Markdown 排版」预览</span>
       </div>
       <div id="edArea" contenteditable="true" spellcheck="false" style="min-height:160px;max-height:320px;overflow:auto;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;line-height:1.9;white-space:pre-wrap;background:rgba(255,255,255,.03)">${_edBody(current)}</div>
       <div class="estatus saved" id="edStatus">● 已加载当前版本</div>
@@ -6653,6 +6706,24 @@ function openEditor(card){
     rd.readAsDataURL(f);
   };
   const valPlain=()=> (area.innerText||area.textContent||"").replace(/\u200b/g,"").trim();
+  /* v142：Markdown 支持——检测正文是否只有手动格式之外的空壳（div/br 不算格式） */
+  const edHasRich=()=> !!(area.querySelector("b,strong,i,em,u,mark,span,font,img,a,hr"));
+  const edConvMd=(notify)=>{
+    const plain=valPlain();
+    if(!looksMd(plain)){ if(notify) toast("正文里没有检测到 Markdown 语法"); return false; }
+    area.innerHTML=mdToHtml(plain);
+    markDirty(); if(notify) toast("已按 Markdown 排版（还没保存）");
+    return true;
+  };
+  const mdBtn=$("#edMd",ov);
+  if(mdBtn){
+    mdBtn.addEventListener("mousedown",e=>e.preventDefault());
+    mdBtn.onclick=()=>{
+      try{ SFX&&SFX.tap(); }catch(_){}
+      if(edHasRich()&&!confirm("正文里已有手动格式，Markdown 排版会按纯文本重排并覆盖这些格式。继续？")) return;
+      edConvMd(true);
+    };
+  }
   function drawHist(){
     const vers=editVer(card.editId);
     if(!vers.length){ hist.innerHTML=`<div class="vitem"><span class="vat">官方原文</span><span class="vprev">（尚无校订版本）</span></div>`; return; }
@@ -6671,7 +6742,12 @@ function openEditor(card){
   }
   $("#edSave",ov).onpointerdown=()=>{
     if(!valPlain()){ toast("内容不能为空"); return; }
-    const html=area.innerHTML.trim();
+    /* v142：纯文本 + Markdown 语法 → 保存前自动转成富文本（已有手动格式则保持原样，避免覆盖） */
+    let html=area.innerHTML.trim();
+    if(!edHasRich()&&looksMd(valPlain())){
+      html=mdToHtml(valPlain());
+      area.innerHTML=html;
+    }
     if(saveEdit(card.editId, html)){ SFX.ok(); dirty=false; status.className="estatus saved"; status.textContent="● 已保存 "+_atLocal(new Date().toISOString(), true); drawHist(); toast("新版本已存档"); if(card.onSaved)card.onSaved(); }
     else { status.className="estatus saved"; status.textContent="● 内容未变化"; }
   };
@@ -11925,18 +12001,21 @@ function openOralStudy(aid){
              v128：校订可能是富文本（加粗/字色）——先过 rich() 净化再显示；
              配图先抽离（图里 URL 的句点会切碎分句），评分/关键词另用纯文本底本 */
           const enRaw=String(getEdit("full:"+o.id+":"+si,String(s.text||s.en||"")));
+          /* v142：纯文本正文若带 Markdown 语法，先转成富文本再分句；已有富文本照旧净化 */
           const enHas=/<[a-z][\s\S]*?>/i.test(enRaw);
-          const en=enHas? rich(enRaw) : enRaw;
+          const enMd=(!enHas&&looksMd(enRaw))?mdToHtml(enRaw):enRaw;
+          const en=enHas?rich(enRaw) : enMd;
+          const enIsHtml=/<[a-z][\s\S]*?>/i.test(en);
           /* v137：改用「保位置」抽图——占位符留在正文里，分句后图回到原句后面
              （旧版把图统一抽到节顶，句中/句末插图会跑到整节最上方） */
-          const sp=enHas&&typeof splitPointImgsKeepPos==="function"? splitPointImgsKeepPos(en) : {body:en,imgs:[]};
+          const sp=enIsHtml&&typeof splitPointImgsKeepPos==="function"? splitPointImgsKeepPos(en) : {body:en,imgs:[]};
           /* v137：富文本按「纯文本坐标」分句（块级标签算一个空格），再按同一坐标切回带样式的 HTML。
              原来直接在 HTML 上切句：</div><div> 不被认作句界，整节会被并成 1 句，
              点读/遮英/句数统计全部失真（用户校订后尤甚）。 */
           let sens=[], sensHtml=null;
           const _hp=(window.V25&&V25._htmlPlainAligned)||null;
           const _hs=(window.V25&&V25._htmlSlicePlain)||null;
-          if(enHas&&_hp&&_hs){
+          if(enIsHtml&&_hp&&_hs){
             const plain=_hp(sp.body);
             sens=oralSplitSentences(plain);
             let cursor=0;
