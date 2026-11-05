@@ -1525,7 +1525,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v88";
+const BUILD_VERSION="v89";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -11855,12 +11855,17 @@ function oralSplitSentences(text){
     if(ch==="."&&/\d/.test(t[i-1]||"")&&/\d/.test(t[i+1]||"")) continue; /* 3.5 不切 */
     let j=i+1;
     while(j<t.length&&isCloser(t[j])){ cur+=t[j]; j++; }
+    /* 图占位符（\uE000n\uE001）若紧贴句末标点，必须跟随前一句：
+       否则它挡住「句号后是空格」的判据，整节会并成 1 句，句末插图也会跑到下一句句首 */
+    const mk=/^(\uE000\d+\uE001)+/.exec(t.slice(j));
+    if(mk){ cur+=mk[0]; j+=mk[0].length; }
     const nx=t[j]||"";
     if(j>=t.length||nx===" "||/[\u4e00-\u9fffA-Z0-9“"‘'(]/.test(nx)){ out.push(cur.trim()); cur=""; i=j-1; }
   }
   if(cur.trim()) out.push(cur.trim());
-  const wc=s=>(s.match(/[A-Za-z0-9]+(?:['’][A-Za-z]+)?/g)||[]).length;
-  const cc=s=>(s.match(/[\u4e00-\u9fff]/g)||[]).length;
+  const _stripMk=s=>String(s||"").replace(/\uE000\d+\uE001/g,"");
+  const wc=s=>(_stripMk(s).match(/[A-Za-z0-9]+(?:['’][A-Za-z]+)?/g)||[]).length;
+  const cc=s=>(_stripMk(s).match(/[\u4e00-\u9fff]/g)||[]).length;
   const merged=[];
   for(let k=0;k<out.length;k++){
     const s=out[k];
