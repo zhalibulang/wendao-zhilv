@@ -2650,11 +2650,18 @@ function _oralParaRaw(art,si,pi,fallback){
 /* 富文本 → 正文 HTML + 独立图区 + 打字机用纯文本 */
 function _oralSplit(raw){
   const isHtml=/<[a-z][\s\S]*?>/i.test(String(raw||""));
-  const safe=isHtml?rich(raw):esc(raw);
-  const sp=isHtml&&typeof splitPointImgs==="function"?splitPointImgs(safe):{body:safe, imgs:[]};
-  /* 纯文本：块级标签/换行转空格，避免朗读与逐字对照时单词粘连 */
-  const plain=_htmlToText(String(raw||"").replace(/<\/(?:p|div|li|h[1-6])>|<br\s*\/?>/gi," ")).replace(/\s+/g," ").trim();
-  return { body:sp.body, gal:typeof pointGalleryHtml==="function"?pointGalleryHtml(sp.imgs):"", plain:plain, isHtml:isHtml };
+  /* v144：五步流程正文也走统一 Markdown 入口——纯文本里的 # / - / > / --- 会渲染成排版，
+     已有富文本的加粗/字色/配图原样保留 */
+  let safe;
+  try{ safe=(typeof mdDocRender==="function")? mdDocRender(raw,true) : (isHtml?rich(raw):esc(raw)); }
+  catch(e){ safe=isHtml?rich(raw):esc(raw); }
+  const safeIsHtml=/<[a-z][\s\S]*?>/i.test(String(safe||""));
+  const sp=safeIsHtml&&typeof splitPointImgs==="function"?splitPointImgs(safe):{body:safe, imgs:[]};
+  /* 纯文本：朗读/逐字对照用——优先走统一清洗（不留 Markdown 符号） */
+  let plain;
+  try{ plain=(typeof mdPlain==="function")? mdPlain(String(raw||"")) : _htmlToText(String(raw||"").replace(/<\/(?:p|div|li|h[1-6])>|<br\s*\/?>/gi," ")).replace(/\s+/g," ").trim(); }
+  catch(e){ plain=_htmlToText(String(raw||"").replace(/<\/(?:p|div|li|h[1-6])>|<br\s*\/?>/gi," ")).replace(/\s+/g," ").trim(); }
+  return { body:sp.body, gal:typeof pointGalleryHtml==="function"?pointGalleryHtml(sp.imgs):"", plain:plain, isHtml:safeIsHtml };
 }
 /* 打字机：纯文本逐字揭示；富文本先打纯文本，打完换成带样式的正文 */
 function _oralType(el, v, onDone, opts){
@@ -2669,28 +2676,34 @@ function _oralType(el, v, onDone, opts){
       遇到 ” 就切不开，把两句合成一句；
    ② 过短的句子（英文 <5 词 / 中文 <6 字）并入下一句，避免「Good morning, everyone!」单独成一条任务。 */
 function _oralSplitSent(text){
-  const t=String(text||"").replace(/\s+/g," ").trim();
+  /* 与 index.html 的 oralSplitSentences 保持一致：保留换行（块级边界），并作为硬句界 */
+  const t=String(text||"").replace(/\r/g,"").replace(/[ \t\f\v]+/g," ").replace(/ *\n+ */g,"\n").replace(/\n{2,}/g,"\n").trim();
   if(!t) return [];
-  const out=[]; let cur="";
+  const out=[], hard=[]; let cur="";
+  const flush=h=>{ const s=cur.trim(); if(s){ out.push(s); hard.push(!!h); } cur=""; };
   const isEnd=ch=>ch==="."||ch==="!"||ch==="?"||ch==="。"||ch==="！"||ch==="？";
   const isCloser=ch=>ch==='"'||ch==="'"||ch==="”"||ch==="’"||ch===")"||ch==="]"||ch==="」"||ch==="』"||ch==="）"||ch==="】";
   for(let i=0;i<t.length;i++){
-    const ch=t[i]; cur+=ch;
+    const ch=t[i];
+    if(ch==="\n"){ flush(true); continue; }
+    cur+=ch;
     if(!isEnd(ch)) continue;
     if(ch==="."&&/\d/.test(t[i-1]||"")&&/\d/.test(t[i+1]||"")) continue; /* 3.5 不切 */
     let j=i+1;
     while(j<t.length&&isCloser(t[j])){ cur+=t[j]; j++; }
     const nx=t[j]||"";
-    if(j>=t.length||nx===" "||/[\u4e00-\u9fffA-Z0-9“"‘'(]/.test(nx)){ out.push(cur.trim()); cur=""; i=j-1; }
+    if(j>=t.length||nx===" "||/[\u4e00-\u9fffA-Z0-9“"‘'(]/.test(nx)){ flush(false); i=j-1; }
   }
-  if(cur.trim()) out.push(cur.trim());
+  flush(true);
   const wc=s=>(s.match(/[A-Za-z0-9]+(?:['’][A-Za-z]+)?/g)||[]).length;
   const cc=s=>(s.match(/[\u4e00-\u9fff]/g)||[]).length;
   const merged=[];
+  const hasMk=s=>/\uE000\d+\uE001/.test(String(s||""));
   for(let k=0;k<out.length;k++){
     const s=out[k];
     const short=/[\u4e00-\u9fff]/.test(s)?cc(s)<6:wc(s)<5;
-    if(short&&k+1<out.length){ out[k+1]=s+" "+out[k+1]; continue; }
+    /* 带图的句子、以及块级边界两侧都不合并：图片位置与标题/列表分行必须保住 */
+    if(short&&k+1<out.length&&!hard[k]&&!hard[k+1]&&!hasMk(s)&&!hasMk(out[k+1])){ out[k+1]=s+" "+out[k+1]; continue; }
     merged.push(s);
   }
   return merged;
@@ -2713,7 +2726,14 @@ function _richWalk(body,cb){
       const tag=body.slice(i,gt+1);
       const nm=((tag.match(/^<\s*\/?\s*([a-zA-Z0-9]+)/)||[])[1]||"").toLowerCase();
       if(nm==="br"||/^(div|p|li|h[1-6]|blockquote)$/.test(nm)){
-        if(!lastSp){ cb("space",i,i); lastSp=true; }
+        /* 第 6 个参数是纯文本里该「空格位」对应的字符：块级边界用换行，
+           这样按纯文本坐标分句时能把标题/列表/引用切成独立句（否则整节并成一句，块级排版全被压平） */
+        if(!lastSp){ cb("space",i,i,nm,false,"\n"); lastSp=true; }
+      } else if(nm==="hr"){
+        /* 分隔线：补一个换行位（供分句），同时保留标签事件（切片时能把它带回正文） */
+        cb("space",i,i,nm,false,"\n");
+        cb("tag",i,gt+1,nm,false);
+        lastSp=true;
       } else {
         cb("tag",i,gt+1,nm,/^<\s*\//.test(tag));
         /* 行内标签不重置空白折叠：a </b> b 与 a  b 折叠一致 */
@@ -2735,9 +2755,9 @@ function _richWalk(body,cb){
 function _htmlPlainAligned(html){
   const ENT={"&nbsp;":" ","&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&#39;":"'"};
   let plain="";
-  _richWalk(html,(kind,a,b)=>{
+  _richWalk(html,(kind,a,b,nm,closing,sp)=>{
     if(kind==="text"){ const seg=html.slice(a,b); const d=ENT[seg]; plain+=(d!=null?d:seg[0]); }
-    else if(kind==="space") plain+=" ";
+    else if(kind==="space") plain+=(sp==="\n"?"\n":" ");
   });
   return plain;
 }
@@ -2757,8 +2777,10 @@ function _htmlSlicePlain(html,from,to){
     if(kind==="text"){ if(pLen>=from&&pLen<to) out+=html.slice(a,b); pLen++; return; }
     if(kind==="space"){ if(pLen>=from&&pLen<to) out+=" "; pLen++; return; }
     if(!closing){
-      stack.push({tag:html.slice(a,b),nm:nm,at:pLen});
-      if(pLen>=from&&pLen<to) out+=html.slice(a,b);
+      /* 空标签（hr）不进栈：它没有闭合标签，进栈会在片段尾部补出错误的 </hr> */
+      if(nm!=="hr") stack.push({tag:html.slice(a,b),nm:nm,at:pLen});
+      /* <hr> 没有文字，按坐标切片时正好落在两句之间；把它归到后一句开头，横线才不会丢 */
+      if((pLen>=from&&pLen<to)||(nm==="hr"&&(pLen===from||pLen===to))) out+=html.slice(a,b);
     } else {
       if(pLen>=from&&pLen<to) out+=html.slice(a,b);
       for(let k=stack.length-1;k>=0;k--){

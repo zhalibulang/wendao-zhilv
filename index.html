@@ -967,12 +967,13 @@ function mdInline(raw, st){
   s=s.replace(/`([^`\n]+)`/g,(m,t)=>put('<span style="background-color:rgba(120,104,78,.12);font-size:.94em">'+t+'</span>'));
   s=s.replace(/==([^=\n]+)==/g,(m,t)=>put('<mark>'+t+'</mark>'));
   s=s.replace(/~~([^~\n]+)~~/g,(m,t)=>put('<span style="text-decoration:line-through">'+t+'</span>'));
-  /* 4) 加粗：** 与 __ 两侧都不能紧贴英文单词/数字（避免 a**b**c 这类词内符号被吃） */
-  s=s.replace(/(^|[^A-Za-z0-9_*])\*\*([^*\n]+?)\*\*(?![A-Za-z0-9_*])/g,(m,pre,t)=>(/^\s|\s$/.test(t)?m:pre+put('<b>'+t+'</b>')));
-  s=s.replace(/(^|[^A-Za-z0-9_])(__)([^_\n]+?)(__)(?![A-Za-z0-9_])/g,(m,pre,o,t)=>(/^\s|\s$/.test(t)?m:pre+put('<b>'+t+'</b>')));
-  /* 5) 斜体：单 * / 单 _ 采用同样的词内保护（前后紧邻字母数字则不是强调） */
-  s=s.replace(/(^|[^A-Za-z0-9_*])\*([^*\n]+?)\*(?![A-Za-z0-9_*])/g,(m,pre,t)=>(/^\s|\s$/.test(t)?m:pre+put('<i>'+t+'</i>')));
-  s=s.replace(/(^|[^A-Za-z0-9_])(_)([^_\n]+?)(_)(?![A-Za-z0-9_])/g,(m,pre,o,t)=>(/^\s|\s$/.test(t)?m:pre+put('<i>'+t+'</i>')));
+  /* 4) 加粗：** 与 __ 两侧都不能紧贴字母/数字（Unicode 全语种，含中日韩——
+     `甲_乙_丙` 里的 `_` 两侧都是汉字，属于词内符号，绝不能被吃成斜体） */
+  s=s.replace(/(^|[^\p{L}\p{N}_*])\*\*([^*\n]+?)\*\*(?![\p{L}\p{N}_*])/gu,(m,pre,t)=>(/^\s|\s$/.test(t)?m:pre+put('<b>'+t+'</b>')));
+  s=s.replace(/(^|[^\p{L}\p{N}_])(__)([^_\n]+?)(__)(?![\p{L}\p{N}_])/gu,(m,pre,o,t)=>(/^\s|\s$/.test(t)?m:pre+put('<b>'+t+'</b>')));
+  /* 5) 斜体：单 * / 单 _ 采用同样的词内保护（前后紧邻任何字母/数字/下划线都不算强调） */
+  s=s.replace(/(^|[^\p{L}\p{N}_*])\*([^*\n]+?)\*(?![\p{L}\p{N}_*])/gu,(m,pre,t)=>(/^\s|\s$/.test(t)?m:pre+put('<i>'+t+'</i>')));
+  s=s.replace(/(^|[^\p{L}\p{N}_])(_)([^_\n]+?)(_)(?![\p{L}\p{N}_])/gu,(m,pre,o,t)=>(/^\s|\s$/.test(t)?m:pre+put('<i>'+t+'</i>')));
   s=s.replace(/\uE200(\d+)\uE201/g,(m,i)=>T[+i]||"");
   return s;
 }
@@ -997,83 +998,142 @@ function mdToHtmlEx(src){
   return {html:body||"<div><br></div>", changed:st.changed};
 }
 function mdToHtml(s){ return mdToHtmlEx(s).html; }
-/* 是否真的有 Markdown 转换发生（与实际转换逻辑同源，避免「看着像就整段转」） */
+/* ================= Markdown 统一入口 =================
+   纯文本：按行识别 # / - / > / --- 与行内强调。
+   富文本：块级标签与 <br> 先还原成换行；<img> 与用户已有的 b/span 等标签抽成私有占位符，
+           按行跑 mdToHtmlEx 后再原样回填——图片、字色、既有 <b> 结构一个不丢。
+   显示是转换产物，存档底本永远保持用户原样（mdBaseText 只做块边界还原）。 */
+const MD_PH_OPEN="\uE100", MD_PH_CLOSE="\uE101";
+const MD_BLOCK_TAG=/^(div|p|li|ul|ol|h[1-6]|section|blockquote|table|tr|td|th|article|header|footer|pre)$/;
+function _mdPhStore(ph, html, kind, name){
+  ph.push({html:html, kind:kind, name:String(name||"").toLowerCase()});
+  return MD_PH_OPEN+(ph.length-1)+MD_PH_CLOSE;
+}
+/* 富文本 → 逐行源码 + 占位符表（标签顺序/层级原样保留，回填后结构不变） */
+function _mdHtmlSource(html){
+  const tpl=document.createElement("template");
+  tpl.innerHTML=String(html==null?"":html);
+  const ph=[]; let src="";
+  /* 块边界只在「需要断行」时补一个换行：相邻 <div> 不会各自补两次而多出空行 */
+  const nl=()=>{ if(src && !src.endsWith("\n")) src+="\n"; };
+  const walk=node=>{
+    if(node.nodeType===3){ src+=node.nodeValue; return; }
+    if(node.nodeType!==1) return;
+    const tag=(node.tagName||"").toLowerCase();
+    if(!tag) return;
+    if(tag==="br"){ src+="\n"; return; }
+    if(tag==="hr"){ nl(); src+=_mdPhStore(ph,"<hr>","self","hr"); nl(); return; }
+    if(tag==="img"){ src+=_mdPhStore(ph,node.outerHTML,"self","img"); return; }
+    if(MD_BLOCK_TAG.test(tag)){ nl(); [...node.childNodes].forEach(walk); nl(); return; }
+    /* 行内标签：开/闭标签各成一个占位符，标签内的文字仍按 Markdown 解析。
+       cloneNode(false) 的 outerHTML 对普通元素会带一个空闭合标签（<strong></strong>），
+       必须只取开标签，否则回填后结构会变成 <strong></strong>文字</strong>。 */
+    const clone=node.cloneNode(false);
+    const openTag=String(clone.outerHTML||"").replace(/<\/[^>]*>\s*$/,"");
+    src+=_mdPhStore(ph,openTag,"open",tag);
+    [...node.childNodes].forEach(walk);
+    src+=_mdPhStore(ph,"</"+tag+">","close",tag);
+  };
+  [...tpl.content.childNodes].forEach(walk);
+  return {src:src, ph:ph};
+}
+/* 行内标签跨行（<b>a<br>b</b>）时不能把标签拆到两个 <div>：
+   未闭合的行用 <br> 续到下一行，闭合进度为 0 才允许断行 */
+function _mdJoinBalanced(src, ph){
+  const lines=String(src).replace(/^\n+/,"").replace(/\n+$/,"").split("\n");
+  const net=line=>{ let n=0; line.replace(/\uE100(\d+)\uE101/g,(m,i)=>{ const p=ph[+i]; if(p&&p.kind==="open") n++; else if(p&&p.kind==="close") n--; return m; }); return n; };
+  const out=[]; let buf="";
+  for(let i=0;i<lines.length;i++){
+    buf = buf ? buf+_mdPhStore(ph,"<br>","self","br")+lines[i] : lines[i];
+    if(net(buf)>0 && i+1<lines.length) continue;
+    out.push(buf); buf="";
+  }
+  if(buf) out.push(buf);
+  return out.join("\n");
+}
+function _mdFill(html, ph){
+  return String(html).replace(/\uE100(\d+)\uE101/g,(m,i)=> (ph[+i]&&ph[+i].html) || "");
+}
+function _mdBook(html){
+  const s=String(html==null?"":html);
+  const info=_mdHtmlSource(s);
+  const ex=mdToHtmlEx(_mdJoinBalanced(info.src, info.ph));
+  return {html:_mdFill(ex.html, info.ph), changed:ex.changed};
+}
+/* 是否真的有 Markdown 转换发生（与真实转换同源；富文本先还原成逐行源码再判断） */
 function looksMd(s){
   s=String(s==null?"":s);
-  if(/<[a-z][\s\S]*?>/i.test(s)) return false;
-  return mdToHtmlEx(s).changed;
+  if(!/<[a-z][\s\S]*?>/i.test(s)) return mdToHtmlEx(s).changed;
+  try{ return _mdBook(s).changed; }catch(e){ return false; }
 }
-/* Markdown/HTML → 纯文本：给朗读、判分、检索用；不改动存档原文 */
-function mdPlain(s){
-  let t=String(s==null?"":s);
-  t=t.replace(/<img\b[^>]*>/gi," ").replace(/<br\b[^>]*>/gi,"。 ").replace(/<hr\b[^>]*>/gi,"。 ");
-  t=t.replace(/<\/?(?:div|p|li|ul|ol|h[1-6]|section|blockquote)[^>]*>/gi," ");
-  t=t.replace(/<[^>]+>/g,"");
-  t=t.replace(/&nbsp;|&#160;/gi," ").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/&amp;/gi,"&");
-  t=t.replace(/!\[([^\]]*)\]\([^)]+\)/g,",$1,").replace(/\[([^\]]+)\]\([^)]+\)/g,"$1");
-  t=t.replace(/^[ \t]*#{1,6}[ \t]+/gm,"").replace(/^[ \t]*[-*+][ \t]+/gm,"· ").replace(/^[ \t]*>[ \t]?/gm,"");
-  t=t.replace(/==|~~|`/g,"").replace(/\*\*|\*/g,"").replace(/_/g,"");
-  /* <br>/<hr> 转成的「。 」会留下多余空格与重复句号，朗读前收拢一下 */
-  t=t.replace(/[ \t]*。[ \t]*/g,"。").replace(/。{2,}/g,"。");
-  return t.replace(/[ \t]+/g," ").replace(/\s*\n\s*/g,"\n").trim();
+/* 显示用统一入口：纯文本按需解析；富文本先还原行结构再解析；sanitize=true 再过 rich 白名单 */
+function mdDocRender(x, sanitize){
+  x=String(x==null?"":x);
+  if(!/<[a-z][\s\S]*?>/i.test(x)) return looksMd(x)? mdToHtml(x) : esc(x);
+  const html=_mdBook(x).html;
+  return sanitize===false ? html : rich(html);
 }
-/* 富文本里混着 Markdown：只遍历文本节点转换，<span>/<img>/<hr> 等标签原样保留 */
-function mdRenderMixed(html){
-  const tpl=document.createElement("template");
-  tpl.innerHTML=String(html==null?"":html);
-  const walk=node=>{
-    if(node.nodeType===3){
-      const st={changed:false};
-      const out=mdInline(node.nodeValue,st);
-      if(st.changed){
-        const box=document.createElement("span");
-        box.innerHTML=out;
-        node.replaceWith(...box.childNodes);
-      }
-      return;
-    }
-    if(node.nodeType!==1) return;
-    if(/^(IMG|BR|HR)$/i.test(node.tagName)) return;   /* 图片/换行/分隔线绝不碰 */
-    [...node.childNodes].forEach(walk);
-  };
-  [...tpl.content.childNodes].forEach(walk);
-  return tpl.innerHTML;
-}
-/* 混合富文本里是否真的会发生 Markdown 转换：逐个文本节点判断，与 mdRenderMixed 同源。
-   （不能拿整段纯文本判断——块级标签拼接会丢掉行边界，`**新加粗**` 与下一块 `*斜体*`
-     连成 `**新加粗***斜体*` 后两边都不匹配，导致合法 Markdown 被误判为「没有语法」）*/
-function mdMixedChanged(html){
-  const tpl=document.createElement("template");
-  tpl.innerHTML=String(html==null?"":html);
-  let has=false;
-  const walk=node=>{
-    if(has) return;
-    if(node.nodeType===3){ const st={changed:false}; mdInline(node.nodeValue,st); if(st.changed) has=true; return; }
-    if(node.nodeType!==1) return;
-    if(/^(IMG|BR|HR)$/i.test(node.tagName)) return;
-    [...node.childNodes].forEach(walk);
-  };
-  [...tpl.content.childNodes].forEach(walk);
-  return has;
-}
-/* 仅当富文本里真的有 Markdown 记号时才做混合转换，否则原样返回（不动既有样式/图片） */
+/* 富文本里混着 Markdown 时做混合转换，否则原样返回（编辑器预览用，不做白名单净化） */
 function mdMaybeMixed(html){
   const s=String(html==null?"":html);
   if(!/<[a-z][\s\S]*?>/i.test(s)) return s;
-  return mdMixedChanged(s)? mdRenderMixed(s) : s;
+  let b; try{ b=_mdBook(s); }catch(e){ return s; }
+  return b.changed? b.html : s;
 }
-/* 富文本 → 底本纯文本：只把块边界换成换行，符号（_ * = ~ `）与文字一律原样保留。
+/* Markdown/HTML → 朗读纯文本（不改动存档原文）。
+   顺序关键：先在 HTML 层把块边界还原成换行，再按行清掉块级符号，最后才把换行转停顿标点；
+   旧实现先把 <br> 换成句号，行首正则因此永远匹配不到，`#`/`>`/`---` 就被念了出来。 */
+function mdPlain(s){
+  let t=String(s==null?"":s);
+  /* ① HTML 层：图片（含 base64）剔除，块边界还原为换行 */
+  t=t.replace(/<img\b[^>]*>/gi," ").replace(/<hr\b[^>]*>/gi,"\n").replace(/<br\b[^>]*>/gi,"\n");
+  t=t.replace(/<\/?(?:div|p|li|ul|ol|h[1-6]|section|blockquote|table|tr|td|th|article|header|footer|pre)[^>]*>/gi,"\n");
+  t=t.replace(/<[^>]+>/g,"");
+  t=t.replace(/&nbsp;|&#160;/gi," ").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/&amp;/gi,"&");
+  /* ② 行首块级符号：标题 / 列表 / 引用 / 分隔线 */
+  t=t.replace(/^[ \t]*#{1,6}[ \t]+/gm,"")
+     .replace(/^[ \t]*[-*+][ \t]+/gm,"")
+     .replace(/^[ \t]*>[ \t]?/gm,"")
+     .replace(/^[ \t]*[=\-]{3,}[ \t]*$/gm,"");
+  /* ③ 图片/链接语法 */
+  t=t.replace(/!\[[^\]]*\]\([^)]*\)/g,"").replace(/\[([^\]]+)\]\([^)]*\)/g,"$1");
+  /* ④ 成对包裹符号脱壳，再清理残留的单字符号（朗读不该念出符号） */
+  t=t.replace(/\*\*([^*\n]+)\*\*/g,"$1").replace(/__([^_\n]+)__/g,"$1")
+     .replace(/==([^=\n]+)==/g,"$1").replace(/~~([^~\n]+)~~/g,"$1").replace(/`([^`\n]+)`/g,"$1");
+  t=t.replace(/[#<>*_~=`|]/g,"").replace(/-/g," ");
+  /* ⑤ 最后才把换行转成停顿标点，并收拢重复标点 */
+  t=t.split("\n").map(x=>x.replace(/[ \t]+/g," ").trim()).filter(Boolean).join("。");
+  t=t.replace(/[ \t]+/g," ").replace(/。{2,}/g,"。").replace(/[，、；：]?。+/g,"。");
+  return t.replace(/。$/,"").trim();
+}
+/* 判分/检索用纯文本：只还原 HTML 与「成对包裹」的格式符号（**x** ==x== ~~x~~ `x` [t](u)→t）。
+   词内 `_`/`*`（snake_case、3*4*5）一律保留——判分绝不能把不同答案归一成同一个。 */
+function mdScoreText(s){
+  let t=String(s==null?"":s);
+  t=t.replace(/<img\b[^>]*>/gi," ").replace(/<br\b[^>]*>/gi,"\n").replace(/<hr\b[^>]*>/gi,"\n");
+  t=t.replace(/<\/?(?:div|p|li|ul|ol|h[1-6]|section|blockquote|table|tr|td|th|article|header|footer|pre)[^>]*>/gi,"\n");
+  t=t.replace(/<[^>]+>/g,"");
+  t=t.replace(/&nbsp;|&#160;/gi," ").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/&amp;/gi,"&");
+  t=t.replace(/^[ \t]*#{1,6}[ \t]+/gm,"").replace(/^[ \t]*[-*+][ \t]+/gm,"").replace(/^[ \t]*>[ \t]?/gm,"").replace(/^[ \t]*[=\-]{3,}[ \t]*$/gm,"");
+  t=t.replace(/!\[([^\]]*)\]\([^)]*\)/g,"$1").replace(/\[([^\]]+)\]\([^)]*\)/g,"$1");
+  t=t.replace(/\*\*([^*\n]+)\*\*/g,"$1").replace(/__([^_\n]+)__/g,"$1")
+     .replace(/==([^=\n]+)==/g,"$1").replace(/~~([^~\n]+)~~/g,"$1").replace(/`([^`\n]+)`/g,"$1");
+  return t;
+}
+/* 富文本 → 底本纯文本：只把块边界换成换行，符号（_ * = ~ `）与文字、空白一律原样保留。
    用于 saveEdit 回写运行库，保证判分/分句/朗读/检索拿到的是「用户原文」，不是转换产物。 */
 function mdBaseText(html){
   let s=String(html==null?"":html);
   if(!/<[a-z][\s\S]*?>/i.test(s)) return s;
   s=s.replace(/<img\b[^>]*>/gi,"");
   s=s.replace(/<br\b[^>]*>/gi,"\n");
-  s=s.replace(/<\/(?:div|p|li|ul|ol|h[1-6]|section|blockquote|tr|table)>/gi,"\n");
-  s=s.replace(/<(?:div|p|li|ul|ol|h[1-6]|section|blockquote|tr|table)\b[^>]*>/gi,"");
+  s=s.replace(/<\/(?:div|p|li|ul|ol|h[1-6]|section|blockquote|tr|table|td|th)>/gi,"\n");
+  s=s.replace(/<(?:div|p|li|ul|ol|h[1-6]|section|blockquote|tr|table|td|th)\b[^>]*>/gi,"");
   s=s.replace(/<[^>]+>/g,"");
   s=s.replace(/&nbsp;|&#160;/gi," ").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").replace(/&quot;/gi,'"').replace(/&#39;/gi,"'").replace(/&amp;/gi,"&");
-  return s.replace(/\n[ \t]+/g,"\n").replace(/[ \t]+\n/g,"\n").replace(/\n{3,}/g,"\n\n").trim();
+  /* 只去掉块边界补出来的收尾换行；行首缩进与内部空白必须保留（底本 = 用户原样输入） */
+  if(s.endsWith("\n")) s=s.slice(0,-1);
+  return s;
 }
 /* 纯文本 →（需要时）Markdown 解析；富文本走混合渲染 */
 function mdMaybe(x){ x=String(x==null?"":x); return looksMd(x)?mdToHtml(x):x; }
@@ -1160,11 +1220,9 @@ function takeImgMarkers(s){
   const text=src.replace(/\uE000(\d+)\uE001/g,(m,d)=>{ pics.push(+d); return ""; }).trim();
   return {text, pics, lead};
 }
-/* 存稿原文（未经净化）的安全显示：含 HTML 先过 rich() 白名单净化再输出，纯文本照旧 esc。
-   卡片/句行直接渲染存稿（st.edits 里的原始 HTML）必须用它——直接 esc 会把加粗/字色变成字面字符 */
-function _rtRich(x){ x=String(x==null?"":x);
-  if(/<[a-z][\s\S]*?>/i.test(x)) return rich(mdMaybeMixed(x));
-  return looksMd(x)? mdToHtml(x) : esc(x); }
+/* 存稿原文（未经净化）的安全显示：统一走 Markdown 入口（纯文本按需解析、富文本保样式保图再排版），
+   最后过 rich() 白名单净化。卡片/句行直接渲染存稿（st.edits 里的原始 HTML）必须用它。 */
+function _rtRich(x){ return mdDocRender(x, true); }
 /* ================= 音效引擎（Web Audio 合成，无外部文件，离线可用） ================= */
 let _ac=null;
 function ac(){ if(!_ac){ try{ _ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(_ac&&_ac.state==="suspended") _ac.resume(); return _ac; }
@@ -1525,7 +1583,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v89";
+const BUILD_VERSION="v90";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -5419,7 +5477,7 @@ function openQuest(qid){
     advanceStage();
   };
   /* quiz 相关辅助函数（供第 4 阶段使用，复用原有逻辑） */
-  function normalize(s){ let t=String(s==null?"":s); try{ if(typeof mdPlain==="function") t=mdPlain(t); }catch(e){} return t.replace(/[\s，。、；：""''！？（）()（）·—…《》<>]/g,"").toLowerCase(); }
+  /* 判分归一统一走全局 normalize（与徽章/其它判分入口同一实现，避免同一答案两处判分不同） */
   function startAiQuiz(){
     const stage=quizStage(q.id);
     const label=stage==="first"?"正在拟题":stage==="second"?"温故出新题":"变化试炼中";
@@ -6276,17 +6334,26 @@ function checkAch(){
 function fullDone(a,b){ for(let i=a;i<=b;i++){ const d=byDay[i]; const p=dayProg(d); if(p.n<p.all) return false; } return true; }
 
 /* ---------- panels ---------- */
+/* 面板关闭后刷新「当前所在视图」：在藏经阁/修行句里编辑完随手关闭面板，
+   以前无条件重绘任务板会把当前页面整体覆盖掉（关窗即跳页），这里按视图分流 */
+function _refreshCurrentView(){
+  try{ if(!document.querySelector(".ov")) document.body.classList.remove("ov-open"); }catch(e){}
+  try{
+    if(typeof view!=="undefined" && view==="lib" && typeof renderLib==="function"){ renderLib(); return; }
+  }catch(e){}
+  try{ V25&&V25.refreshBoard&&V25.refreshBoard(); }catch(e){}
+}
 function panel(html){
   const ov=document.createElement("div"); ov.className="ov";
   ov.innerHTML=`<div class="dlg"><button class="close" type="button">×</button>${html}</div>`;
   document.body.appendChild(ov);
   try{ document.body.classList.add("ov-open"); }catch(e){}
-  const close=()=>{ try{ V25&&V25.ttsStop&&V25.ttsStop(); }catch(e){} ov.remove(); try{ V25&&V25.refreshBoard&&V25.refreshBoard(); }catch(e){} };
+  const close=()=>{ try{ V25&&V25.ttsStop&&V25.ttsStop(); }catch(e){} ov.remove(); try{ _refreshCurrentView(); }catch(e){} };
   $(".close",ov).onpointerdown=close;
   ov.onpointerdown=e=>{ if(e.target===ov) close(); };  // 点击遮罩背景关闭
-  /* 无论面板以何种方式消失（× / 点遮罩 / 代码关闭），统一刷新任务板：让「进行中/已完成」状态与排序即时生效 */
+  /* 无论面板以何种方式消失（× / 点遮罩 / 代码关闭），统一刷新当前视图：让「进行中/已完成」状态与排序即时生效 */
   try{
-    const mo=new MutationObserver(()=>{ if(!ov.isConnected){ mo.disconnect(); try{ if(!document.querySelector(".ov")) document.body.classList.remove("ov-open"); }catch(e){} try{ V25&&V25.refreshBoard&&V25.refreshBoard(); }catch(e){} } });
+    const mo=new MutationObserver(()=>{ if(!ov.isConnected){ mo.disconnect(); try{ _refreshCurrentView(); }catch(e){} } });
     mo.observe(document.body,{childList:true});
   }catch(e){}
   return ov;
@@ -6807,10 +6874,10 @@ function openEditor(card){
       try{ SFX&&SFX.tap(); }catch(_){}
       let prev=ov.querySelector("#edMdPrev");
       if(prev){ prev.remove(); mdBtn.textContent="M↓ Markdown 预览"; return; }
+      /* 预览必须走真实保存路径：contenteditable 的 <div>/<br> 先还原成行，再识别块级 Markdown */
       const cur=area.innerHTML.trim();
-      const hasTag=/<[a-z][\s\S]*?>/i.test(cur);
-      const html=hasTag? mdMaybeMixed(cur) : (looksMd(valPlain())? mdToHtml(valPlain()) : esc(valPlain()));
-      if(html===cur && hasTag && !looksMd(_htmlToText(cur))){ toast("正文里没有检测到 Markdown 语法"); return; }
+      const html=mdDocRender(cur, false);
+      if(html===cur){ toast("正文里没有检测到 Markdown 语法"); return; }
       prev=document.createElement("div");
       prev.id="edMdPrev";
       prev.style.cssText="border:1px dashed var(--border);border-radius:8px;padding:8px 10px;margin-top:8px;background:var(--bg2);max-height:34vh;overflow:auto";
@@ -10328,7 +10395,11 @@ function renderMem(){
   };
 }
 
-function normalize(s){ let t=String(s==null?"":s); try{ if(typeof mdPlain==="function") t=mdPlain(t); }catch(e){} return t.replace(/[\s，。、；：""''！？（）()·—…《》<>]/g,"").toLowerCase(); }
+/* 判分/去重唯一实现：`snake_case` 与 `snakecase`、`3*4*5` 与 `345` 必须判为不同答案，
+   所以只剥「成对包裹」的格式符号，不做无条件删符号。 */
+function normalize(s){
+  return mdScoreText(s).replace(/[\s，。、；：""''！？（）()（）·—…《》〈〉「」『』【】<>]/g,"").toLowerCase();
+}
 function renderAch(){
   const ov2=panel('<h2>徽章墙</h2><div class="mt">'+Object.keys(st.ach).length+'/'+D.achievements.length+' 枚已取得</div><div class="badgewall">'
     + D.achievements.map(function(a){ const got=st.ach[a.id];
@@ -11844,13 +11915,18 @@ function oralSecMarkPart(aid,sec,part){
    ① 句末标点后可能先跟右引号/右括号（如 “Purple Forbidden City.”），只看 .!? 后是否跟空格会切不开；
    ② 过短句（英文 <5 词 / 中文 <6 字）并入下一句，避免「Good morning, everyone!」单独成条。 */
 function oralSplitSentences(text){
-  const t=String(text||"").replace(/\s+/g," ").trim();
+  /* 只折叠空格，保留换行：换行来自块级标签（标题/列表/引用/分隔线），必须当作硬句界，
+     否则「# 一级标题 # 二级标题 …」会被并成一句，字号层级就全挤在同一行里 */
+  const t=String(text||"").replace(/\r/g,"").replace(/[ \t\f\v]+/g," ").replace(/ *\n+ */g,"\n").replace(/\n{2,}/g,"\n").trim();
   if(!t) return [];
-  const out=[]; let cur="";
+  const out=[], hard=[]; let cur="";
+  const flush=h=>{ const s=cur.trim(); if(s){ out.push(s); hard.push(!!h); } cur=""; };
   const isEnd=ch=>ch==="."||ch==="!"||ch==="?"||ch==="。"||ch==="！"||ch==="？";
   const isCloser=ch=>ch==='"'||ch==="'"||ch==="”"||ch==="’"||ch===")"||ch==="]"||ch==="」"||ch==="』"||ch==="）"||ch==="】";
   for(let i=0;i<t.length;i++){
-    const ch=t[i]; cur+=ch;
+    const ch=t[i];
+    if(ch==="\n"){ flush(true); continue; }   /* 块级边界：硬切，不合并 */
+    cur+=ch;
     if(!isEnd(ch)) continue;
     if(ch==="."&&/\d/.test(t[i-1]||"")&&/\d/.test(t[i+1]||"")) continue; /* 3.5 不切 */
     let j=i+1;
@@ -11860,17 +11936,20 @@ function oralSplitSentences(text){
     const mk=/^(\uE000\d+\uE001)+/.exec(t.slice(j));
     if(mk){ cur+=mk[0]; j+=mk[0].length; }
     const nx=t[j]||"";
-    if(j>=t.length||nx===" "||/[\u4e00-\u9fffA-Z0-9“"‘'(]/.test(nx)){ out.push(cur.trim()); cur=""; i=j-1; }
+    if(j>=t.length||nx===" "||/[\u4e00-\u9fffA-Z0-9“"‘'(]/.test(nx)){ flush(false); i=j-1; }
   }
-  if(cur.trim()) out.push(cur.trim());
+  flush(true);
   const _stripMk=s=>String(s||"").replace(/\uE000\d+\uE001/g,"");
   const wc=s=>(_stripMk(s).match(/[A-Za-z0-9]+(?:['’][A-Za-z]+)?/g)||[]).length;
   const cc=s=>(_stripMk(s).match(/[\u4e00-\u9fff]/g)||[]).length;
   const merged=[];
+  const hasMk=s=>/\uE000\d+\uE001/.test(String(s||""));
   for(let k=0;k<out.length;k++){
     const s=out[k];
     const short=/[\u4e00-\u9fff]/.test(s)?cc(s)<6:wc(s)<5;
-    if(short&&k+1<out.length){ out[k+1]=s+" "+out[k+1]; continue; }
+    /* 句里带图（或下一句句首带图）时禁止合并：合并会把图挤到整句末尾，插图位置就跑偏了；
+       块级边界（标题/列表/引用）也禁止合并，否则标题会被并进下一行 */
+    if(short&&k+1<out.length&&!hard[k]&&!hard[k+1]&&!hasMk(s)&&!hasMk(out[k+1])){ out[k+1]=s+" "+out[k+1]; continue; }
     merged.push(s);
   }
   return merged;
@@ -12098,10 +12177,9 @@ function openOralStudy(aid){
              v128：校订可能是富文本（加粗/字色）——先过 rich() 净化再显示；
              配图先抽离（图里 URL 的句点会切碎分句），评分/关键词另用纯文本底本 */
           const enRaw=String(getEdit("full:"+o.id+":"+si,String(s.text||s.en||"")));
-          /* v142：纯文本正文若带 Markdown 语法，先转成富文本再分句；已有富文本照旧净化 */
-          const enHas=/<[a-z][\s\S]*?>/i.test(enRaw);
-          const enMd=(!enHas&&looksMd(enRaw))?mdToHtml(enRaw):enRaw;
-          const en=enHas?rich(mdMaybeMixed(enRaw)) : enMd;
+          /* v144：统一入口——纯文本/富文本都按真实保存路径解析块级 Markdown（# / - / > / ---），
+             同时保留已有加粗/字色与配图 */
+          const en=mdDocRender(enRaw, true);
           const enIsHtml=/<[a-z][\s\S]*?>/i.test(en);
           /* v137：改用「保位置」抽图——占位符留在正文里，分句后图回到原句后面
              （旧版把图统一抽到节顶，句中/句末插图会跑到整节最上方） */
