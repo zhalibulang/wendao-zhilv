@@ -1408,9 +1408,21 @@ function _ttsSplitSentences(s){
   return out.length?out:[String(s)];
 }
 
+/* v143：朗读前统一清洗——HTML 标签 / <img>（含 base64）/ Markdown 符号都不进声道。
+   其它入口（修习室、任务页）也走 ttsSpeak，因此在这里兜底一次即可。 */
+function _ttsSanitize(text){
+  let s=String(text==null?"":text);
+  try{ if(typeof mdPlain==="function") return mdPlain(s); }catch(e){}
+  s=s.replace(/<img\b[^>]*>/gi," ").replace(/<br\b[^>]*>/gi,"。 ")
+    .replace(/<\/?(?:div|p|li|ul|ol|h[1-6]|section|blockquote)[^>]*>/gi," ")
+    .replace(/<[^>]+>/g,"").replace(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi," ")
+    .replace(/!\[[^\]]*\]\([^)]+\)/g," ");
+  return s.replace(/[ \t]+/g," ").replace(/\s*\n\s*/g,"\n").trim();
+}
+
 function ttsSpeak(text, lang, el, _noHd){
   const synth=window.speechSynthesis;
-  const s=String(text||"").replace(/【中文对照】[\s\S]*$/,"").trim();
+  let s=_ttsSanitize(String(text||"")).replace(/【中文对照】[\s\S]*$/,"").trim();
   if(!synth){ toast("当前环境不支持语音朗读——建议用 Chrome/Edge/Safari"); return; }
   if(!s) return;
   /* 重入保护：正在播时再次点击 → 先设 stopped 让前一个尽快退出，等它 resolve 再启新的
@@ -1418,7 +1430,7 @@ function ttsSpeak(text, lang, el, _noHd){
      必须等它真正 resolve 才能启下一个，否则两个 async 循环争抢 Audio 对象会卡死 */
   if(_ttsHdPromise){
     _ttsQ.stopped=true;  /* 告诉前一个 HD 循环退出 */
-    try{ _ttsHdPromise.then(()=>{ _ttsHdPromise=null; ttsSpeak(text,lang,el,_noHd); }); }catch(e){}
+    try{ _ttsHdPromise.then(()=>{ _ttsHdPromise=null; ttsSpeak(s,lang,el,_noHd); }); }catch(e){}
     return;  /* 让前一个跑完再递归启新的 */
   }
   /* 语言判定（v116 按用户明确规则）：朗读首选永远是英文，只有文本里真的出现汉字才用中文声道。
