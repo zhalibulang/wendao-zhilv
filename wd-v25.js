@@ -1412,12 +1412,15 @@ function _ttsSplitSentences(s){
    其它入口（修习室、任务页）也走 ttsSpeak，因此在这里兜底一次即可。 */
 function _ttsSanitize(text){
   let s=String(text==null?"":text);
-  try{ if(typeof mdPlain==="function") return mdPlain(s); }catch(e){}
-  s=s.replace(/<img\b[^>]*>/gi," ").replace(/<br\b[^>]*>/gi,"。 ")
-    .replace(/<\/?(?:div|p|li|ul|ol|h[1-6]|section|blockquote)[^>]*>/gi," ")
-    .replace(/<[^>]+>/g,"").replace(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi," ")
-    .replace(/!\[[^\]]*\]\([^)]+\)/g," ");
-  return s.replace(/[ \t]+/g," ").replace(/\s*\n\s*/g,"\n").trim();
+  try{ if(typeof mdPlain==="function") s=mdPlain(s); }catch(e){}
+  /* v146：送进 speechSynthesis 前的最后一道闸——标签/图片/base64/HTML 实体/Markdown 符号一律不念。
+     旧版只靠 mdPlain，二次转义（&amp;#39;）剥掉 # 后会留下裸 &39;，TTS 会念成怪音。 */
+  s=s.replace(/<[^>]*>/g," ").replace(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi," ");
+  try{ if(typeof _decodeEnt==="function") s=_decodeEnt(s); }catch(e){}
+  s=s.replace(/&[#a-zA-Z][a-zA-Z0-9]*;/g,"")
+     .replace(/[#<>*_~=`|]/g," ")
+     .replace(/\s+/g," ").trim();
+  return s;
 }
 
 function ttsSpeak(text, lang, el, _noHd){
@@ -1779,7 +1782,10 @@ function _taskPreview(u){
   const oIt=u.items[0]||{};
   let sub;
   if(isOralSec){
-    const vol=(oIt.paras!=null)?('本次覆盖 '+oIt.paras+' 段 / '+(oIt.sents||0)+' 句 / '+(oIt.words||0)+' 词 · '):'';
+    /* v146：句数取正文口径——和修习室「正文 N 句」、五步流程分母保持一致 */
+    let sentN=oIt.sents||0;
+    try{ const ref=_oralSecParse(oIt); const n=ref?_oralProseSents(ref):null; if(n!=null) sentN=n; }catch(e){}
+    const vol=(oIt.paras!=null)?('本次覆盖 '+oIt.paras+' 段 / 正文 '+sentN+' 句 / '+(oIt.words||0)+' 词 · '):'';
     sub=vol+'整段读 → 分句精读 → 分句复述 → 整段重读 → 整段复述';
   }
   else if(quiz) sub="笔试考点 "+pids.length+" 个";
@@ -1891,7 +1897,15 @@ function _addBack(ov){
   const dlg=ov.querySelector(".dlg"); if(!dlg) return;
   const b=document.createElement("button");
   b.type="button"; b.className="btn sm ghost"; b.textContent="← 返回";
-  Object.assign(b.style,{position:"absolute",bottom:"12px",right:"14px",zIndex:"12"});
+  /* v146：窄屏不再浮动——放进正文流末尾（底部工具条下方），避免压住「立即显示全文」等主按钮 */
+  let narrow=false;
+  try{ narrow=window.matchMedia("(max-width:640px)").matches; }catch(e){ narrow=(window.innerWidth||0)<=640; }
+  if(narrow){
+    Object.assign(b.style,{position:"static",display:"block",margin:"10px 0 0 auto",zIndex:"1"});
+    dlg.style.paddingBottom="";
+  }else{
+    Object.assign(b.style,{position:"absolute",bottom:"12px",right:"14px",zIndex:"12"});
+  }
   dlg.appendChild(b);
   b.onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(histBack()) return; ov.remove(); try{ if(typeof render==="function") render(); }catch(e){} try{ window.V25&&window.V25.refreshBoard&&window.V25.refreshBoard(); }catch(e){} };
   return b;
@@ -2647,6 +2661,24 @@ function _oralParas(sec){
 function _oralParaRaw(art,si,pi,fallback){
   try{ return getEdit("fullp:"+art.id+":"+si+":"+pi, fallback); }catch(e){ return fallback; }
 }
+/* v146：任务预告/提案的句数走「正文口径」——与修习室、五步流程同一套分段，
+   标题 / 列表项 / 引用 / 分隔线等块级元素不计入（旧版按原文行数统计，句数会虚高）。 */
+function _oralProseSents(ref){
+  try{
+    const out=[];
+    _oralParas(ref.sec).slice(ref.p0,ref.p1).forEach(p=>{
+      const paIdx=(typeof p.n==="number")?p.n-1:0;
+      const raw=String(_oralParaRaw(ref.art,ref.idx,paIdx,p.text)||"");
+      let rendered=raw;
+      try{ if(typeof mdDocRender==="function") rendered=mdDocRender(raw,true); }catch(e){}
+      let txt="";
+      try{ txt=(typeof mdPracticePlain==="function")?mdPracticePlain(rendered):_htmlToText(String(rendered||"")); }
+      catch(e){ try{ txt=_htmlToText(String(rendered||"")); }catch(_e){ txt=String(rendered||""); } }
+      try{ _oralSplitSent(txt).forEach(t=>{ if(String(t).replace(/\uE000\d+\uE001/g,"").trim()) out.push(t); }); }catch(e){}
+    });
+    return out.length;
+  }catch(e){ return null; }
+}
 /* 富文本 → 正文 HTML + 独立图区 + 打字机用纯文本 */
 function _oralSplit(raw){
   const isHtml=/<[a-z][\s\S]*?>/i.test(String(raw||""));
@@ -3323,7 +3355,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     });
   }
   const head=()=>'<div class="v25rd-head"><h3 class="v25rd-title">'+esc(name)+'</h3>'
-    +'<span class="v25rd-count" style="font-size:12px">'+esc(sec.h||"")+' · '+sents.length+' 句</span></div>';
+    +'<span class="v25rd-count" style="font-size:12px">'+esc(sec.h||"")+' · 正文 '+sents.length+' 句</span></div>';
 
   /* ① / ④ 整段阅读：一段整体正文（v104 不分句，按自然段落衔接排版；打字机逐段连打；第二遍直接全文）
      v113：修订改为「整体修订」——一个编辑器改整个片段，可改正文/小标题/中文小注、删段、加段 */
