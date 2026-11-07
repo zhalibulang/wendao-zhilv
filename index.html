@@ -928,7 +928,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v69"></script>
 <script src="wd-planner.js?v33"></script>
-<script src="wd-v25.js?v140"></script>
+<script src="wd-v25.js?v141"></script>
 <script>
 
 "use strict";
@@ -1717,7 +1717,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v97";
+const BUILD_VERSION="v98";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -6544,6 +6544,7 @@ function _promptCsvOverride(){
   const pend=window.__wdCsvPending;
   if(!pend||!pend.plan||!pend.plan.length) return;
   if(st.csvSkipStamp===pend.stamp) return;   /* 用户已选「保留」，同一底本不再打扰 */
+  if(st.csvPromptStamp===pend.stamp){ window.__wdCsvPending=null; return; } /* v98：同一份 CSV 已提示并处理过（含直接关闭） */
   const plan=pend.plan.filter(it=>st.edits&&st.edits[it.key]);
   if(!plan.length){ window.__wdCsvPending=null; return; }
   const g=_csvPlanGroup(plan), keys=Object.keys(g);
@@ -6564,17 +6565,27 @@ function _promptCsvOverride(){
       <button class="btn sm ghost" id="csvKeep" type="button">保留校订（不覆盖）</button>
     </div>`);
   $("#csvBak",ov).onpointerdown=()=>{ SFX.tap(); _exportEditsBackup(); };
+  /* v98：幂等标记——无论「确认」「保留」还是直接关掉弹窗，同一份 CSV 只提示一次；
+     只写状态字段，不碰任何 st.edits / st.myOral 文本 */
+  try{
+    const mo=new MutationObserver(()=>{
+      if(ov.isConnected) return;
+      mo.disconnect();
+      if(st.csvPromptStamp!==pend.stamp){ st.csvPromptStamp=pend.stamp; window.__wdCsvPending=null; save(); }
+    });
+    mo.observe(document.body,{childList:true});
+  }catch(e){}
   $("#csvGo",ov).onpointerdown=()=>{
     SFX.ok();
     try{
       plan.forEach(it=>{ try{ delete st.edits[it.key]; }catch(e){} });
-      st.csvSkipStamp=pend.stamp; window.__wdCsvPending=null; save();
+      st.csvSkipStamp=pend.stamp; st.csvPromptStamp=pend.stamp; window.__wdCsvPending=null; save();
       toast("已按 CSV 底本覆盖 "+plan.length+" 条旧校订");
     }catch(e){}
     ov.remove(); try{ _refreshCurrentView(); }catch(e){}
   };
   $("#csvKeep",ov).onpointerdown=()=>{
-    SFX.tap(); st.csvSkipStamp=pend.stamp; window.__wdCsvPending=null; save();
+    SFX.tap(); st.csvSkipStamp=pend.stamp; st.csvPromptStamp=pend.stamp; window.__wdCsvPending=null; save();
     toast("已保留本地校订，本次未覆盖任何记录"); ov.remove(); try{ _refreshCurrentView(); }catch(e){}
   };
 }
@@ -6602,7 +6613,8 @@ function oralHasEditOf(o,si){
 }
 /* v97：问契·自录统一取文——通用编辑器写入的是 myoral:<id>，卡面/详情/朗读都先读它，
    没有校订才回落到结构化字段现拼「问：… 答：…」，与 point:/clue:/oral: 同一套取文方式。
-   st.myOral 原字段只读不改，结构化录入面板仍是它的唯一写入方。 */
+   v98：单一事实源规则——显示永远以 myoral:<id> 为准；结构化面板保存时同步写一份到
+   myoral:<id>，同时更新 st.myOral 的 q/a/ref。两个入口都只改这两处，谁后保存谁生效。 */
 function myOralTextOf(m){
   if(!m) return "";
   const assembled="问："+m.q+"\n答："+m.a;
@@ -6612,7 +6624,9 @@ function myOralTextOf(m){
    保证题库/揭示语义不变；若用户整段改写（没有答标记），则整段作为答。 */
 function myOralAnswerOf(m){
   if(!m) return "";
-  const t=getEdit("myoral:"+m.id, "");
+  /* v98：编辑器存的是富文本 HTML，取答段前先剥成纯文本，避免朗读/判分读到 </div> 之类的标签 */
+  const raw=getEdit("myoral:"+m.id, "");
+  const t=raw?(typeof mdPlain==="function"?mdPlain(raw):String(raw).replace(/<[^>]+>/g,"")):"";
   if(!t) return m.a;
   const mm=/\n?答[：:]([\s\S]*)$/.exec(String(t));
   return mm?mm[1].trim():String(t).trim();
@@ -6811,7 +6825,7 @@ function renderLib(){
       <button class="btn sm primary" id="cFlip" type="button" ${pool.length===0?"disabled":""}>翻下一张 ⤵</button>
       <button class="btn sm gold" id="cRand" type="button" ${pool.length===0?"disabled":""}>🎲 随机抽</button>
       <button class="btn sm" id="cTts" type="button" ${cur?"":"disabled"}>🔊 朗读</button>${(window.V25&&V25.ttsCtlHtml)?V25.ttsCtlHtml():""}
-      <button class="btn sm" id="cEdit" type="button" ${cur&&cur.editable?"":"disabled"}>✏️ 校订此卡</button>
+      <button class="btn sm" id="cEdit" type="button" ${cur&&cur.editable?"":"disabled"}>✏️ 校订此卡</button>${cur&&cur.cat==="qmine"?'<button class="btn sm ghost" id="cQmPanel" type="button">📝 结构化录入</button>':""}
       <button class="btn sm ghost" id="cDel" type="button" ${cur?"":"disabled"}>🗑 删除此卡</button>
     </div>
     <div class="fliphint">点「翻下一张」从卡堆顶部依次取出 · 「随机抽」从全部卡片中抽取 · 校订内容会自动存档并可回退版本</div>
@@ -6833,9 +6847,11 @@ function renderLib(){
     V25&&V25.ttsSpeak&&V25.ttsSpeak(txt, null, $(".cardstack",stream)); };
   if(window.V25&&V25.bindTtsCtl) V25.bindTtsCtl(stream);
   $("#cEdit",stream).onpointerdown=()=>{ if(!cur) return;
-    /* myoral 是结构化问答字段，走专用录入面板而非通用文本编辑器 */
-    if(cur.cat==="qmine"){ openOralInput(cur.id); return; }
+    /* v98：「校订此卡」对问契·自录也走通用富文本编辑器（写 myoral:<id>）；
+       结构化面板保留为并列入口，两个入口保存后都刷新同一张卡 */
     openEditor(cur); };
+  const cQm=$("#cQmPanel",stream);
+  if(cQm) cQm.onpointerdown=()=>{ SFX.tap(); openOralInput(cur.id); };
   const cOR=$("#cOralReplace",stream); if(cOR) cOR.onpointerdown=()=>{ SFX.tap(); renderOralReplace(); };
   const cAdd=$("#cAdd",stream); if(cAdd) cAdd.onpointerdown=()=>{ SFX.tap(); openCardCreator(); };
   const cDel=$("#cDel",stream); if(cDel) cDel.onpointerdown=()=>{ if(cur) deleteCard(cur); };
@@ -7410,6 +7426,8 @@ function openOralInput(editId){
     const exist=st.myOral.find(x=>x.id===nid);
     if(exist){ Object.assign(exist,d,{status:final?"final":"draft",created:exist.created||new Date().toISOString()}); }
     else st.myOral.push(Object.assign({id:nid},d,{status:final?"final":"draft",created:new Date().toISOString()}));
+    /* v98：面板保存即写显示源——显示读 myoral:<id>，结构化字段同步更新，避免「面板改了卡面没变」 */
+    try{ saveEdit("myoral:"+nid, "问："+d.q+"\n答："+d.a); }catch(e){ console.warn("[myoral] 同步显示源失败:",e); }
     save(); return nid;
   }
   $("#oiDraft",ov).onpointerdown=()=>{

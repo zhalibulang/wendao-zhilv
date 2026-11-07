@@ -4564,13 +4564,13 @@ window.V25={ v25st, V25_TIERS, aiGenInterp25, mockInterp25, aiGenQuiz25, mockQui
   planHorizon, planFloor, startOralSectionFlow,
   _htmlPlainAligned, _htmlSlicePlain,   /* v136：修习室富文本按纯文本坐标分句，需复用这套切片 */
   subjColor, SUBJ_COLORS, s5Cat, S5_CATS,
-  VER:"v34",
+  VER:"v35",
   ttsSpeak, ttsStop, ttsPause, ttsResume, ttsCtlHtml, bindTtsCtl, ttsPickVoice, ttsHdOn, ttsHdSet, ttsHdStatus, ttsHdEnsure, ttsHdPct,
   ttsVoiceList, ttsGetVoicePref, ttsSetVoicePref, ttsPreview, ttsDiag, ttsSelfCheck, ttsGetRate, ttsSetRate, ttsRateCycle,
   unitIsDone, unitRunState, normalizeDoneState,
   oralSecText, oralSecParas, oralSecHasEdit,   /* v151：导游词统一取文（段落级 fullp 与整节级 full/fullsec 按时间戳合并） */
   injectCards, cardMins, acctNote, settleAcct, subjStats, laggingSubjs };
-const VER="v34";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
+const VER="v35";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
 engineBoot();
 /* 页脚版本水印延迟填充——engineBoot() 在 IIFE 执行时 DOM 里还没有 footer（wd-v25.js 是 body 内同步加载的），
    所以 getElementById("v25ver") 会返回 null。等到 DOM 就绪后再填，这样即使 index.html 模板是旧版（硬编码 "…"）也能被 JS 覆盖 */
