@@ -2996,9 +2996,111 @@ function _oralParas(sec){
   if(Array.isArray(sec.paragraphs)&&sec.paragraphs.length) return sec.paragraphs;
   return [{n:1, text:String(sec.text||sec.en||"").trim()}];
 }
-/* 段落正文：优先玩家校订版（fullp:<篇>:<节>:<段>），否则官方原文 */
+/* v151：导游词「统一取文」——修习室 / 五步流程 / 朗读 / 分句 / 判分 / 检索 / 藏经阁
+   全部走这一套，不再各拼各的键（此前修习室只读 full:，五步流程写的是 fullp:，
+   用户改完刷新回原文）。规则：只读，绝不写回、绝不删除 st.edits 里任何记录。
+     ① 整节级候选：fullsec（带【小标题】/【小注】标记）与 full（整节纯文本），取时间戳较晚者；
+     ② 逐段覆盖：该段若有 fullp 记录且时间戳不早于整节级 → 用 fullp（并列时段落级优先）；
+     ③ 都没有 → 官方原文 / 运行库当前段。
+   依据：时间戳裁决能同时满足「后来改的整节要生效」和「后来改的段落要生效」，
+   且不必删旧记录——删记录等于销毁用户的修订历史。 */
+function _oralEditOf(key){
+  try{
+    const a=(st&&st.edits&&st.edits[key])||[];
+    if(!a.length) return null;
+    const h=a[0]||{};
+    return { at:(Date.parse(String(h.at||""))||0), text:String(h.text==null?"":h.text) };
+  }catch(e){ return null; }
+}
+function _oralArtOf(o){
+  if(!o) return null;
+  if(typeof o==="string") return (D.oralFull||[]).find(x=>x.id===o)||(D.oralFull||[]).find(x=>x.aid===o)||null;
+  return o;
+}
+/* 保标签版行切分（顶层）：块级边界（br / div、p 等）转换行，行内标签（b/span/字色等）原地保留。
+   五步流程与修习室/导出共用，避免「流程没进过就取不到」的作用域问题。 */
+function _oralHtmlLines(html){
+  return String(html||"")
+    .replace(/<br\s*\/?>/gi,"\n")
+    .replace(/<\/(?:div|p|li|h[1-6]|blockquote)\s*>/gi,"\n")
+    .replace(/<(?:div|p|li|h[1-6]|blockquote)(?:\s[^>]*)?>/gi,"\n")
+    .split("\n");
+}
+/* 整节稿解析（顶层）：一行一段；识别【小标题】/【小注】；标记行粘了英文正文时自愈切开。
+   五步流程与修习室/导出共用，不再依赖「五步流程已经渲染过」才挂到 window 上。 */
+function _oralParseBlocks(text){
+  const blocks=[]; let cur=null;
+  const flush=()=>{ if(cur&&(String(cur.text).trim()||cur.head||cur.note)) blocks.push(cur); cur=null; };
+  const splitLab=v=>{
+    const s=String(v||"").trim();
+    const m=s.match(/^([\u4e00-\u9fff][\u4e00-\u9fff0-9\s，。、；：·（）()《》「」『』“”‘’—\-~～]*?)([A-Za-z“"'(][\s\S]{40,})$/);
+    if(m&&m[1].trim()) return {lab:m[1].trim(), rest:m[2].trim()};
+    return {lab:s, rest:""};
+  };
+  String(text||"").split("\n").forEach(raw=>{
+    const t=raw.trim();
+    const mH=t.match(/^【小标题】\s?([\s\S]*)$/), mN=t.match(/^【小注】\s?([\s\S]*)$/);
+    if(mH){ const r=splitLab(mH[1]); cur=cur||{head:"",note:"",text:""}; cur.head=r.lab; if(r.rest) cur.text+=(cur.text?" ":"")+r.rest; return; }
+    if(mN){ const r=splitLab(mN[1]); cur=cur||{head:"",note:"",text:""}; cur.note=r.lab; if(r.rest) cur.text+=(cur.text?" ":"")+r.rest; return; }
+    if(!t){ flush(); return; }
+    cur=cur||{head:"",note:"",text:""};
+    cur.text+=(cur.text?" ":"")+t;
+  });
+  flush();
+  return blocks;
+}
+try{ window.__wdParseSecText=_oralParseBlocks; }catch(e){}
+/* 返回本节逐段正文：[{n,text,head,note}]（已按上面规则合并） */
+function oralSecParas(o,si){
+  const art=_oralArtOf(o); if(!art) return [];
+  const sec=(art.sections||[])[si]; if(!sec) return [];
+  const orig=_oralParas(sec).map((p,i)=>({ n:i+1, text:String(p.text!=null?p.text:(sec.text||sec.en||"")), head:p.head||"", note:p.note||"" }));
+  const eSec=_oralEditOf("fullsec:"+art.id+":"+si);
+  const eFull=_oralEditOf("full:"+art.id+":"+si);
+  const eWhole=(eSec&&(!eFull||eSec.at>=eFull.at))?eSec:eFull;
+  const fromFullsec=!!(eSec&&eWhole===eSec);
+  let base=orig;
+  if(eWhole&&eWhole.text){
+    let blocks=[];
+    try{
+      const lines=_oralHtmlLines(eWhole.text);
+      if(typeof window.__wdParseSecText==="function") blocks=window.__wdParseSecText(lines.join("\n"))||[];
+      if(!blocks.length) blocks=_oralParseBlocks(lines.join("\n"));
+    }catch(e){ blocks=[]; }
+    if(!blocks.length){
+      const parts=String(eWhole.text).split(/\n{2,}/).map(x=>x.trim()).filter(Boolean);
+      if(parts.length>1) blocks=parts.map(t=>({head:"",note:"",text:t}));
+    }
+    /* 旧 full 存档若把整节挤成「一行」（没有空行）会解析成单块，套用会把十几段压成一段。
+       但用户主动把整节改成一段也是合法修订，不能因此回退成原文（等于打回原形）。
+       判据：单块文本与「原文各段拼成一句」等价 → 视为旧存档挤压，保留原文分段；
+       只要措辞变了 → 是按用户最新稿显示（哪怕只有一段）。 */
+    const _normT=s=>String(s||"").replace(/\s+/g," ").trim();
+    const _oneTxt=blocks.length===1?_normT(blocks[0].text):"";
+    const _legacyOne=!!_oneTxt&&orig.length>1&&_oneTxt===_normT(orig.map(p=>p.text||"").join(" "));
+    if(blocks.length&&!(_legacyOne&&!fromFullsec)){
+      base=blocks.map((b,i)=>({ n:i+1, text:String((b&&b.text)||""), head:(b&&b.head)||"", note:(b&&b.note)||"" }));
+    }
+  }
+  base.forEach((p,i)=>{
+    const pe=_oralEditOf("fullp:"+art.id+":"+si+":"+i);
+    if(pe&&(!eWhole||pe.at>=eWhole.at)) p.text=pe.text;
+  });
+  return base;
+}
+function oralSecText(o,si){ return oralSecParas(o,si).map(p=>p.text||"").join("\n\n"); }
+function oralSecHasEdit(o,si){
+  const art=_oralArtOf(o); if(!art) return false;
+  if(_oralEditOf("fullsec:"+art.id+":"+si)||_oralEditOf("full:"+art.id+":"+si)) return true;
+  return Object.keys((st&&st.edits)||{}).some(k=>k.indexOf("fullp:"+art.id+":"+si+":")===0);
+}
+/* 段落正文：走统一取文（含 fullp 与整节稿的时间戳裁决） */
 function _oralParaRaw(art,si,pi,fallback){
-  try{ return getEdit("fullp:"+art.id+":"+si+":"+pi, fallback); }catch(e){ return fallback; }
+  try{
+    const a=oralSecParas(art,si);
+    if(pi!=null&&a[pi]&&a[pi].text!=null) return a[pi].text;
+  }catch(e){}
+  return fallback;
 }
 /* v146：任务预告/提案的句数走「正文口径」——与修习室、五步流程同一套分段，
    标题 / 列表项 / 引用 / 分隔线等块级元素不计入（旧版按原文行数统计，句数会虚高）。 */
@@ -3708,10 +3810,13 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
      文字一致就沿用原 HTML，加粗/字色等富文本不会因为套用修订而丢。 */
   const applySecSaved=()=>{
     try{
-      const arrSec=(st&&st.edits&&st.edits["fullsec:"+art.id+":"+si])||[];
-      const arrFull=(st&&st.edits&&st.edits["full:"+art.id+":"+si])||[];
-      /* 两种入口保存的整节稿都认：fullsec（整体修订，带小标题/小注标记）优先，其次 full（整节纯文本） */
-      const src=arrSec.length?String((arrSec[0]||{}).text||""):(arrFull.length?String((arrFull[0]||{}).text||""):"");
+      const eS=_oralEditOf("fullsec:"+art.id+":"+si);
+      const eF=_oralEditOf("full:"+art.id+":"+si);
+      /* v151：两种入口保存的整节稿都认，但按时间戳取较新的一份（与 oralSecParas 同一规则），
+         不再无条件让 fullsec 压过后来保存的 full */
+      const pick=(eS&&(!eF||eS.at>=eF.at))?eS:eF;
+      const fromSec=!!(eS&&pick===eS);
+      const src=pick?pick.text:"";
       if(!src) return;
       const ap=_oralParas(sec);
       if(!ap.length) return;
@@ -3720,11 +3825,16 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       let blocks=_parseSecText(_htmlLines(src).join("\n"));
       if(!blocks.length) return;
       /* 旧版 full（整节纯文本）存档可能只有单换行，解析出来会并成 1 块。
-         这时绝不能真去套用——那会把十几段压成一段。先按空行重分，分不出就放弃、保持原文。 */
-      if(!arrSec.length&&blocks.length===1&&ap.length>1){
+         v151：只有「单块文本 = 原文各段拼成一句」时才认定是旧存档挤压、保持原文分段；
+         措辞变了的单块是用户主动改写，必须按新稿显示（不能打回原形）。 */
+      if(!fromSec&&blocks.length===1&&ap.length>1){
         const alt=String(src).split(/\n{2,}/).map(x=>x.trim()).filter(Boolean);
         if(alt.length>1) blocks=alt.map(t=>({head:"",note:"",text:t}));
-        else return;
+        else{
+          const norm=s=>_htmlToText(String(s||"")).replace(/\s+/g," ").trim();
+          const joined=norm(ap.map(p=>String(p.text||"")).join(" "));
+          if(norm(blocks[0].text)===joined) return;
+        }
       }
       const plainOf=x=>_htmlToText(String(x||"")).replace(/\s+/g," ").trim();
       const oldRaw=ap.map(p=>String(_oralParaRaw(art,si,paOf(p),p.text)||""));
@@ -3772,34 +3882,8 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
      旧版最后过 _htmlToText 把标签全剥光：整体修订里加的粗体/字色/配图
      在「序列化进编辑器 → 保存 → 写回段落 → 进页重套」整条链路上被拍平成纯文本，
      用户看到的就是「样式没有显示」。行内标签跟着正文走，样式才能活下来。 */
-  const _htmlLines=html=>String(html||"")
-    .replace(/<br\s*\/?>/gi,"\n")
-    .replace(/<\/(?:div|p|li|h[1-6]|blockquote)\s*>/gi,"\n")
-    .replace(/<(?:div|p|li|h[1-6]|blockquote)(?:\s[^>]*)?>/gi,"\n")
-    .split("\n");
-  const _parseSecText=text=>{
-    const blocks=[]; let cur=null;
-    const flush=()=>{ if(cur&&(String(cur.text).trim()||cur.head||cur.note)) blocks.push(cur); cur=null; };
-    /* 自愈：标记行后面粘了英文正文（历史稿在 contenteditable 里被折叠换行所致）时，
-       把「中文标签」和「英文正文」切开，否则整行会被当成小注，正文整段变灰字消失 */
-    const splitLab=v=>{
-      const s=String(v||"").trim();
-      const m=s.match(/^([\u4e00-\u9fff][\u4e00-\u9fff0-9\s，。、；：·（）()《》「」『』“”‘’—\-~～]*?)([A-Za-z“"'(][\s\S]{40,})$/);
-      if(m&&m[1].trim()) return {lab:m[1].trim(), rest:m[2].trim()};
-      return {lab:s, rest:""};
-    };
-    String(text||"").split("\n").forEach(raw=>{
-      const t=raw.trim();
-      const mH=t.match(/^【小标题】\s?([\s\S]*)$/), mN=t.match(/^【小注】\s?([\s\S]*)$/);
-      if(mH){ const r=splitLab(mH[1]); cur=cur||{head:"",note:"",text:""}; cur.head=r.lab; if(r.rest) cur.text+=(cur.text?" ":"")+r.rest; return; }
-      if(mN){ const r=splitLab(mN[1]); cur=cur||{head:"",note:"",text:""}; cur.note=r.lab; if(r.rest) cur.text+=(cur.text?" ":"")+r.rest; return; }
-      if(!t){ flush(); return; }
-      cur=cur||{head:"",note:"",text:""};
-      cur.text+=(cur.text?" ":"")+t;
-    });
-    flush();
-    return blocks;
-  };
+  const _htmlLines=_oralHtmlLines;
+  const _parseSecText=_oralParseBlocks;
   try{ window.__wdParseSecText=_parseSecText; }catch(e){}
   const _applySecEdit=eid=>{
     const blocks=_parseSecText(_htmlLines(getEdit(eid,"")).join("\n"));
@@ -3837,12 +3921,14 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
         if(!farr.length||farr[0].text!==joined) farr.unshift({at:new Date().toISOString(), text:joined});
       }
     }catch(e){}
-    /* 本片段的逐段旧修订已并入整片稿，清掉避免新旧两个源打架 */
-    try{ Object.keys(st.edits||{}).forEach(k=>{ if(k.indexOf("fullp:"+art.id+":"+si+":")===0) delete st.edits[k]; }); save(); }catch(e){}
+    /* v151：不再删除逐段修订（fullp:）——清记录等于销毁用户的修订历史。
+       新旧两个源由 oralSecParas 按时间戳裁决：整片稿刚写入，时间最新，
+       旧段落在读取时自然让位；以后哪一段又单独改过，那段自己会重新胜出。 */
     resyncParas(); rebuildSents();
   };
   const name=art.name+' · 第'+(si+1)+'节';
   let idx=0;                          /* 分句下标；五步流程靠 render* 直接切页 */
+  let readMode="shadow";              /* v151：分句精读的「跟读/复述」翻页后保持当前模式（原实现每翻页重置为跟读） */
   /* 单麦约定：整个流程同一时刻只允许一个识别器、一个朗读；切页/换模式先收干净，避免抢麦克风 */
   let liveRec=null, autoTtsT=null;
   const killAutoTts=()=>{ if(autoTtsT){ clearTimeout(autoTtsT); autoTtsT=null; } };
@@ -4006,8 +4092,9 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     if(!_TTS_IOS) autoTtsT=setTimeout(()=>{ autoTtsT=null; try{ if(se.isConnected) ttsSpeak(sn.text,'en-US',se); }catch(e){} },260);
     host.querySelector("#v25otts").onpointerdown=()=>{ try{SFX.tap();}catch(e){} killAutoTts(); if(liveRec) stopVoice(); ttsSpeak(sn.text,'en-US',se); };
 
-    /* 模式：跟读=原文可见；复述=原文模糊遮盖（点一下复原、再点一下重新遮回） */
-    let mode="shadow";
+    /* 模式：跟读=原文可见；复述=原文模糊遮盖（点一下复原、再点一下重新遮回）
+       v151：翻页保持当前模式（与分句复述一致），不再每句都弹回跟读 */
+    let mode=readMode;
     const box=host.querySelector("#v25saybox");
     const ms=host.querySelector("#v25mshadow"), mr=host.querySelector("#v25mrecall");
     const hintOf=m=>m==="recall"
@@ -4017,7 +4104,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     box.innerHTML=_oralVoiceHtml({ hint:hintOf("shadow"), lang:"en-US", unit:"句", label:"跟读" });
     const voice=_oralVoiceBind(box,{ lang:"en-US", ref:()=>sn.text, unit:"句", label:"跟读", mod:"sent", idleMs:3500 });
     function paintMode(next){
-      mode=next;
+      mode=next; readMode=next;
       sk&&sk();   /* 先把打字机收尾，再决定是否遮盖 */
       ms.classList.toggle("cur",mode==="shadow"); ms.classList.toggle("ghost",mode!=="shadow");
       mr.classList.toggle("cur",mode==="recall"); mr.classList.toggle("ghost",mode!=="recall");
@@ -4044,7 +4131,7 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     }
     ms.onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(mode==="shadow") return; stopVoice(); if(voice) voice.stop(); paintMode("shadow"); };
     mr.onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(mode==="recall") return; stopVoice(); if(voice) voice.stop(); paintMode("recall"); };
-    paintMode("shadow");
+    paintMode(readMode);
     host.querySelector("#v25oprev").onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(i>0){ if(voice) voice.stop(); stopVoice(); idx=i-1; renderSentRead(idx); } };
     host.querySelector("#v25oedit").onpointerdown=()=>{ try{SFX.tap();}catch(e){}
       if(voice) voice.stop(); stopVoice();
@@ -4053,7 +4140,8 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
         openEditor({ uid:eid, editId:eid, id:art.aid+'-S'+(si+1)+'-P'+(pa+1),
           title:art.name+' 第'+(si+1)+'节 第'+(pa+1)+'段', cat:"full",
           catLabel:'导游词 · '+art.name, body:raw, onSaved:()=>{ try{
-            try{ if(st.edits) delete st.edits["fullsec:"+art.id+":"+si]; }catch(x){}
+            /* v151：不再删除整节修订（fullsec）——本段刚保存，时间戳最新，读取时这一段自然压过整节稿；
+               其余段落继续用整节稿。删掉它会让用户没改过的段落一起退回原文。 */
             rebuildSents(); renderSentRead(Math.min(i,sents.length-1)); }catch(x){} } });
       }catch(x){ toast("编辑器暂不可用"); }
     };
@@ -4458,12 +4546,13 @@ window.V25={ v25st, V25_TIERS, aiGenInterp25, mockInterp25, aiGenQuiz25, mockQui
   planHorizon, planFloor, startOralSectionFlow,
   _htmlPlainAligned, _htmlSlicePlain,   /* v136：修习室富文本按纯文本坐标分句，需复用这套切片 */
   subjColor, SUBJ_COLORS, s5Cat, S5_CATS,
-  VER:"v32",
+  VER:"v33",
   ttsSpeak, ttsStop, ttsPause, ttsResume, ttsCtlHtml, bindTtsCtl, ttsPickVoice, ttsHdOn, ttsHdSet, ttsHdStatus, ttsHdEnsure, ttsHdPct,
   ttsVoiceList, ttsGetVoicePref, ttsSetVoicePref, ttsPreview, ttsDiag, ttsSelfCheck, ttsGetRate, ttsSetRate, ttsRateCycle,
   unitIsDone, unitRunState, normalizeDoneState,
+  oralSecText, oralSecParas, oralSecHasEdit,   /* v151：导游词统一取文（段落级 fullp 与整节级 full/fullsec 按时间戳合并） */
   injectCards, cardMins, acctNote, settleAcct, subjStats, laggingSubjs };
-const VER="v32";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
+const VER="v33";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
 engineBoot();
 /* 页脚版本水印延迟填充——engineBoot() 在 IIFE 执行时 DOM 里还没有 footer（wd-v25.js 是 body 内同步加载的），
    所以 getElementById("v25ver") 会返回 null。等到 DOM 就绪后再填，这样即使 index.html 模板是旧版（硬编码 "…"）也能被 JS 覆盖 */

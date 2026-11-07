@@ -1717,7 +1717,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v95";
+const BUILD_VERSION="v96";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -4678,8 +4678,9 @@ function openQuest(qid){
         if(oo){ const fresh=rtOralPages(oo); pages.length=0; Array.prototype.push.apply(pages,fresh); D.lectures[q.id]=pages; }
         renderStageBookPage();   /* 校订即所见：段落卡分句立即换成校订版 */
       }catch(_){} };
+      const _art=(D.oralFull.find(x=>x.id===oa.fullId)||{sections:[]});
       openEditor({id:_eid, catLabel:"咒祷全卷 · "+oa.name+" §"+(oa.sec+1),
-        title:_eid, body:getEdit(_eid, (D.oralFull.find(x=>x.id===oa.fullId)||{sections:[]}).sections[oa.sec]?.text||""),
+        title:_eid, body:(_art.sections&&_art.sections[oa.sec]?oralTextOf(_art,oa.sec):""), preferBody:true,
         editable:true, editId:_eid, onSaved:refreshOralPages}); }; }
     const ogr=$("#oralGoRecite",stageHost);
     if(ogr) ogr.onpointerdown=()=>{ SFX.tap(); bookDone=true; goStage(3); };
@@ -6501,6 +6502,20 @@ function getEdit(id, original){
   return v.length? v[0].text : original;
 }
 function hasEdit(id){ return editVer(id).length>0; }
+/* v151：导游词统一取文——修习室 / 五步流程 / 朗读 / 分句 / 判分 / 检索 / 藏经阁 共用一个来源。
+   实现放在 wd-v25.js（oralSecParas）：段落级 fullp 与整节级 full/fullsec 按时间戳裁决，
+   并列时段落级优先；只读，不写回、不删除任何 st.edits 记录。 */
+function oralTextOf(o,si){
+  try{
+    if(window.V25&&V25.oralSecText) return V25.oralSecText(o,si);
+    const s=(o.sections||[])[si]||{};
+    return getEdit("full:"+o.id+":"+si,String(s.text||s.en||""));
+  }catch(e){ const s=(o.sections||[])[si]||{}; return String(s.text||s.en||""); }
+}
+function oralHasEditOf(o,si){
+  try{ return (window.V25&&V25.oralSecHasEdit)?V25.oralSecHasEdit(o,si):hasEdit("full:"+o.id+":"+si); }
+  catch(e){ return false; }
+}
 function saveEdit(id, text){
   text=String(text);
   if(!st.edits) st.edits={};
@@ -6569,7 +6584,7 @@ function buildCardPool(){
       cards.push({uid:"full:"+o.id+":"+i, cat:"full", catLabel:"修诵卷 · "+o.name, id:o.id+" §"+(i+1),
         key:"ORB-"+(o.aid||o.id)+"-"+i, sub:o.name, star:2,
         title:o.name+" · 第"+(i+1)+"节"+(s.h?" · "+s.h:""),
-        body:getEdit("full:"+o.id+":"+i, s.text||s.en||""),
+        body:oralTextOf(o,i),
         extra:s.h?("小节："+s.h):"", editable:true, editId:"full:"+o.id+":"+i});
     });
   });
@@ -6771,7 +6786,10 @@ function originalOf(editId){
 }
 function openEditor(card){
   const origText = originalOf(card.editId) || card.body;
-  const current = getEdit(card.editId, origText);
+  /* v151：preferBody=true 时以传入的 body 为初稿（导游词整节用的「统一取文」结果，
+     已把段落级 fullp 与整节级 full/fullsec 合并好），不能再退回只读单键的 getEdit，
+     否则用户在这里看到的是没合并的旧文本。 */
+  const current = card.preferBody ? String(card.body==null?"":card.body) : getEdit(card.editId, origText);
   /* 纯文本正文（含换行）→ 结构化 HTML。
      contenteditable 里裸 \n 只是文本节点：用户一编辑，浏览器重建 DOM 时会把 \n 折叠成空格，
      保存回来行结构全丢（【小注】行和正文粘成一行，整块被当成小注渲染）。
@@ -7200,7 +7218,7 @@ function renderOralReplace(){
   const rows=D.oralFull.map(o=>{
     const secs=o.sections||[];
     const mins=rtSpkMin(secs.reduce((n,s)=>n+oralSecWords(s),0));
-    const doneN=secs.filter((s,i)=>hasEdit("full:"+o.id+":"+i)).length;
+    const doneN=secs.filter((s,i)=>oralHasEditOf(o,i)).length;
     return `<div style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
       <div class="rp-head" style="padding:10px 12px;cursor:pointer;background:rgba(255,255,255,0.03);display:flex;justify-content:space-between;align-items:center;gap:8px">
         <span style="min-width:0"><b>${esc(o.name)}</b>
@@ -7224,8 +7242,7 @@ function renderOralReplace(){
       const o=D.oralFull[hi]; if(!o) return;
       const fillList=()=>{
         body.innerHTML=(o.sections||[]).map((s,i)=>{
-          const eid="full:"+o.id+":"+i;
-          const ed=hasEdit(eid), words=oralSecWords(s);
+          const ed=oralHasEditOf(o,i), words=oralSecWords(s);
           return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px dashed var(--border)">
             <div style="flex:1;min-width:0">
               <div style="font-size:13px">§${i+1} ${esc(s.h||"（无标题）")} ${ed?'<span style="color:var(--ok);font-size:10px" title="当前使用你的校订版">✎ 已替换</span>':'<span style="color:var(--dim);font-size:10px">官方版</span>'}</div>
@@ -7237,7 +7254,7 @@ function renderOralReplace(){
         body.querySelectorAll("button[data-i]").forEach(b=>b.onpointerdown=()=>{ SFX.tap();
           const i=+b.dataset.i, s=o.sections[i], eid="full:"+o.id+":"+i;
           openEditor({id:eid,catLabel:"修诵卷 · "+o.name+" §"+(i+1),title:(s.h||("第"+(i+1)+"节")),
-            body:getEdit(eid,s.text||s.en||""),editable:true,editId:eid,onSaved:fillList});
+            body:oralTextOf(o,i),preferBody:true,editable:true,editId:eid,onSaved:fillList});
         });
       };
       fillList();
@@ -7419,7 +7436,10 @@ function rtOralOf(key){
   const s=o.sections[+m[2]]; if(!s) return null;
   return {key,fullId:o.id,aid:o.aid,name:o.name,sec:+m[2],h:s.h||"",raw:s.text||s.en||""};
 }
-function rtOralText(key){ const o=rtOralOf(key); return o?getEdit("full:"+o.fullId+":"+o.sec,o.raw):""; }
+function rtOralText(key){
+  const o=rtOralOf(key); if(!o) return "";
+  try{ const art=(D.oralFull||[]).find(x=>x.id===o.fullId); const t=art?oralTextOf(art,o.sec):""; return t||o.raw; }catch(e){ return o.raw; }
+}
 /* 统一取卡：任何 key → 展示结构（夜巡/书页/题目共用） */
 function rtCardOf(key){
   if(/^S[1-4]-/.test(key)){ const p=D.pointsLib.find(x=>x.id===key); return p?{key,id:key,text:mdClean(getEdit("point:"+key,p.text)),star:+p.star||1,cat:"a",subj:key.slice(0,2),mod:p.module||""}:null; }
@@ -7903,7 +7923,8 @@ async function aiOralBriefUpgrade(d,slot){
   }catch(e){ clearTimeout(timer); try{badge.remove();}catch(_){} }
 }
 function rtOralPages(o){
-  const cur=getEdit("full:"+o.fullId+":"+o.sec,o.raw);
+  const art=(D.oralFull||[]).find(x=>x.id===o.fullId);
+  const cur=(art?oralTextOf(art,o.sec):"")||o.raw;
   const sentences=cur.match(/[^.!?]+[.!?]+/g)||[cur];
   const est=rtSpkMin(cur.split(/\s+/).length);
   const whole=(D.oralFull.find(x=>x.aid===o.aid)||{sections:[]});
@@ -9536,42 +9557,17 @@ function downloadFile(name,text,mime){
 }
 /* 导出导游词文稿源文件（含本机全部修订）——把当前生效的全文固化为 oral-full-gug.js。
    游戏内修订只存在浏览器存档里，磁盘文件感知不到；导出后替换项目同名文件即可提交 GitHub，
-   富文本样式（加粗/字色）随 HTML 一起保留。覆盖顺序：整片修订 fullsec > 整节修订 full > 逐段修订 fullp */
+   富文本样式（加粗/字色）随 HTML 一起保留。取值与界面同一套（v151：oralSecParas 时间戳裁决） */
 function exportOralSrc(){
   try{
     const arts=JSON.parse(JSON.stringify(D.oralFull||[]));
-    const parseSec=text=>{
-      /* 优先复用运行时同一套解析（含标记行与正文粘连的自愈），避免两处规则漂移 */
-      if(typeof window.__wdParseSecText==="function") return window.__wdParseSecText(text);
-      const blocks=[]; let cur=null;
-      const flush=()=>{ if(cur&&(String(cur.text).trim()||cur.head||cur.note)) blocks.push(cur); cur=null; };
-      String(text||"").split("\n").forEach(raw=>{
-        const t=raw.trim();
-        const mH=t.match(/^【小标题】\s?([\s\S]*)$/), mN=t.match(/^【小注】\s?([\s\S]*)$/);
-        if(mH){ cur=cur||{head:"",note:"",text:""}; cur.head=mH[1].trim(); return; }
-        if(mN){ cur=cur||{head:"",note:"",text:""}; cur.note=mN[1].trim(); return; }
-        if(!t){ flush(); return; }
-        cur=cur||{head:"",note:"",text:""};
-        cur.text+=(cur.text?" ":"")+t;
-      });
-      flush(); return blocks;
-    };
     arts.forEach(o=>{
       (o.sections||[]).forEach((s,si)=>{
-        let ps=(Array.isArray(s.paragraphs)&&s.paragraphs.length?s.paragraphs:[{n:1,text:s.text||s.en||""}]).map(p=>Object.assign({},p));
-        const secEdit=getEdit("fullsec:"+o.id+":"+si,"");
-        if(secEdit){
-          const plain=(typeof _htmlLines==="function")?_htmlLines(secEdit).join("\n"):String(secEdit).replace(/<[^>]*>/g," ");
-          const blocks=parseSec(plain);
-          if(blocks.length) ps=blocks.map((b,i)=>({n:i+1,text:b.text,head:b.head,note:b.note}));
-        }else{
-          const fe=getEdit("full:"+o.id+":"+si,"");
-          if(fe){
-            const pts=String(fe).split(/\n{2,}/).map(x=>x.trim()).filter(Boolean);
-            if(pts.length>1||(pts.length===1&&ps.length===1)) ps=pts.map((t,i)=>Object.assign({},ps[i]||{},{n:i+1,text:t}));
-          }
-        }
-        ps.forEach((p,pi)=>{ p.text=getEdit("fullp:"+o.id+":"+si+":"+pi, p.text); });
+        /* v151：导出与界面同源——直接取统一取文结果（fullp 与整节稿按时间戳裁决） */
+        let ps=null;
+        try{ const c=(window.V25&&V25.oralSecParas)?V25.oralSecParas(o,si):null;
+          if(c&&c.length) ps=c.map(p=>({n:p.n,text:p.text||"",head:p.head||"",note:p.note||""})); }catch(e){}
+        if(!ps) ps=(Array.isArray(s.paragraphs)&&s.paragraphs.length?s.paragraphs:[{n:1,text:s.text||s.en||""}]).map(p=>Object.assign({},p));
         ps.forEach((p,i)=>{ p.n=i+1; });
         s.paragraphs=ps;
         s.text=ps.map(p=>p.text||"").join("\n\n");
@@ -12324,7 +12320,7 @@ function openOralStudy(aid){
           /* v58：分句导游词与校订同源——玩家改过此段则以最新校订版分句（对照/点读/遮英一致）
              v128：校订可能是富文本（加粗/字色）——先过 rich() 净化再显示；
              配图先抽离（图里 URL 的句点会切碎分句），评分/关键词另用纯文本底本 */
-          const enRaw=String(getEdit("full:"+o.id+":"+si,String(s.text||s.en||"")));
+          const enRaw=String(oralTextOf(o,si));
           /* v144：统一入口——纯文本/富文本都按真实保存路径解析块级 Markdown（# / - / > / ---），
              同时保留已有加粗/字色与配图 */
           const en=mdDocRender(enRaw, true);
@@ -12452,7 +12448,7 @@ function openOralStudy(aid){
         const s=o.sections[si];
         /* v58：分站考核基准同样取校订版，避免"背的是新版、考的是旧版"
            v128：评分/关键词一律用纯文本——富文本标签混进 oralScore/oralKeywords 会把样式词当关键词 */
-        const enRaw=String(getEdit("full:"+o.id+":"+si,String(s.text||s.en||"")));
+        const enRaw=String(oralTextOf(o,si));
         const en=/<[a-z][\s\S]*?>/i.test(enRaw)? _htmlToText(enRaw).replace(/\s+/g," ").trim() : enRaw;
         const kws=oralKeywords(en,5);
         const box=ov.querySelector('[data-osectest="'+si+'"]');
@@ -12487,7 +12483,7 @@ function openOralStudy(aid){
         SFX.tap();
         const eid="full:"+o.id+":"+si;
         openEditor({id:eid, catLabel:"修诵卷 · "+o.name, title:o.name+" · 第"+(si+1)+"节"+(s.h?" · "+s.h:""),
-          body:getEdit(eid, String(s.text||s.en||"")), editable:true, editId:eid,
+          body:oralTextOf(o,si), preferBody:true, editable:true, editId:eid,
           onSaved:()=>render()});
       };
     });
@@ -12566,7 +12562,7 @@ function openOralStudy(aid){
     };
   }
   /* v58：通篇考核基准=各节最新校订版逐段拼接；v128：剥掉富文本标签再评分 */
-  function en0(x){ const t=x.sections.map((s,si)=>getEdit("full:"+x.id+":"+si,String(s.text||s.en||""))).join(" "); return /<[a-z][\s\S]*?>/i.test(t)? _htmlToText(t) : t; }
+  function en0(x){ const t=x.sections.map((s,si)=>oralTextOf(x,si)).join(" "); return /<[a-z][\s\S]*?>/i.test(t)? _htmlToText(t) : t; }
   document.body.appendChild(ov); render();
 }
 function renderOralLine(){
