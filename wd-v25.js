@@ -1438,7 +1438,8 @@ function _ttsSplitSentences(s){
     }
     push(rest);
   };
-  const segs=String(s||"").split(/(?<=[。！？；!?])\s*|(?<=[.!?])\s+(?=[A-Z"'（(一-鿿])/g);
+  /* v148：先按换行拆段（整卡朗读时标题/正文各自成句），再按标点细分 */
+  const segs=String(s||"").split(/\r?\n+/).flatMap(line=>line.split(/(?<=[。！？；!?])\s*|(?<=[.!?])\s+(?=[A-Z"'（(一-鿿])/g));
   for(const raw of segs){
     const seg=raw.trim();
     if(!seg) continue;
@@ -1469,20 +1470,38 @@ function _ttsSanitize(text){
   return s;
 }
 
-/* v147：设备没装对应语言语音时给一句「照着做」的提示（iOS 上常见：从没下载过中文语音）。
-   注意 getVoices() 首次为空是正常现象，此时不误报，等 voiceschanged 再说。 */
+/* v147/v148：设备没装对应语言语音时给一句「照着做」的提示（iOS 上常见：从没下载过中文语音）。
+   v148：分清两种「列表为空」——
+   (a) 首次 getVoices() 尚未就绪（iPadOS 常见）→ 等 voiceschanged 或 1 秒超时后再判，不误报；
+   (b) 等过仍为空，或有清单但缺目标语言 → 给一次可照做的提示，绝不让用户「点了没反应」。 */
 let _ttsVoiceWarned=false;
+let _ttsVoiceWait=null;
 function _ttsVoiceWarnIfNeeded(wantZh){
   try{
     if(_ttsVoiceWarned) return;
     const synth=window.speechSynthesis; if(!synth||!synth.getVoices) return;
     const all=synth.getVoices()||[];
-    if(!all.length) return;
-    if(all.some(v=>wantZh?/^zh/i.test(v.lang):/^en/i.test(v.lang))) return;
-    _ttsVoiceWarned=true;
-    toast(wantZh
-      ? "这台设备还没装中文语音：设置 → 辅助功能 → 朗读内容 → 声音 → 中文，下载一个再回来"
-      : "这台设备没有英文语音：设置 → 辅助功能 → 朗读内容 → 声音 → 英语，下载一个再回来");
+    if(all.length){
+      if(all.some(v=>wantZh?/^zh/i.test(v.lang):/^en/i.test(v.lang))) return;
+      _ttsVoiceWarned=true;
+      toast(wantZh
+        ? "这台设备还没装中文语音：设置 → 辅助功能 → 朗读内容 → 声音 → 中文，下载一个再回来"
+        : "这台设备没有英文语音：设置 → 辅助功能 → 朗读内容 → 声音 → 英语，下载一个再回来");
+      return;
+    }
+    /* 空列表：先等一次 voiceschanged（或 1 秒超时），仍为空才提示 */
+    if(_ttsVoiceWait) return;
+    const settle=()=>{
+      try{ clearTimeout(_ttsVoiceWait); }catch(e){}
+      _ttsVoiceWait=null;
+      if(_ttsVoiceWarned) return;
+      const now=(synth.getVoices()||[]);
+      if(now.length) return;   /* 只是晚到：不打扰用户，等下次点读再按语言判断 */
+      _ttsVoiceWarned=true;
+      toast("这台设备没有可用的朗读语音：设置 → 辅助功能 → 朗读内容 → 声音，下载一个（中文如「婷婷」）再回来");
+    };
+    try{ synth.addEventListener("voiceschanged",settle,{once:true}); }catch(e){}
+    _ttsVoiceWait=setTimeout(settle,1000);
   }catch(e){}
 }
 
@@ -1514,7 +1533,13 @@ function ttsSpeak(text, lang, el, _noHd){
   _ttsHalt(); ttsStopMarks(); _ttsHdBadge(false);   /* 系统声道起播：高清徽标必须熄灭 */
   _ttsVoiceWarnIfNeeded(hasZh);                     /* 设备没装该语言语音 → 给可照做的提示 */
   /* HD 英文：开关开启且引擎就绪 → Kokoro 神经语音；未就绪则后台预热，本次先用系统 TTS，不打断用户 */
-  if(/^en/i.test(lang)&&ttsHdOn()&&!_noHd){
+  /* v148：iOS/iPadOS 不启用 HD——Kokoro 合成要几秒，Audio.play() 已脱离手势会被系统拒绝，
+     表现就是「点了没反应」。这里直接用系统语音，并给一次说明，避免用户以为是坏了。 */
+  if(_TTS_IOS&&/^en/i.test(lang)&&ttsHdOn()&&!_noHd&&!_ttsIosHdHint){
+    _ttsIosHdHint=true;
+    toast("iPad/iPhone 上不支持高清英文朗读（系统不允许非手势播放），已改用系统语音");
+  }
+  if(!_TTS_IOS&&/^en/i.test(lang)&&ttsHdOn()&&!_noHd){
     if(_ttsHdInst){
       const p=_ttsHdPlay(_ttsHdInst, s, el);
       _ttsHdPromise=p.catch(()=>{});  /* 存生命周期 Promise，下一次 ttsSpeak 会等它 resolve 再启新的 */
@@ -1533,25 +1558,36 @@ function ttsSpeak(text, lang, el, _noHd){
      并把 60ms 的那次机会挪进 _ttsPlayNext 的无响应自愈里。 */
   _ttsPlayNext(synth);
 }
+/* v148：按句/段判语种——藏经阁整卡朗读时，卡里中文标题不再把英文正文一起带成中文声道。
+   汉字占一定比重才算中文（英文句里夹一个中文词仍按英文读，避免来回换嗓子）。 */
+function _ttsSegLang(seg){
+  const s=String(seg||"");
+  const zh=(s.match(/[\u4e00-\u9fff]/g)||[]).length;
+  if(!zh) return "en-US";
+  const en=(s.match(/[A-Za-z]/g)||[]).length;
+  return zh*3>=en?"zh-CN":"en-US";
+}
 function _ttsPlayNext(synth, bare){
   if(_ttsQ.stopped||_ttsQ.paused) return;
   if(_ttsQ.i>=_ttsQ.items.length){ if(_ttsQ.el) _ttsQ.el.classList.remove("tts-speaking"); return; }
   const seg=_ttsQ.items[_ttsQ.i++];
   try{
     const u=new SpeechSynthesisUtterance(seg);
+    /* v148：逐句判语种（整卡中英混排时各用各的声道） */
+    const segLang=_ttsSegLang(seg);
     /* bare 自愈重试也必须调 ttsPickVoice（不带用户偏好、自动挑最高分的），绝不 voice=null——
        Mac 中文 locale 的浏览器默认声道恰恰是中文声音，voicenull 会绕过所有语族兜底，英文就被串成中文 */
-    let v=ttsPickVoice(_ttsQ.lang);
+    let v=ttsPickVoice(segLang);
     /* 列表未就绪再拉一次，避免被自动挑到脏偏好 */
-    if(!v){ _ttsLoadVoices(); v=ttsPickVoice(_ttsQ.lang); }
+    if(!v){ _ttsLoadVoices(); v=ttsPickVoice(segLang); }
     /* 语族错配兜底：无论存档怎么脏，中文声音绝不允许被挂到英文朗读上（反之亦然） */
-    if(v&&((/^zh/i.test(_ttsQ.lang)&&!/^zh/i.test(v.lang))||(/^en/i.test(_ttsQ.lang)&&!/^en/i.test(v.lang)))) v=null;
+    if(v&&((/^zh/i.test(segLang)&&!/^zh/i.test(v.lang))||(/^en/i.test(segLang)&&!/^en/i.test(v.lang)))) v=null;
     /* 终极兜底：v 仍为 null（iOS 首次 getVoices 为空、或系统只有英文声音）时，
        只按语言前缀再找一次，绝不按硬编码语音名硬套——iOS 上根本没有 Google/Samantha 这套命名。
        仍找不到就交给调用方「不指定 voice」走系统默认，而不是 return 静默失败。 */
     if(!v){
       const all=window.speechSynthesis&&window.speechSynthesis.getVoices?window.speechSynthesis.getVoices():[];
-      const wantZh=/^zh/i.test(_ttsQ.lang);
+      const wantZh=/^zh/i.test(segLang);
       v=all.find(x=>wantZh?/^zh/i.test(x.lang):/^en/i.test(x.lang))||null;
       if(!v&&wantZh){  /* 中文内容但设备只有别的语言：退而求其次用系统默认声音念（总比不出声好） */
         try{ console.log("[TTS] 设备无中文语音，改用系统默认声音；建议到 设置→辅助功能→朗读内容→声音→中文 下载"); }catch(e){}
@@ -1567,11 +1603,11 @@ function _ttsPlayNext(synth, bare){
     if(!v){
       if(_TTS_IOS){ /* v147：iOS 拿不到匹配语音时【不指定 voice、也不硬塞 lang】——
                        交给系统默认声音。乱塞一个系统没有的 lang 在 iPadOS 上会静默无声。 */ }
-      else u.lang=_ttsQ.lang;
+      else u.lang=segLang;
     }
-    u.rate=(/^zh/i.test(u.lang||_ttsQ.lang)?1:0.9)*(_ttsQ.rate||1); u.pitch=1;
+    u.rate=(/^zh/i.test(u.lang||segLang)?1:0.9)*(_ttsQ.rate||1); u.pitch=1;
     /* 诊断日志——在 Chrome DevTools Console 搜 [TTS] 就能看到每次挂的声音 */
-    console.log("[TTS] lang="+_ttsQ.lang+" pickVoice="+ (v?(v.name+"/"+v.lang):"null") +" → utterance.voice="+(u.voice?(u.voice.name+"/"+u.lang):"null")+" utterance.lang="+u.lang+" text="+(seg.slice(0,40)));
+    console.log("[TTS] segLang="+segLang+" pickVoice="+ (v?(v.name+"/"+v.lang):"null") +" → utterance.voice="+(u.voice?(u.voice.name+"/"+u.lang):"null")+" utterance.lang="+u.lang+" text="+(seg.slice(0,40)));
     let started=false;
     u.onstart=()=>{ started=true; _ttsCur=u; };
     u.onend=()=>{ if(_ttsCur===u) _ttsCur=null; if(!_ttsQ.stopped&&!_ttsQ.suppress) _ttsPlayNext(synth); };
@@ -1654,6 +1690,7 @@ function _ttsHdBadge(on){ /* 高清播放中点亮所有控制条的徽标——
   try{ document.querySelectorAll(".ttsctl .ttshd").forEach(x=>x.style.display=on?"":"none"); }catch(e){}
 }
 let _ttsSysHint=false;  /* 「英文走系统语音」提醒一次性标记，防刷屏 */
+let _ttsIosHdHint=false;/* v148：iOS 上「高清英文不可用，已改系统语音」提醒一次性标记 */
 /* —— 语速：设置页滑杆 + 朗读控制条 ×按钮 共用一份偏好（0.5~2.0，默认 1.0） —— */
 function ttsGetRate(){ try{ const r=+(_ttsPrefs().rate); return (r>=0.5&&r<=2)?r:1; }catch(e){ return 1; } }
 function ttsSetRate(r, live){
@@ -4226,11 +4263,11 @@ window.V25={ v25st, V25_TIERS, aiGenInterp25, mockInterp25, aiGenQuiz25, mockQui
   planHorizon, planFloor, startOralSectionFlow,
   _htmlPlainAligned, _htmlSlicePlain,   /* v136：修习室富文本按纯文本坐标分句，需复用这套切片 */
   subjColor, SUBJ_COLORS, s5Cat, S5_CATS,
-  VER:"v30",
+  VER:"v31",
   ttsSpeak, ttsStop, ttsPause, ttsResume, ttsCtlHtml, bindTtsCtl, ttsPickVoice, ttsHdOn, ttsHdSet, ttsHdStatus, ttsHdEnsure, ttsHdPct,
   ttsVoiceList, ttsGetVoicePref, ttsSetVoicePref, ttsPreview, ttsDiag, ttsGetRate, ttsSetRate, ttsRateCycle,
   injectCards, cardMins, acctNote, settleAcct, subjStats, laggingSubjs };
-const VER="v30";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
+const VER="v31";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
 engineBoot();
 /* 页脚版本水印延迟填充——engineBoot() 在 IIFE 执行时 DOM 里还没有 footer（wd-v25.js 是 body 内同步加载的），
    所以 getElementById("v25ver") 会返回 null。等到 DOM 就绪后再填，这样即使 index.html 模板是旧版（硬编码 "…"）也能被 JS 覆盖 */

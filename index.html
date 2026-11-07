@@ -1306,9 +1306,32 @@ function _v25GalFit(img){
     img.style.maxWidth="100%"; img.style.height="auto";
   }catch(e){}
 }
+/* v148：显示层统一「先解码、再转义」，全链路只转义一次。
+   历史存档里有把撇号存成 &#39; / &amp;#39; 的（编辑器保存时转义过），旧版 esc() 会二次转义，
+   页面就显示成 China&amp;#39;s。这里只解码已知实体（未知实体原样留给 esc），
+   解码后再 esc，所以 <、>、& 这类真需要转义的字符仍然安全，不会开 XSS 口子。 */
+function _plainFix(s){
+  let t=String(s==null?"":s);
+  for(let k=0;k<3;k++){
+    const n=t
+      .replace(/&lt;/gi,"<").replace(/&gt;/gi,">")
+      .replace(/&quot;/gi,'"').replace(/&apos;|&#0*39;/gi,"'")
+      .replace(/&nbsp;|&#160;/gi," ")
+      .replace(/&#(\d+);?/g,(m,d)=>{ const c=+d; return (c>0&&c<0x110000)?String.fromCodePoint(c):m; })
+      .replace(/&#x([0-9a-f]+);?/gi,(m,h)=>{ const c=parseInt(m.slice(3).replace(";",""),16); return (c>0&&c<0x110000)?String.fromCodePoint(c):m; })
+      .replace(/&amp;/gi,"&");
+    if(n===t) break;
+    t=n;
+  }
+  return t;
+}
 /* 高亮/显示函数共用的富文本适配：含 HTML 标签的入参视为 rich() 已净化的校订文本，直接放行；
-   纯文本照旧 esc 转义。防止「esc 把用户编辑的 <b>/<span> 变成字面字符」的样式丢失。 */
-function richAware(s){ return /<[a-z][\s\S]*?>/i.test(String(s||""))? String(s) : esc(s); }
+   纯文本先解码历史实体再 esc 一次（v148：修 China&#39;s → China&amp;#39;s 的双重转义）。 */
+function richAware(s){
+  s=String(s==null?"":s);
+  if(/<[a-z][\s\S]*?>/i.test(s)) return s;
+  return esc(_plainFix(s));
+}
 /* v137：图文分离的「保位置」版——<img> 换成私有占位符，分句后按原位置还原图区。
    旧版 splitPointImgs 把图全抽走、在节顶统一显示，玩家插在句中的图会跑到整节最上面，
    看起来就是「图片位置错了」。这里只给修习室分句渲染用，其它页面维持原行为。 */
@@ -1694,7 +1717,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v93";
+const BUILD_VERSION="v94";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -7700,24 +7723,43 @@ function rtQuizForCards(cards,targetN){
   }
   return shuffleArr(out);
 }
+/* v148：高亮正则是在「已转义的 HTML」上跑的，数字锚点会把 &#39; 里的 39 也包上 <em>（China&#39;s → China&#<em>39</em>;s）。
+   这里先把实体换成纯字母占位符（不含数字/符号），高亮插完标签再换回来。 */
+function _protectEnt(s){
+  const list=[];
+  const out=String(s||"").replace(/&(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);/g,m=>{
+    list.push(m); let n=list.length, k="";
+    while(n>0){ k=String.fromCharCode(97+(n-1)%26)+k; n=Math.floor((n-1)/26); }
+    return "\u0001"+k+"\u0002";
+  });
+  return { out, list };
+}
+function _restoreEnt(s, list){
+  return String(s||"").replace(/\u0001([a-z]+)\u0002/g,(m,k)=>{
+    let n=0; for(let i=0;i<k.length;i++) n=n*26+(k.charCodeAt(i)-96);
+    return list[n-1]!==undefined?list[n-1]:m;
+  });
+}
 /* v64 p6：英文段落卡真实锚点——大写专名、数字事实、长实词按词边界标 em（与分站关键词同源） */
 const ORAL_STARTER=new Set(["This","That","These","Those","There","Here","Today","Now","Then","After","Before","When","While","During","As","If","Once","Although","One","We","You","It","Its","Our","Their","They","Them","She","He","His","Her","The","A","An","In","On","At","By","For","From","Into","Inside","Outside","Over","Under","Near","Next","Each","Every","Some","Many","Most","Both","All","No","Not","Only","Just","So","But","And","Or","Yet","Also","Even","Still","Since","Until","Because","Another","Such","What","Why","How","Where"]);
 function hlOralAnchors(text){
   const firstWord=(/^[A-Za-z]+/.exec(text||"")||[""])[0];
   const anchors=oralKeywords(text,6).filter(k=>!(ORAL_STARTER.has(k)&&k===firstWord));
-  let out=richAware(text);   /* 校订富文本直接放行；纯文本 esc */
+  const p=_protectEnt(richAware(text));   /* 校订富文本直接放行；纯文本 esc */
+  let out=p.out;
   anchors.forEach(k=>{
     const re=new RegExp("\\b"+k.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","g");
     out=out.replace(re,m=>"<em>"+m+"</em>");
   });
-  return out;
+  return _restoreEnt(out,p.list);
 }
 /* v80：传译/问契中文块标记——数字与计量单位、引号术语分别高亮 */
 function hlTransZh(s){
-  let h=richAware(s);   /* 校订富文本直接放行；纯文本 esc */
+  const p=_protectEnt(richAware(s));   /* 校订富文本直接放行；纯文本 esc */
+  let h=p.out;
   h=h.replace(/\d[\d.,]*(?:\s?(?:万|亿|平方米|平方公里|公里|米|年|位|处|座|间|个|次|％|%))?/g,m=>`<em>${m}</em>`);
   h=h.replace(/(「[^」]*」|“[^”]*”|『[^』]*』)/g,m=>`<b style="color:var(--gold)">${m}</b>`);
-  return h;
+  return _restoreEnt(h,p.list);
 }
 /* v80：单句传译底稿页（阅读态）——中文/英文分开成块，各带校订入口 */
 function transCardPageHtml(tc){
@@ -12264,7 +12306,7 @@ function openOralStudy(aid){
       const gal=(mk.pics.length&&imgs&&typeof pointGalleryHtml==="function")
         ? pointGalleryHtml(mk.pics.map(k=>imgs[k]).filter(Boolean)) : "";
       const main=mk.text?`<div class="osent-en">${richAware(mk.text)}</div>
-      <div class="osent-zh">${esc((zhMap&&zhMap[i])||"")}</div>
+      <div class="osent-zh">${esc(_plainFix((zhMap&&zhMap[i])||""))}</div>
       <div class="osent-act">
         <button class="btn sm ghost" data-speak="${i}" type="button">🔊 点读</button>
         <button class="btn sm ghost" data-hide="${i}" type="button">遮英</button>
