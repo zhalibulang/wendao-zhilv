@@ -928,7 +928,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v69"></script>
 <script src="wd-planner.js?v33"></script>
-<script src="wd-v25.js?v143"></script>
+<script src="wd-v25.js?v144"></script>
 <script>
 
 "use strict";
@@ -1717,7 +1717,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v100";
+const BUILD_VERSION="v101";
 /* v99：核心脚本版本握手——index 与 wd-v25.js 必须同版；SW 的 ignoreSearch 回落可能
    在弱网时把「新 index + 旧 wd-v25」混在一起，这里发现不一致就自愈一次并给出可见提示 */
 const WD_NEED_V25="v36";
@@ -6646,102 +6646,127 @@ function _myOralPlain(raw){
    ④ 没有「问：」也没有「答：」→ 整段当作答案（q 保留原值），并标 unsplit；
    ⑤ 有「问：」但没有「答：」→ 只更新 q，aUnknown=true（绝不拿问题文本填充答案）。
    返回 {ok, unsplit, q, a, aUnknown, ref, hasRef, plain} */
+/* v101：结构解析只在「面板里用户明确要求拆分」时使用，编辑器保存一律不解析。
+   规则：行首「问/答」标记才算结构；「参考」只认最后一段；解析不出就 unsplit。
+   返回的 spans/bodyEnd 用于面板「只替换改动的那一段」，未改部分逐字保留。 */
 function myOralParse(raw){
   const full=_myOralPlain(raw).replace(/^\n+|\n+$/g,"");
-  if(!full.trim()) return {ok:false, unsplit:true, q:null, a:null, aUnknown:true, ref:null, hasRef:false, plain:"", empty:true};
-  /* ③ 参考段：最后一个空行分段，且整段以「参考：」开头 */
-  let body=full, ref=null, hasRef=false;
+  const blank={ok:false,unsplit:true,q:null,a:null,aUnknown:true,ref:null,hasRef:false,full:"",plain:"",
+    spans:{q:null,a:null,ref:null,refBlock:null},bodyEnd:0,empty:true};
+  if(!full.trim()) return blank;
+  let body=full, ref=null, hasRef=false, refSpan=null, bodyEnd=full.length;
   const paras=full.split(/\n(?:[ \t\u3000]*\n)+/);
   const lastP=paras.length?paras[paras.length-1]:"";
   const rm=/^[ \t\u3000]*参考[ \t\u3000]*[：:][ \t\u3000]?/.exec(lastP);
   const hasQA=/^[ \t\u3000]*(?:问|答)[ \t\u3000]*[：:]/m.test(full);
   if(rm&&(paras.length>1||!hasQA)){
     const rt=lastP.slice(rm[0].length).trim();
-    if(rt){ ref=rt; hasRef=true; body=paras.slice(0,-1).join("\n\n"); }
+    if(rt){
+      ref=rt; hasRef=true;
+      const lastIdx=full.length-lastP.length;
+      refSpan=[lastIdx+rm[0].length,lastIdx+lastP.length];
+      let cut=lastIdx; while(cut>0&&full[cut-1]==="\n") cut--;
+      bodyEnd=cut; body=full.slice(0,cut);
+    }
   }
-  const lines=body.split("\n");
-  let i0=0; while(i0<lines.length&&!lines[i0].trim()) i0++;
-  if(i0>=lines.length) return {ok:true, unsplit:false, q:null, a:null, aUnknown:true, ref, hasRef, plain:full.trim()};
-  const first=lines[i0];
-  /* ① 「问：」必须在首行行首 */
-  const mq=/^[ \t\u3000]*问[ \t\u3000]*[：:][ \t\u3000]?/.exec(first);
+  const R=(q,a,spans)=>({ok:true,unsplit:false,q:q||null,a:a||null,aUnknown:!a,ref,hasRef,full,plain:full,
+    bodyEnd,spans:Object.assign({q:null,a:null,ref:refSpan,refBlock:refSpan?[bodyEnd,full.length]:null},spans||{})});
+  const lines=[]; let pos=0;
+  body.split("\n").forEach(t=>{ lines.push({s:pos,e:pos+t.length,t:t}); pos+=t.length+1; });
+  let i0=0; while(i0<lines.length&&!lines[i0].t.trim()) i0++;
+  if(i0>=lines.length) return R(null,null);
+  const L=lines[i0];
+  const mq=/^[ \t\u3000]*问[ \t\u3000]*[：:][ \t\u3000]?/.exec(L.t);
   if(mq){
-    const rest=first.slice(mq[0].length);
-    /* 单行双标记：答：必须被空格/标点隔开，紧贴文字（如「怎么答：」）不算 */
-    const inline=/(^|[\s\u3000，。；、,.;：])[ \t\u3000]*答[ \t\u3000]*[：:][ \t\u3000]?/.exec(rest);
+    const rs=L.s+mq[0].length;
+    const rest=body.slice(rs,L.e);
+    /* 单行双标记：答：必须被空格/标点隔开（v101 补 ？！" 等前置字符） */
+    const inline=/(^|[\s\u3000，。；、,.;：！？!?"'“”‘’）)】])[ \t\u3000]*答[ \t\u3000]*[：:][ \t\u3000]?/.exec(rest);
     if(inline){
-      const cut=inline.index+(inline[1]?inline[1].length:0);
-      const q=rest.slice(0,cut).trim();
-      const a=[rest.slice(inline.index+inline[0].length)].concat(lines.slice(i0+1)).join("\n").trim();
-      return {ok:true, unsplit:false, q:q||null, a:a||null, aUnknown:!a, ref, hasRef, plain:full.trim()};
+      /* v101：分隔用的标点（？ ！ ” 等）属于问句本身，必须留在 q 里 */
+      const lead=inline[1]?inline[1].length:0;
+      const sep=rs+inline.index+lead;
+      const aS=rs+inline.index+inline[0].length;
+      return R(body.slice(rs,sep).trim(), body.slice(aS).trim(), {q:[rs,sep],a:[aS,body.length]});
     }
     let ai=-1;
-    for(let j=i0+1;j<lines.length;j++){ if(/^[ \t\u3000]*答[ \t\u3000]*[：:][ \t\u3000]?/.test(lines[j])){ ai=j; break; } }
+    for(let j=i0+1;j<lines.length;j++){ if(/^[ \t\u3000]*答[ \t\u3000]*[：:][ \t\u3000]?/.test(lines[j].t)){ ai=j; break; } }
     if(ai>=0){
-      const q=[rest].concat(lines.slice(i0+1,ai)).join("\n").trim();
-      const am=/^[ \t\u3000]*答[ \t\u3000]*[：:][ \t\u3000]?/.exec(lines[ai]);
-      const a=[lines[ai].slice(am[0].length)].concat(lines.slice(ai+1)).join("\n").trim();
-      return {ok:true, unsplit:false, q:q||null, a:a||null, aUnknown:!a, ref, hasRef, plain:full.trim()};
+      const qEnd=Math.max(rs,lines[ai].s-1);
+      const am=/^[ \t\u3000]*答[ \t\u3000]*[：:][ \t\u3000]?/.exec(lines[ai].t);
+      const aS=lines[ai].s+am[0].length;
+      return R(body.slice(rs,qEnd).trim(), body.slice(aS).trim(), {q:[rs,qEnd],a:[aS,body.length]});
     }
-    /* ⑤ 有问无答：只认 q，答案字段一律不动 */
-    const q=[rest].concat(lines.slice(i0+1)).join("\n").trim();
-    return {ok:true, unsplit:false, q:q||null, a:null, aUnknown:true, ref, hasRef, plain:full.trim()};
+    /* 有问无答：只认 q（面板里 a 为空，由用户决定是否补） */
+    return R(body.slice(rs).trim(), null, {q:[rs,body.length]});
   }
-  /* 「答：」在首行行首 → 只更新 a，q 不动 */
-  const ma=/^[ \t\u3000]*答[ \t\u3000]*[：:][ \t\u3000]?/.exec(first);
+  const ma=/^[ \t\u3000]*答[ \t\u3000]*[：:][ \t\u3000]?/.exec(L.t);
   if(ma){
-    const a=[first.slice(ma[0].length)].concat(lines.slice(i0+1)).join("\n").trim();
-    return {ok:true, unsplit:false, q:null, a:a||null, aUnknown:!a, ref, hasRef, plain:full.trim()};
+    const aS=L.s+ma[0].length;
+    return R(null, body.slice(aS).trim(), {a:[aS,body.length]});
   }
-  /* ④ 没有任何行首标记 → 整段作答案，显式标「未拆分」 */
-  return {ok:false, unsplit:true, q:null, a:body.trim(), aUnknown:false, ref, hasRef, plain:full.trim()};
+  return {ok:false,unsplit:true,q:null,a:null,aUnknown:false,ref,hasRef,full,plain:full,bodyEnd,
+    spans:{q:null,a:null,ref:refSpan,refBlock:refSpan?[bodyEnd,full.length]:null}};
 }
-/* 把解析结果写进镜像：只写「能确认的字段」，其余保持原值（宁可不更新，也不覆盖） */
-function myOralApplyParse(m, p){
-  if(!m||!p) return false;
-  let ch=false;
-  if(p.q&&m.q!==p.q){ m.q=p.q; ch=true; }
-  if(p.a&&!p.aUnknown&&m.a!==p.a){ m.a=p.a; ch=true; }
-  if(p.hasRef&&p.ref&&m.ref!==p.ref){ m.ref=p.ref; ch=true; }
-  return ch;
+/* v101：面板显式拆分后按「只替换改动段」重建原文；未改的部分逐字保留，绝不从镜像拼。 */
+function myOralRebuild(full, p, d){
+  let out=String(full||"");
+  const sp=(p&&p.spans)||{}, ops=[];
+  if(d.q!==(p.q||"")){
+    if(sp.q) ops.push([sp.q[0],sp.q[1],d.q]);
+    else if(d.q) ops.push([0,0,"问："+d.q+((p.hasRef&&p.bodyEnd===0)?"\n\n":"\n")]);
+  }
+  if(d.a!==(p.a||"")){
+    if(sp.a) ops.push([sp.a[0],sp.a[1],d.a]);
+    else if(d.a) ops.push([p.bodyEnd,p.bodyEnd,(p.q?"\n答：":"答：")+d.a+((p.hasRef&&p.bodyEnd===0)?"\n\n":"")]);
+  }
+  if(d.ref!==(p.ref||"")){
+    if(d.ref){
+      if(sp.ref) ops.push([sp.ref[0],sp.ref[1],d.ref]);
+      else ops.push([out.length,out.length,"\n\n参考："+d.ref]);
+    } else if(sp.refBlock) ops.push([sp.refBlock[0],sp.refBlock[1],""]);
+  }
+  ops.sort((x,y)=>y[0]-x[0]);
+  ops.forEach(o=>{ out=out.slice(0,o[0])+o[2]+out.slice(o[1]); });
+  return out.replace(/^\n+|\n+$/g,"");
 }
-/* 巡夜/复习朗读：解析可靠且有答段 → 只读答段；解析不可靠或只有问 → 整段原文读，
-   绝不再像 v99 那样从第一个「答：」往下截（会把问题念半截）。 */
+/* 巡夜/复习朗读：v101 起一律按原文整段读（不再切答段），保证不会念半截或念到编出来的内容 */
 function myOralAnswerOf(m){
   if(!m) return "";
   try{
     const raw=getEdit("myoral:"+m.id, "");
-    if(raw){
-      const p=myOralParse(raw);
-      if(p&&p.ok&&p.a&&!p.aUnknown) return p.a;
-      if(p&&p.plain) return p.plain;
-    }
+    if(raw){ const t=_myOralPlain(raw).trim(); if(t) return t; }
   }catch(e){}
   return m.a||"";
 }
-/* 巡夜标题：有可靠 q 用 q；否则用原文首行/答段首行，避免显示与正文对不上 */
+/* 巡夜标题：只取原文首行的第一个完整句，过长截断加省略号，只允许一行；
+   不再读镜像 q，避免标题出现正文里没有的旧值或跨行。 */
 function myOralTitleOf(m){
   if(!m) return "";
+  let t="";
   try{
     const raw=getEdit("myoral:"+m.id, "");
-    if(raw){
-      const p=myOralParse(raw);
-      if(p&&p.q) return p.q;
-      if(p&&p.a){ const f=String(p.a).split("\n")[0].trim(); if(f) return f.slice(0,40); }
-    }
-  }catch(e){}
-  return m.q||"";
+    t=raw?_myOralPlain(raw):("问："+(m.q||"")+"\n答："+(m.a||""));
+  }catch(e){ t=_myOralPlain("问："+(m.q||"")+"\n答："+(m.a||"")); }
+  const line=(String(t).split("\n").find(x=>x.trim())||"").trim();
+  let s=line.replace(/^(问|答|参考)[ \t\u3000]*[：:][ \t\u3000]?/,"");
+  const one=/^[^。！？!?]*[。！？!?]/.exec(s);
+  if(one) s=one[0];
+  s=s.trim();
+  if(!s) s=line.trim();
+  if(s.length>40) s=s.slice(0,40)+"…";
+  return s;
 }
-/* v100：通用编辑器保存后回填结构化镜像（st.myOral）——高置信才写，解析失败时不动原字段 */
+/* v101：通用编辑器保存只记「原文 + 来源」，不做任何结构解析、不写 q/a/ref。
+   这是「程序不乱猜」的落地：没有解析，就不会有猜错的值被写进镜像。 */
 function myOralSyncMirror(id, raw){
   try{
     const m=(st.myOral||[]).find(x=>x.id===id); if(!m) return null;
-    const p=myOralParse(raw);
-    if(p.empty) return null;               /* 空内容不写，绝不清空镜像 */
-    myOralApplyParse(m,p);
+    if(!_myOralPlain(raw).trim()) return null;   /* 空内容不写，绝不清空 */
+    m.src="editor"; m.unsplit=true; m.at=new Date().toISOString();
     save();
-    return {q:m.q,a:m.a,ref:m.ref,unsplit:!!p.unsplit};
-  }catch(e){ console.warn("[myoral] 镜像同步失败:",e); return null; }
+    return {q:m.q,a:m.a,ref:m.ref};
+  }catch(e){ console.warn("[myoral] 原文标记失败:",e); return null; }
 }
 function saveEdit(id, text){
   text=String(text);
@@ -6836,12 +6861,13 @@ function buildCardPool(){
   });
   (st.myOral||[]).forEach(m=>{
     if(_delUids.has("myoral:"+m.id)) return;
+    /* v101：卡面正文只读显示源原文；参考段已在原文里，不再用 m.ref 额外拼一行（避免重复/显示已删除的参考） */
+    const _hasDisp=!!getEdit("myoral:"+m.id,"");
     cards.push({uid:"myoral:"+m.id, cat:"qmine", catLabel:"问契·自录", id:m.id,
       key:m.id, sub:m.status==="final"?"已定稿":"草稿", star:2, created:m.created,
       title:"★★ "+m.id+(m.status==="final"?"":" · 草稿"),
-      /* v97：卡面正文与朗读同源——有 myoral:<id> 校订就读校订，没有才现拼 */
       body:myOralTextOf(m),
-      extra:m.ref?("参考："+String(m.ref).slice(0,80)):"", editable:true, editId:"myoral:"+m.id});
+      extra:(!_hasDisp&&m.ref)?("参考："+String(m.ref).slice(0,80)):"", editable:true, editId:"myoral:"+m.id});
   });
   D.clues.forEach(x=>{
     if(_delUids.has("clue:"+x.id)) return;
@@ -7292,7 +7318,13 @@ function openEditor(card){
     if(!valPlain()){ toast("内容不能为空"); return; }
     /* v143：保存原样，不做任何 Markdown 转换（底本必须与用户输入一字不差） */
     const html=area.innerHTML.trim();
-    if(saveEdit(card.editId, html)){ SFX.ok(); dirty=false; status.className="estatus saved"; status.textContent="● 已保存 "+_atLocal(new Date().toISOString(), true); drawHist(); toast("新版本已存档"); if(card.onSaved)card.onSaved(); }
+    /* v101：只差 HTML 包装（原文是纯文本、编辑器序列化成 <div>）不算修改——
+       否则每打开一次编辑器再保存就多一个版本，且把纯文本原文改写成 HTML。 */
+    const _stored=getEdit(card.editId,"");
+    const _fmt=/<(span|b|i|u|strong|em|font|mark|a|img)\b/i;
+    const plainOnly=!_fmt.test(html)&&!_fmt.test(_stored)&&_myOralPlain(html).trim()===_myOralPlain(_stored).trim();
+    if(plainOnly){ dirty=false; status.className="estatus saved"; status.textContent="● 内容未变化"; drawHist(); }
+    else if(saveEdit(card.editId, html)){ SFX.ok(); dirty=false; status.className="estatus saved"; status.textContent="● 已保存 "+_atLocal(new Date().toISOString(), true); drawHist(); toast("新版本已存档"); if(card.onSaved)card.onSaved(); }
     else { status.className="estatus saved"; status.textContent="● 内容未变化"; }
     _syncMyOralMirror();
   };
@@ -7504,146 +7536,236 @@ function openOralInput(editId){
   const seq=String((st.myOral||[]).filter(x=>x.id.startsWith("QM-"+todayKey)).length+1).padStart(2,"0");
   const nid=isEdit?m.id:("QM-"+todayKey+"-"+seq);
   const npcName="晚棠";
-  /* v100：预填以「显示源」为准（显示源是唯一事实源，镜像可能落后）；解析不出结构时
-     明确告诉用户「按原文整体保存」，并把完整原文放进答栏供整体编辑。 */
+  /* v101 设计：编辑器保存不做结构解析，面板也不拿镜像旧值当事实。
+     · 有显示源 → 一切从原文派生：能高置信拆出结构就三栏编辑，拆不出就整段原文编辑；
+     · 新卡 / 无显示源的旧卡 → 镜像里的内容就是唯一内容，三栏编辑；
+     · 保存以当前原文为底，只替换用户实际改动的那一段；什么都没改就一个字都不写。 */
   const dispRaw=isEdit?getEdit("myoral:"+nid,""):"";
-  const parsed=dispRaw?myOralParse(dispRaw):null;
-  const unsplit=!!(parsed&&parsed.unsplit&&parsed.plain);
-  const initQ=(parsed&&parsed.q)?parsed.q:((m&&m.q)||"");
-  const initA=unsplit?((parsed&&(parsed.a||parsed.plain))||"")
-    :((parsed&&parsed.ok&&parsed.a&&!parsed.aUnknown)?parsed.a:((m&&m.a)||""));
-  const initR=(parsed&&parsed.hasRef&&parsed.ref)?parsed.ref:((m&&m.ref)||"");
-  const initRaw=unsplit?String(parsed.plain||"").trim():"";
-  const noAns=!!(parsed&&parsed.ok&&parsed.aUnknown&&parsed.q);
+  const parsed0=dispRaw?myOralParse(dispRaw):null;
+  let curMode=(dispRaw&&(!parsed0||!parsed0.ok||parsed0.unsplit))?"text":"fields";
+  let curBase=dispRaw?String(_myOralPlain(dispRaw)).replace(/^\n+|\n+$/g,""):"";
+  const savedBase=curBase;
+  let curParsed=dispRaw?parsed0:null;
+  let splitAsked=false;
+  let pending=null;
+  let init={q:"",a:"",ref:""};
   const synth=d=>"问："+d.q+"\n答："+d.a+(d.ref?"\n\n参考："+d.ref:"");
   const ov=panel(`<h2>问契 · 自录 ${isEdit?"（校订）":""}</h2>
     <div class="mt">${npcName}把空白签纸推到你面前：把你想记住的一问一答写上来，写好了我替你收进藏经阁。</div>
     <div class="ad" style="margin:6px 0 10px">编号 ${nid} · 今日已录 ${(st.myOral||[]).filter(x=>x.id.startsWith("QM-"+todayKey)).length} 张 · 草稿不入库，定稿后交沈昭入档并进入雾回潮名册</div>
-    ${unsplit?`<div class="note" style="border-left-color:var(--gold)">这条是按原文整体保存的，未拆分结构——卡面与朗读都按原文整段显示。下面「答」里就是完整原文，可直接整体改写；写成「问：…」和「答：…」两段后会自动拆成结构。</div>`:""}
-    ${noAns?`<div class="note" style="border-left-color:var(--cyber)">原文只有问、没有答——「答」里仍是你此前保存的答案，本次不会改动它。</div>`:""}
-    <div class="editor">
-      <div style="font-size:12px;color:var(--cyber);margin-bottom:4px">问（来客的疑问）</div>
-      <textarea id="oiQ" rows="2" placeholder="例如：故宫的午门为什么叫午门？">${esc(initQ)}</textarea>
-      <div style="font-size:12px;color:var(--cyber);margin:10px 0 4px">答（你的回答）<span style="color:var(--dim);font-size:11px">（口述会接在原文后，可自行删改）</span></div>
-      <textarea id="oiA" rows="4" placeholder="凭记忆或参考材料写下你的回答…">${esc(initA)}</textarea>
-      <div style="font-size:12px;color:var(--cyber);margin:10px 0 4px">参考材料（可粘贴原文/链接，仅入库备查）</div>
-      <textarea id="oiR" rows="2" placeholder="可选">${esc(initR)}</textarea>
-      ${unsplit?`<div style="font-size:12px;color:var(--cyber);margin:10px 0 4px">原文整体编辑（改这里＝原样保存，不改写你的文字）</div>
-      <textarea id="oiRaw" rows="6" placeholder="整段原文">${esc(initRaw)}</textarea>`:""}
-      <div class="estatus saved" id="oiStatus">${isEdit?"● 已加载现有内容":"● 新签纸"}</div>
-      <div class="kitbar">
-        <button class="btn sm ghost" id="oiDraft" type="button">存为草稿</button>
-        <button class="btn sm primary" id="oiFinal" type="button">定稿入库</button>
-        <button class="btn sm ghost" id="oiClose" type="button">离开</button>
-        ${asrSupport()?'<button class="btn sm ghost" id="oiMic" type="button">🎙️ 口述</button><span id="oiMicSt" style="font-size:11.5px;color:var(--dim)"></span>':""}
-      </div>
-      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
-        <button class="btn sm ghost" id="oiAi" type="button" ${dsReady()?"":"disabled"}>✨ 灵脉协判</button>
-        <span style="font-size:11px;color:var(--dim)">${dsReady()?"AI 从正误/语法/完整性三方面协判":"离线模式——对照参考材料自行核对"}</span>
-      </div>
-      <div id="oiAiOut" style="margin-top:8px"></div>
-    </div>`);
-  const qEl=$("#oiQ",ov), aEl=$("#oiA",ov), rEl=$("#oiR",ov), status=$("#oiStatus",ov);
-  const rawEl=$("#oiRaw",ov);
-  const mark=()=>{ status.className="estatus dirty"; status.textContent="● 有未保存修改…"; };
-  [qEl,aEl,rEl].forEach(el=>el.oninput=mark);
-  if(rawEl) rawEl.oninput=mark;
+    <div id="oiBody"></div>`);
+  const bodyEl=$("#oiBody",ov);
+  function renderBody(){
+    const fields=curMode==="fields";
+    const legacy=fields&&!dispRaw&&!curBase;
+    init=fields
+      ? {q:legacy?((m&&m.q)||""):((curParsed&&curParsed.q)||""),
+         a:legacy?((m&&m.a)||""):((curParsed&&curParsed.a)||""),
+         ref:legacy?((m&&m.ref)||""):((curParsed&&curParsed.ref)||"")}
+      : {q:"",a:"",ref:""};
+    const onlyQ=!!(fields&&curBase&&curParsed&&curParsed.q&&curParsed.a==null);
+    const onlyA=!!(fields&&curBase&&curParsed&&!curParsed.q&&curParsed.a!=null);
+    bodyEl.innerHTML=fields?`
+      <div class="editor">
+        ${splitAsked?'<div class="note" style="border-left-color:var(--cyber)">以下是从原文标记识别出的三栏，请逐栏核对；保存只替换你改动的那一段，其余原文逐字保留。不点保存＝原文一个字都不动。</div>':""}
+        ${onlyQ?'<div class="note" style="border-left-color:var(--cyber)">原文只有问、没有答——「答」留空就是原文现状；填了才会在原文末尾补一段「答：」。</div>':""}
+        ${onlyA?'<div class="note" style="border-left-color:var(--cyber)">原文只有答、没有问——「问」留空就是原文现状。</div>':""}
+        <div style="font-size:12px;color:var(--cyber);margin-bottom:4px">问（来客的疑问）</div>
+        <textarea id="oiQ" rows="2" placeholder="例如：故宫的午门为什么叫午门？">${esc(init.q)}</textarea>
+        <div style="font-size:12px;color:var(--cyber);margin:10px 0 4px">答（你的回答）<span style="color:var(--dim);font-size:11px">（口述会接在原文后，可自行删改）</span></div>
+        <textarea id="oiA" rows="5" placeholder="凭记忆或参考材料写下你的回答…">${esc(init.a)}</textarea>
+        <div style="font-size:12px;color:var(--cyber);margin:10px 0 4px">参考材料（可粘贴原文/链接，仅入库备查）</div>
+        <textarea id="oiR" rows="2" placeholder="可选">${esc(init.ref)}</textarea>
+        ${splitAsked?'<div style="margin-top:8px"><button class="btn sm ghost" id="oiBackRaw" type="button">改回原文整体编辑</button></div>':""}
+        <div class="estatus saved" id="oiStatus">${isEdit?"● 已加载现有内容":"● 新签纸"}</div>
+        <div class="kitbar">
+          <button class="btn sm ghost" id="oiDraft" type="button">存为草稿</button>
+          <button class="btn sm primary" id="oiFinal" type="button">定稿入库</button>
+          <button class="btn sm ghost" id="oiClose" type="button">离开</button>
+          ${asrSupport()?'<button class="btn sm ghost" id="oiMic" type="button">🎙️ 口述</button><span id="oiMicSt" style="font-size:11.5px;color:var(--dim)"></span>':""}
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+          <button class="btn sm ghost" id="oiAi" type="button" ${dsReady()?"":"disabled"}>✨ 灵脉协判</button>
+          <span style="font-size:11px;color:var(--dim)">${dsReady()?"AI 从正误/语法/完整性三方面协判":"离线模式——对照参考材料自行核对"}</span>
+        </div>
+        <div id="oiAiOut" style="margin-top:8px"></div>
+      </div>`:`
+      <div class="editor">
+        <div class="note" style="border-left-color:var(--gold)">这条是用编辑器改的，以下为原文，结构未拆分——卡面、详情、朗读和夜巡标题都按这段原文显示/朗读。改这里＝原样保存，不会改写你的文字。</div>
+        <div style="font-size:12px;color:var(--cyber);margin-bottom:4px">原文（逐字保存）</div>
+        <textarea id="oiRaw" rows="10" placeholder="整段原文">${esc(curBase)}</textarea>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn sm ghost" id="oiSplit" type="button">按标记尝试拆分</button>
+          <span id="oiSplitMsg" style="font-size:11.5px;color:var(--dim)">只有原文里确实有行首「问：」「答：」标记时才会拆开</span>
+        </div>
+        <div class="estatus saved" id="oiStatus">${isEdit?"● 已加载现有内容":"● 新签纸"}</div>
+        <div class="kitbar">
+          <button class="btn sm ghost" id="oiDraft" type="button">存为草稿</button>
+          <button class="btn sm primary" id="oiFinal" type="button">定稿入库</button>
+          <button class="btn sm ghost" id="oiClose" type="button">离开</button>
+        </div>
+      </div>`;
+    bind();
+  }
   function collect(){
-    const q=qEl.value.trim(), a=aEl.value.trim(), r=rEl.value.trim();
-    return {q,a,ref:r};
+    if(curMode==="text"){
+      const r=$("#oiRaw",ov);
+      return {raw:r?r.value.replace(/\r/g,""):""};
+    }
+    return {q:$("#oiQ",ov).value.trim(), a:$("#oiA",ov).value.trim(), ref:$("#oiR",ov).value.trim()};
   }
   function persist(final){
-    const d=collect();
-    const rawVal=rawEl?rawEl.value.replace(/\r/g,""):"";
-    const rawChanged=!!(rawEl&&rawVal!==initRaw);
-    /* 三栏没动、原文也没动 → 不重写显示源，避免把用户原文按模板「重排」 */
-    const fieldsChanged=(d.q!==initQ)||(d.a!==initA)||(d.ref!==initR);
-    if(!rawChanged&&(!d.q||!d.a)){ toast("问与答都不能空"); return null; }
-    if(rawChanged&&!rawVal.trim()){ toast("原文不能为空"); return null; }
+    const d=(final&&pending)?pending:collect();
     st.myOral=st.myOral||[];
     const exist=st.myOral.find(x=>x.id===nid);
     const rec=exist||{id:nid};
-    rec.status=final?"final":"draft"; rec.created=rec.created||new Date().toISOString();
-    if(rawChanged){
-      /* 原文整体编辑：原样存为显示源，镜像只按高置信规则映射 */
-      myOralApplyParse(rec,myOralParse(rawVal));
+    if(curMode==="text"){
+      const v=d.raw;
+      if(!v.trim()){ toast("原文不能为空"); return null; }
+      rec.status=final?"final":"draft"; rec.created=rec.created||new Date().toISOString();
       if(!exist) st.myOral.push(rec);
-      try{ saveEdit("myoral:"+nid, rawVal); }catch(e){ console.warn("[myoral] 同步显示源失败:",e); }
-    } else {
-      Object.assign(rec,d);
-      if(!exist) st.myOral.push(rec);
-      /* v100：只有三栏真的被改过（或新卡还没有显示源）才合成显示源；
-         合成时把参考段写成独立段落，保证下次能再解析回 ref（N5）。 */
-      if(fieldsChanged||!getEdit("myoral:"+nid,"")){
-        try{ saveEdit("myoral:"+nid, synth(d)); }catch(e){ console.warn("[myoral] 同步显示源失败:",e); }
+      if(v!==curBase){
+        /* 只写原文，不解析、不写 q/a/ref —— 原文怎么写就怎么存 */
+        try{ saveEdit("myoral:"+nid, v); }catch(e){ console.warn("[myoral] 保存原文失败:",e); }
+        myOralSyncMirror(nid, v);
       }
+      save(); return nid;
     }
+    if(curBase){
+      if(!d.q&&!d.a&&!d.ref){ toast("内容不能为空"); return null; }
+    } else if(!d.q||!d.a){ toast("问与答都不能空"); return null; }
+    const changed=(d.q!==init.q)||(d.a!==init.a)||(d.ref!==init.ref);
+    /* v101：原文缓冲被改过（原文模式里改完再按标记拆分）也要写回，不能只改镜像 */
+    const baseDirty=!!(curBase&&curBase!==savedBase);
+    rec.status=final?"final":"draft"; rec.created=rec.created||new Date().toISOString();
+    if(curBase){
+      /* 以当前原文为底：只替换用户实际改动的段，其余逐字保留 */
+      if(changed||baseDirty){
+        try{ saveEdit("myoral:"+nid, myOralRebuild(curBase, curParsed||myOralParse(curBase), d)); }
+        catch(e){ console.warn("[myoral] 写回原文失败:",e); }
+      }
+      if(changed||splitAsked){
+        rec.q=d.q; if(d.a) rec.a=d.a; else delete rec.a;
+        if(d.ref) rec.ref=d.ref; else delete rec.ref;
+        rec.at=new Date().toISOString();
+      }
+    } else if(!isEdit||changed){
+      /* 新卡：合成原文；旧卡（无显示源）只有用户真的改了才合成，否则不新建显示源 */
+      try{ saveEdit("myoral:"+nid, synth(d)); }catch(e){ console.warn("[myoral] 合成原文失败:",e); }
+      rec.q=d.q; rec.a=d.a; if(d.ref) rec.ref=d.ref; else delete rec.ref;
+    }
+    if(!exist) st.myOral.push(rec);
     save(); return nid;
   }
-  $("#oiDraft",ov).onpointerdown=()=>{
-    const id=persist(false); if(!id) return;
-    SFX.tap(); status.className="estatus saved"; status.textContent="● 草稿已存（编号 "+id+"）";
-    toast("草稿已存——可稍后从藏经阁「问契·自录」继续校订");
-  };
-  /* 批5：口述（ASR 转写接在答字段后，可删改） */
-  const oiMic=$("#oiMic",ov);
-  if(oiMic) oiMic.onpointerdown=function(){
-    SFX.tap();
-    const stEl=$("#oiMicSt",ov);
-    if(this._rec){ try{this._rec.stop();}catch(e){} this._rec=null; this.textContent="🎙️ 口述"; if(stEl) stEl.textContent=""; return; }
-    const dft=asrDraftBinder(aEl); /* v89：草稿实时上屏 */
-    const rec=asrOnce("zh-CN",(fin,inter)=>{
-      dft.feed(fin,inter);
-      const shown=(fin||inter||"").trim();
-      if(!shown) return;
-      if(stEl) stEl.textContent=fin?"口述中……说完再点一次结束":"听到："+shown.slice(-40);
-    },(msg)=>{ if(stEl) stEl.textContent=msg; dft.reset(); },()=>aEl.isConnected);
-    if(!rec) return;
-    this._rec=rec; this.textContent="■ 结束口述"; if(stEl) stEl.textContent="口述中……说完再点一次结束";
-    try{ rec.start(); }catch(e){ if(stEl) stEl.textContent="启动失败，请直接打字"; this._rec=null; this.textContent="🎙️ 口述"; }
-  };
-  /* 批5：定稿前预览确认——问/答/参考三栏过目，防误定稿 */
-  $("#oiFinal",ov).onpointerdown=()=>{
-    const d=collect(); if(!d) return;
-    if(!rawEl&&(!d.q||!d.a)){ toast("问与答都不能空"); return; }
-    SFX.tap();
-    const editor=ov.querySelector(".editor");
-    editor.innerHTML=`<div class="note" style="border-left-color:var(--cyber)">定稿前请过目——定稿后此签交沈昭入档，明日雾回潮时会再来寻你。</div>
-      <div style="margin-top:10px"><div style="font-size:12px;color:var(--cyber)">问</div><div class="book" style="margin-top:4px"><div style="font-size:13.5px;line-height:1.8">${esc(d.q)}</div></div></div>
-      <div style="margin-top:10px"><div style="font-size:12px;color:var(--cyber)">答</div><div class="book" style="margin-top:4px"><div style="font-size:13.5px;line-height:1.8">${esc(d.a)}</div></div></div>
-      ${d.ref?`<div style="margin-top:10px"><div style="font-size:12px;color:var(--cyber)">参考</div><div class="book" style="margin-top:4px"><div style="font-size:12.5px;line-height:1.7;color:var(--fg2)">${esc(d.ref)}</div></div></div>`:""}
-      ${d.a.length>300?'<div style="margin-top:8px;font-size:12px;color:var(--gold)">答已超过 300 字——回潮签以精炼为佳，仍可定稿。</div>':""}
-      <div class="kitbar" style="margin-top:12px">
-        <button class="btn sm primary" id="oiConfirm" type="button">确认定稿</button>
-        <button class="btn sm ghost" id="oiBack" type="button">返回修改</button>
-      </div>`;
-    $("#oiConfirm",editor).onpointerdown=()=>{
-      const id=persist(true); if(!id) return;
-      SFX.ok(); ov.remove();
-      /* b2-3：定稿即交沈昭入库——SRS 首学入档（tier1，明日回潮），并补一条入库对话 */
-      srsMark(id);
-      const sz=NPC.shenzhao||{name:"沈昭"};
-      st.dialogue.push({role:"npc",npc:"shenzhao",text:sz.name+"收下「"+id+"」：此签已入藏经阁，与经匣同列。雾回潮时它会再来寻你——别躲。",at:new Date().toISOString(),day:st.day,kind:"sys"});
-      if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
-      save();
-      toast("已定稿入库（"+id+"）——明日回潮时再见它");
-      if(view==="lib") renderLib();
+  function confirmFinal(){
+    const id=persist(true); if(!id) return;
+    SFX.ok(); ov.remove();
+    /* b2-3：定稿即交沈昭入库——SRS 首学入档（tier1，明日回潮），并补一条入库对话 */
+    srsMark(id);
+    const sz=NPC.shenzhao||{name:"沈昭"};
+    st.dialogue.push({role:"npc",npc:"shenzhao",text:sz.name+"收下「"+id+"」：此签已入藏经阁，与经匣同列。雾回潮时它会再来寻你——别躲。",at:new Date().toISOString(),day:st.day,kind:"sys"});
+    if(st.dialogue.length>200) st.dialogue=st.dialogue.slice(-200);
+    save();
+    toast("已定稿入库（"+id+"）——明日回潮时再见它");
+    if(view==="lib") renderLib();
+  }
+  function bind(){
+    const status=$("#oiStatus",ov);
+    const mark=()=>{ status.className="estatus dirty"; status.textContent="● 有未保存修改…"; };
+    if(curMode==="text"){
+      const rawEl=$("#oiRaw",ov); if(rawEl) rawEl.oninput=mark;
+      const spBtn=$("#oiSplit",ov);
+      if(spBtn) spBtn.onpointerdown=()=>{
+        SFX.tap();
+        const v=rawEl?rawEl.value.replace(/\r/g,""):"";
+        const msg=$("#oiSplitMsg",ov);
+        if(!v.trim()){ if(msg) msg.textContent="原文是空的，没有可拆分的内容。"; return; }
+        const pp=myOralParse(v);
+        if(!pp.ok||pp.unsplit){
+          if(msg) msg.textContent="这几行无法识别，将整体作为答案——原文保持不动，结构未拆分。";
+          return;
+        }
+        curBase=pp.full; curParsed=pp; splitAsked=true; curMode="fields";
+        renderBody(); toast("已按标记拆分，请核对三栏后再保存");
+      };
+    } else {
+      const qEl=$("#oiQ",ov), aEl=$("#oiA",ov), rEl=$("#oiR",ov);
+      [qEl,aEl,rEl].forEach(el=>{ if(el) el.oninput=mark; });
+      const backRaw=$("#oiBackRaw",ov);
+      if(backRaw) backRaw.onpointerdown=()=>{ SFX.tap(); splitAsked=false; curMode="text"; renderBody(); };
+      /* 批5：口述（ASR 转写接在答字段后，可删改） */
+      const oiMic=$("#oiMic",ov);
+      if(oiMic&&aEl) oiMic.onpointerdown=function(){
+        SFX.tap();
+        const stEl=$("#oiMicSt",ov);
+        if(this._rec){ try{this._rec.stop();}catch(e){} this._rec=null; this.textContent="🎙️ 口述"; if(stEl) stEl.textContent=""; return; }
+        const dft=asrDraftBinder(aEl); /* v89：草稿实时上屏 */
+        const rec=asrOnce("zh-CN",(fin,inter)=>{
+          dft.feed(fin,inter);
+          const shown=(fin||inter||"").trim();
+          if(!shown) return;
+          mark();
+          if(stEl) stEl.textContent=fin?"口述中……说完再点一次结束":"听到："+shown.slice(-40);
+        },(msg)=>{ if(stEl) stEl.textContent=msg; dft.reset(); },()=>aEl.isConnected);
+        if(!rec) return;
+        this._rec=rec; this.textContent="■ 结束口述"; if(stEl) stEl.textContent="口述中……说完再点一次结束";
+        try{ rec.start(); }catch(e){ if(stEl) stEl.textContent="启动失败，请直接打字"; this._rec=null; this.textContent="🎙️ 口述"; }
+      };
+      /* v55 批3-④：问契 AI 协判按钮 */
+      const oiAi=$("#oiAi",ov);
+      if(oiAi) oiAi.onpointerdown=()=>{ SFX.tap();
+        if(!dsReady()){ toast("灵脉未通——请在配置中填入密钥后启用 AI 协判"); return; }
+        const q=qEl.value.trim(), a=aEl.value.trim(), r=rEl.value.trim();
+        if(!q||!a){ toast("先写问题与回答，再请协判"); return; }
+        oiAi.disabled=true; oiAi.textContent="协判中…";
+        aiOralReview(q,a,r,$("#oiAiOut",ov));
+      };
+    }
+    $("#oiDraft",ov).onpointerdown=()=>{
+      const id=persist(false); if(!id) return;
+      SFX.tap(); status.className="estatus saved"; status.textContent="● 草稿已存（编号 "+id+"）";
+      toast("草稿已存——可稍后从藏经阁「问契·自录」继续校订");
     };
-    $("#oiBack",editor).onpointerdown=()=>{ SFX.tap(); ov.remove(); openOralInput(isEdit?editId:undefined); };
-  };
-  $("#oiClose",ov).onpointerdown=()=>{
-    if(status.className.includes("dirty")&&!confirm("有未保存的修改，确定离开？")) return;
-    ov.remove(); if(view==="lib") renderLib();
-  };
-  /* v55 批3-④：问契 AI 协判按钮 */
-  const oiAi=$("#oiAi",ov);
-  if(oiAi) oiAi.onpointerdown=()=>{ SFX.tap();
-    if(!dsReady()){ toast("灵脉未通——请在配置中填入密钥后启用 AI 协判"); return; }
-    const q=qEl.value.trim(), a=aEl.value.trim(), r=rEl.value.trim();
-    if(!q||!a){ toast("先写问题与回答，再请协判"); return; }
-    oiAi.disabled=true; oiAi.textContent="协判中…";
-    aiOralReview(q,a,r,$("#oiAiOut",ov));
-  };
+    /* 批5：定稿前预览确认——按当前模式预览原文或三栏，防误定稿 */
+    $("#oiFinal",ov).onpointerdown=()=>{
+      const editor=ov.querySelector(".editor");
+      if(curMode==="text"){
+        const v=collect().raw;
+        if(!v.trim()){ toast("原文不能为空"); return; }
+        pending={raw:v};
+        SFX.tap();
+        editor.innerHTML=`<div class="note" style="border-left-color:var(--cyber)">定稿前请过目——定稿后此签交沈昭入档，明日雾回潮时会再来寻你。</div>
+          <div style="margin-top:10px"><div style="font-size:12px;color:var(--cyber)">原文（未拆分，原样入库）</div><div class="book" style="margin-top:4px"><div style="font-size:13.5px;line-height:1.8;white-space:pre-wrap">${esc(v)}</div></div></div>
+          ${v.length>300?'<div style="margin-top:8px;font-size:12px;color:var(--gold)">原文已超过 300 字——回潮签以精炼为佳，仍可定稿。</div>':""}
+          <div class="kitbar" style="margin-top:12px">
+            <button class="btn sm primary" id="oiConfirm" type="button">确认定稿</button>
+            <button class="btn sm ghost" id="oiBack" type="button">返回修改</button>
+          </div>`;
+      } else {
+        const d=collect();
+        if(curBase){ if(!d.q&&!d.a&&!d.ref){ toast("内容不能为空"); return; } }
+        else if(!d.q||!d.a){ toast("问与答都不能空"); return; }
+        pending=d;
+        SFX.tap();
+        editor.innerHTML=`<div class="note" style="border-left-color:var(--cyber)">定稿前请过目——定稿后此签交沈昭入档，明日雾回潮时会再来寻你。</div>
+          ${d.q?`<div style="margin-top:10px"><div style="font-size:12px;color:var(--cyber)">问</div><div class="book" style="margin-top:4px"><div style="font-size:13.5px;line-height:1.8">${esc(d.q)}</div></div></div>`:""}
+          ${d.a?`<div style="margin-top:10px"><div style="font-size:12px;color:var(--cyber)">答</div><div class="book" style="margin-top:4px"><div style="font-size:13.5px;line-height:1.8">${esc(d.a)}</div></div></div>`:""}
+          ${d.ref?`<div style="margin-top:10px"><div style="font-size:12px;color:var(--cyber)">参考</div><div class="book" style="margin-top:4px"><div style="font-size:12.5px;line-height:1.7;color:var(--fg2)">${esc(d.ref)}</div></div></div>`:""}
+          ${d.a.length>300?'<div style="margin-top:8px;font-size:12px;color:var(--gold)">答已超过 300 字——回潮签以精炼为佳，仍可定稿。</div>':""}
+          <div class="kitbar" style="margin-top:12px">
+            <button class="btn sm primary" id="oiConfirm" type="button">确认定稿</button>
+            <button class="btn sm ghost" id="oiBack" type="button">返回修改</button>
+          </div>`;
+      }
+      $("#oiConfirm",editor).onpointerdown=confirmFinal;
+      $("#oiBack",editor).onpointerdown=()=>{ SFX.tap(); ov.remove(); openOralInput(isEdit?editId:undefined); };
+    };
+    $("#oiClose",ov).onpointerdown=()=>{
+      if(status.className.includes("dirty")&&!confirm("有未保存的修改，确定离开？")) return;
+      ov.remove(); if(view==="lib") renderLib();
+    };
+  }
+  renderBody();
 }
 /* ============================================================
    v54 批 1：任务内核重构 —— 统一 SRS 记忆调度 + 四类任务运行时排程
