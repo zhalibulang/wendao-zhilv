@@ -928,7 +928,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v69"></script>
 <script src="wd-planner.js?v33"></script>
-<script src="wd-v25.js?v144"></script>
+<script src="wd-v25.js?v145"></script>
 <script>
 
 "use strict";
@@ -1717,7 +1717,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v101";
+const BUILD_VERSION="v102";
 /* v99：核心脚本版本握手——index 与 wd-v25.js 必须同版；SW 的 ignoreSearch 回落可能
    在弱网时把「新 index + 旧 wd-v25」混在一起，这里发现不一致就自愈一次并给出可见提示 */
 const WD_NEED_V25="v36";
@@ -6638,6 +6638,58 @@ function _myOralPlain(raw){
     .replace(/\u00a0/g," ")
     .replace(/\n{3,}/g,"\n\n");   /* 空段落的 <div><br></div> 会折成两个换行，归一成一个空行 */
 }
+/* v102：与 _myOralPlain 同规则，额外带回原文的「词元表」：
+   标签（含 <br>/块级闭合产生的换行）与纯文本字符一一列出，供面板「只替换改动段」时
+   在原文上原地替换——未改动段落里的 <b>/<mark>/换行等原样保留。 */
+function _myOralPlainMap(raw){
+  const s=String(raw==null?"":raw);
+  let plain="", nl=0; const st=[], en=[], toks=[];
+  const addChar=(ch,a,b,rawTok,fromTag,close)=>{
+    if(ch==="\n"){ nl++; if(nl>2){ toks.push({a,b,raw:rawTok,ch:null,fromTag:!!fromTag,close:!!close}); return; } }
+    else nl=0;
+    plain+=ch; st.push(a); en.push(b);
+    toks.push({a,b,raw:rawTok,ch,fromTag:!!fromTag,close:!!close});
+  };
+  const addTag=(a,b,rawTok)=>{ toks.push({a,b,raw:rawTok,ch:null,fromTag:true,close:/^<\//.test(rawTok)}); };
+  let i=0;
+  while(i<s.length){
+    const c=s[i];
+    if(c==="<"){
+      const tail=s.slice(i);
+      const br=/^<br\s*\/?>/i.exec(tail);
+      if(br){ addChar("\n",i,i+br[0].length,br[0],true,false); i+=br[0].length; continue; }
+      const blk=/^<\/?(?:div|p|li|h[1-6]|blockquote|tr|section)\b[^>]*>/i.exec(tail);
+      if(blk){
+        const tok=blk[0];
+        if(/^<\//.test(tok)) addChar("\n",i,i+tok.length,tok,true,true);
+        else addTag(i,i+tok.length,tok);
+        i+=tok.length; continue;
+      }
+      const any=/^<[^>]+>/.exec(tail);
+      if(any){ addTag(i,i+any[0].length,any[0]); i+=any[0].length; continue; }
+      addChar("<",i,i+1,"<",false,false); i++; continue;
+    }
+    if(c==="&"){
+      const ent=/^&(nbsp|#160|lt|gt|quot|#39|amp);/i.exec(s.slice(i));
+      if(ent){
+        const k=ent[1].toLowerCase();
+        const ch=(k==="nbsp"||k==="#160")?" ":(k==="lt"?"<":(k==="gt"?">":(k==="quot"?'"':(k==="#39"?"'":"&"))));
+        addChar(ch,i,i+ent[0].length,ent[0],false,false); i+=ent[0].length; continue;
+      }
+    }
+    if(c==="\r"){ i++; continue; }
+    if(c==="\u00a0"){ addChar(" ",i,i+1," ",false,false); i++; continue; }
+    addChar(c,i,i+1,c,false,false); i++;
+  }
+  let a0=0, a1=plain.length;
+  while(a0<a1&&plain[a0]==="\n") a0++;
+  while(a1>a0&&plain[a1-1]==="\n") a1--;
+  const shift=a0;
+  return {plain:plain.slice(a0,a1),
+    starts:st.slice(a0,a1), ends:en.slice(a0,a1),
+    /* 词元保留原文全量；重建时用 plain 下标判断，所以这里只裁首尾换行对应的字符区间 */
+    toks:toks, lead:a0};
+}
 /* v100：问契结构解析——高置信规则（宁可标「未拆分」，也不许猜错）
    ① 「问/答」标记只认行首（可有缩进），句中出现的「……说答：……」一律不算标记；
       唯一的例外：首行以「问：」开头且同一行内紧跟被空格/标点隔开的「答：」（单行双标记）；
@@ -6708,26 +6760,68 @@ function myOralParse(raw){
   return {ok:false,unsplit:true,q:null,a:null,aUnknown:false,ref,hasRef,full,plain:full,bodyEnd,
     spans:{q:null,a:null,ref:refSpan,refBlock:refSpan?[bodyEnd,full.length]:null}};
 }
-/* v101：面板显式拆分后按「只替换改动段」重建原文；未改的部分逐字保留，绝不从镜像拼。 */
-function myOralRebuild(full, p, d){
-  let out=String(full||"");
-  const sp=(p&&p.spans)||{}, ops=[];
+/* v101：面板显式拆分后按「只替换改动段」重建原文；未改的部分逐字保留，绝不从镜像拼。
+   v102：底本改为「原文」而不是纯文本——解析得到的纯文本区间换算成原文词元区间后原地替换，
+        未改段落里的 <b>/<strong>/<mark>/<br> 等标签和换行逐字保留，不再整段转纯文本再拼回。
+        删除参考段时才连标签一起删（否则会留下空块），删完由后面的闭合标签补齐。 */
+function myOralRebuild(raw, p, d){
+  const src=String(raw==null?"":raw);
+  const map=_myOralPlainMap(src), toks=map.toks;
+  const isHtml=/<[a-z][\s\S]*?>/i.test(src);
+  const enc=t=>isHtml?esc(String(t==null?"":t)).replace(/\n/g,"<br>"):String(t==null?"":t);
+  const sp=(p&&p.spans)||{};
+  const plains=[], dels=[];
   if(d.q!==(p.q||"")){
-    if(sp.q) ops.push([sp.q[0],sp.q[1],d.q]);
-    else if(d.q) ops.push([0,0,"问："+d.q+((p.hasRef&&p.bodyEnd===0)?"\n\n":"\n")]);
+    if(sp.q) plains.push({s:sp.q[0],e:sp.q[1],txt:enc(d.q),keep:true});
+    else if(d.q) plains.push({s:0,e:0,keep:true,
+      txt:isHtml?("<div>问："+esc(d.q)+"</div>"+((p.hasRef&&p.bodyEnd===0)?"<div><br></div>":""))
+        :("问："+d.q+((p.hasRef&&p.bodyEnd===0)?"\n\n":"\n"))});
   }
   if(d.a!==(p.a||"")){
-    if(sp.a) ops.push([sp.a[0],sp.a[1],d.a]);
-    else if(d.a) ops.push([p.bodyEnd,p.bodyEnd,(p.q?"\n答：":"答：")+d.a+((p.hasRef&&p.bodyEnd===0)?"\n\n":"")]);
+    if(sp.a) plains.push({s:sp.a[0],e:sp.a[1],txt:enc(d.a),keep:true});
+    else if(d.a) plains.push({s:p.bodyEnd,e:p.bodyEnd,keep:true,
+      txt:isHtml?("<div>答："+esc(d.a)+"</div>"+((p.hasRef&&p.bodyEnd===0)?"<div><br></div>":""))
+        :((p.q?"\n答：":"答：")+d.a+((p.hasRef&&p.bodyEnd===0)?"\n\n":""))});
   }
   if(d.ref!==(p.ref||"")){
     if(d.ref){
-      if(sp.ref) ops.push([sp.ref[0],sp.ref[1],d.ref]);
-      else ops.push([out.length,out.length,"\n\n参考："+d.ref]);
-    } else if(sp.refBlock) ops.push([sp.refBlock[0],sp.refBlock[1],""]);
+      if(sp.ref) plains.push({s:sp.ref[0],e:sp.ref[1],txt:enc(d.ref),keep:true});
+      else plains.push({s:map.plain.length,e:map.plain.length,keep:true,
+        txt:isHtml?("<div><br></div><div>参考："+esc(d.ref)+"</div>"):("\n\n参考："+d.ref)});
+    } else if(sp.refBlock){
+      const ra=map.starts[sp.refBlock[0]], rb=map.ends[sp.refBlock[1]-1];
+      if(ra!=null&&rb!=null) dels.push([ra,rb]);
+    }
   }
-  ops.sort((x,y)=>y[0]-x[0]);
-  ops.forEach(o=>{ out=out.slice(0,o[0])+o[2]+out.slice(o[1]); });
+  plains.sort((x,y)=>x.s-y.s||x.e-y.e);
+  let out="", pi=-map.lead, pe=0;
+  const flushInsert=()=>{
+    while(pe<plains.length&&!plains[pe].done&&plains[pe].s===plains[pe].e&&plains[pe].s<=pi){
+      out+=plains[pe].txt; plains[pe].done=true; pe++;
+    }
+  };
+  for(const tk of toks){
+    if(dels.some(r=>tk.a>=r[0]&&tk.b<=r[1])) continue;   /* 删参考：整段（含标签）删掉 */
+    const isChar=tk.ch!==null;
+    flushInsert();
+    const ed=(pe<plains.length&&!plains[pe].done)?plains[pe]:null;
+    const inside=!!(ed&&ed.s<ed.e&&ed.s<=pi&&pi<ed.e);
+    if(inside){
+      /* 标签先原样输出（未改段落的样式不动），到第一个被替换的字符处再落新内容 */
+      if(!isChar){ if(ed.keep) out+=tk.raw; continue; }
+      if(!ed.started){ out+=ed.txt; ed.started=true; }
+      pi++;
+      if(pi>=ed.e) pe++;
+      continue;
+    }
+    out+=tk.raw;
+    if(isChar){
+      pi++;
+      if(pe<plains.length&&plains[pe].started&&pi>=plains[pe].e) pe++;
+    }
+  }
+  flushInsert();
+  while(pe<plains.length){ if(!plains[pe].done){ out+=plains[pe].txt; plains[pe].done=true; } pe++; }
   return out.replace(/^\n+|\n+$/g,"");
 }
 /* 巡夜/复习朗读：v101 起一律按原文整段读（不再切答段），保证不会念半截或念到编出来的内容 */
@@ -6740,7 +6834,10 @@ function myOralAnswerOf(m){
   return m.a||"";
 }
 /* 巡夜标题：只取原文首行的第一个完整句，过长截断加省略号，只允许一行；
-   不再读镜像 q，避免标题出现正文里没有的旧值或跨行。 */
+   不再读镜像 q，避免标题出现正文里没有的旧值或跨行。
+   v102：① 先剥 Markdown/HTML 标记（**问：**、<b>问：</b>）；
+         ② 单行双标记「问：…答：…」在「答：」之前截断，答句绝不进标题；
+         ③ 句末引号/括号跟随整句保留。 */
 function myOralTitleOf(m){
   if(!m) return "";
   let t="";
@@ -6749,11 +6846,18 @@ function myOralTitleOf(m){
     t=raw?_myOralPlain(raw):("问："+(m.q||"")+"\n答："+(m.a||""));
   }catch(e){ t=_myOralPlain("问："+(m.q||"")+"\n答："+(m.a||"")); }
   const line=(String(t).split("\n").find(x=>x.trim())||"").trim();
-  let s=line.replace(/^(问|答|参考)[ \t\u3000]*[：:][ \t\u3000]?/,"");
-  const one=/^[^。！？!?]*[。！？!?]/.exec(s);
+  let s=line.replace(/<[^>]+>/g,"").replace(/^[># \t\u3000]+/,"");
+  s=s.replace(/^(\*\*|__)(?=[ \t\u3000]*(?:问|答|参考))/,"");
+  s=s.replace(/^(问|答|参考)[ \t\u3000]*[：:][ \t\u3000]?/,"");
+  s=s.replace(/^(\*\*|__)[ \t\u3000]*/,"");
+  /* 单行双标记：只留问句，切在「答」本身之前（分隔用的引号/标点留在问句里） */
+  const am=/(?:^|[\s\u3000，。；、,.;："'“”‘’）)】])(答[ \t\u3000]*[：:])/.exec(s);
+  if(am) s=s.slice(0,am.index+am[0].length-am[1].length);
+  s=s.replace(/\*\*|__/g,"").replace(/`/g,"").trim();
+  const one=/^[^。！？!?]*[。！？!?][”"’）)]?/.exec(s);
   if(one) s=one[0];
   s=s.trim();
-  if(!s) s=line.trim();
+  if(!s) s=line.replace(/\*\*|__/g,"").replace(/<[^>]+>/g,"").trim();
   if(s.length>40) s=s.slice(0,40)+"…";
   return s;
 }
@@ -7319,14 +7423,16 @@ function openEditor(card){
     /* v143：保存原样，不做任何 Markdown 转换（底本必须与用户输入一字不差） */
     const html=area.innerHTML.trim();
     /* v101：只差 HTML 包装（原文是纯文本、编辑器序列化成 <div>）不算修改——
-       否则每打开一次编辑器再保存就多一个版本，且把纯文本原文改写成 HTML。 */
-    const _stored=getEdit(card.editId,"");
+       否则每打开一次编辑器再保存就多一个版本，且把纯文本原文改写成 HTML。
+       v102：判等基准必须是「这张卡当前实际显示的文本」（current，已含官方原文兜底），
+       不能只取已有校订——否则没校订的考点卡会被当成「原来什么都没有」，什么都没改也会存一版。 */
+    const _stored=String(current==null?"":current);
     const _fmt=/<(span|b|i|u|strong|em|font|mark|a|img)\b/i;
-    const plainOnly=!_fmt.test(html)&&!_fmt.test(_stored)&&_myOralPlain(html).trim()===_myOralPlain(_stored).trim();
+    const _normEd=s=>_myOralPlain(s).replace(/^\n+|\n+$/g,"");
+    const plainOnly=!_fmt.test(html)&&!_fmt.test(_stored)&&_normEd(html)===_normEd(_stored);
     if(plainOnly){ dirty=false; status.className="estatus saved"; status.textContent="● 内容未变化"; drawHist(); }
-    else if(saveEdit(card.editId, html)){ SFX.ok(); dirty=false; status.className="estatus saved"; status.textContent="● 已保存 "+_atLocal(new Date().toISOString(), true); drawHist(); toast("新版本已存档"); if(card.onSaved)card.onSaved(); }
+    else if(saveEdit(card.editId, html)){ SFX.ok(); dirty=false; status.className="estatus saved"; status.textContent="● 已保存 "+_atLocal(new Date().toISOString(), true); drawHist(); toast("新版本已存档"); if(card.onSaved)card.onSaved(); _syncMyOralMirror(); }
     else { status.className="estatus saved"; status.textContent="● 内容未变化"; }
-    _syncMyOralMirror();
   };
   $("#edReset",ov).onpointerdown=()=>{
     if(!confirm("恢复为官方原文？此操作会把原文存为最新版本。")) return;
@@ -7543,6 +7649,9 @@ function openOralInput(editId){
   const dispRaw=isEdit?getEdit("myoral:"+nid,""):"";
   const parsed0=dispRaw?myOralParse(dispRaw):null;
   let curMode=(dispRaw&&(!parsed0||!parsed0.ok||parsed0.unsplit))?"text":"fields";
+  /* v102：curRaw 保留显示源原文（可能含 <b>/<mark>/<div>），改栏保存时以它为底只替换改动段；
+     curBase 是原文的纯文本（文本框显示与逐字比较都只看它）。 */
+  let curRaw=dispRaw?String(dispRaw):"";
   let curBase=dispRaw?String(_myOralPlain(dispRaw)).replace(/^\n+|\n+$/g,""):"";
   const savedBase=curBase;
   let curParsed=dispRaw?parsed0:null;
@@ -7639,9 +7748,9 @@ function openOralInput(editId){
     const baseDirty=!!(curBase&&curBase!==savedBase);
     rec.status=final?"final":"draft"; rec.created=rec.created||new Date().toISOString();
     if(curBase){
-      /* 以当前原文为底：只替换用户实际改动的段，其余逐字保留 */
+      /* 以当前原文为底：只替换用户实际改动的段，其余逐字保留（含原有 HTML 样式） */
       if(changed||baseDirty){
-        try{ saveEdit("myoral:"+nid, myOralRebuild(curBase, curParsed||myOralParse(curBase), d)); }
+        try{ saveEdit("myoral:"+nid, myOralRebuild(curRaw||curBase, curParsed||myOralParse(curRaw||curBase), d)); }
         catch(e){ console.warn("[myoral] 写回原文失败:",e); }
       }
       if(changed||splitAsked){
@@ -7686,6 +7795,8 @@ function openOralInput(editId){
           return;
         }
         curBase=pp.full; curParsed=pp; splitAsked=true; curMode="fields";
+        /* v102：原文缓冲若没被改过，底本仍是原显示源（保留 HTML 样式）；改过就以用户输入的纯文本为底 */
+        if(v!==_myOralPlain(curRaw).replace(/^\n+|\n+$/g,"")) curRaw=v;
         renderBody(); toast("已按标记拆分，请核对三栏后再保存");
       };
     } else {
