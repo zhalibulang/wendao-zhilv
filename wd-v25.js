@@ -1257,6 +1257,33 @@ const TTS_SEG_MAX=160;   /* 单句上限（字符），超过按逗号二级切�
 let _ttsVoices=[]; let _ttsHooked=false;
 let _ttsRetry=0;     /* v147：无响应自愈只做一次，避免无限重试却不给提示 */
 let _ttsCur=null;   /* 防 GC：Chrome 会回收局部 utterance 导致静默无声（crbug 679437），必须模块级持有 */
+let _ttsProbe=null; /* v95：最近一次朗读请求的分阶段证据（3 秒卡死提示 / 自检面板共用） */
+let _ttsStallT=null, _ttsStallShown=false;
+function _ttsDisplayMode(){
+  try{
+    if(typeof navigator!=="undefined"&&navigator.standalone===true) return "standalone(navigator)";
+    const ms=["standalone","fullscreen","minimal-ui","browser"];
+    for(let i=0;i<ms.length;i++){
+      try{ if(window.matchMedia&&window.matchMedia("(display-mode: "+ms[i]+")").matches) return ms[i]; }catch(e){}
+    }
+  }catch(e){}
+  return "browser";
+}
+/* v95：3 秒内既没有 onstart 也没有 onerror → 把卡在哪一环节、用哪个声音、什么窗口写成一句人话 */
+function _ttsStallCheck(){
+  if(_ttsStallShown) return;
+  if(_ttsQ.stopped||_ttsQ.paused) return;
+  const p=_ttsProbe; if(!p||p.started||p.error) return;
+  _ttsStallShown=true;
+  let sp=false,pd=false;
+  try{ const s=window.speechSynthesis; sp=!!(s&&s.speaking); pd=!!(s&&s.pending); }catch(e){}
+  const det="voices="+p.voices+" · 选中="+p.voice+" · utter.lang="+p.uttLang
+    +" · 窗口="+_ttsDisplayMode()+" · synth.speaking="+sp+" / pending="+pd;
+  toast("朗读卡在「speak() 已调用，3 秒内既无 onstart 也无 onerror」——"+det
+    +"。请到 设置→实验特性→语音朗读 点「朗读自检」并截图这一行"
+    +(_TTS_IOS?"；若从主屏幕图标打开，先用 Safari 标签页试一次":""));
+  if(_ttsQ.el) _ttsQ.el.classList.remove("tts-speaking");
+}
 let _ttsHdInst=null; let _ttsHdAudio=null; let _ttsHdLoading=null; let _ttsHdFailed=false; let _ttsHdPct=0; let _ttsHdPromise=null;
 /* 播放会话：系统队列与 HD 播放共用（stopped/el/lang），ttsStop 一停全停 */
 const _ttsQ={ items:[], i:0, el:null, lang:"", stopped:true, paused:false, rate:1, suppress:false };
@@ -1422,7 +1449,99 @@ function ttsDiag(){ /* 一键自检：声音列表/当前选中/引擎状态，�
     })(),
     hd:ttsHdOn()?(_ttsHdInst?"已就绪":"加载中/失败"):"已关闭",
     rawList:rawAll,  /* 完整原始清单——设置页自检弹窗会显示 */
+    probe:_ttsProbe, /* v95：最近一次朗读请求的分阶段证据 */
     ver:(typeof V25!=="undefined"&&V25.VER)||"" };
+}
+/* v95：iPad 真机自检面板——必须在【同一次点击的手势栈】里跑完第一屏：
+   接口 / 声音清单 / 独立窗口 / 内核 / 喇叭短音 / 语音 onstart·onerror 时间线 / 结论。
+   逐行追加到 out（可以是元素或元素 id），字号大、word-break 防横溢，方便真机直接截图。 */
+function ttsSelfCheck(out){
+  const lines=[];
+  const paint=()=>{
+    const el=(typeof out==="string")?document.getElementById(out):out;
+    if(!el) return;
+    el.style.display="";
+    el.style.whiteSpace="pre-wrap";
+    el.style.wordBreak="break-all";
+    el.style.fontSize="15px";
+    el.style.lineHeight="1.85";
+    el.style.maxWidth="100%";
+    el.style.userSelect="text";
+    el.innerHTML="";
+    lines.forEach(t=>{ const d=document.createElement("div"); d.textContent=t; d.style.margin="1px 0"; el.appendChild(d); });
+  };
+  const push=t=>{ lines.push(String(t)); paint(); };
+  const t0=performance.now(), ms=()=>Math.round(performance.now()-t0)+"ms";
+  const ua=String(navigator.userAgent||"");
+  const webkit=/AppleWebKit/i.test(ua);
+  const mode=_ttsDisplayMode();
+  const mq=m=>{ try{ return !!(window.matchMedia&&window.matchMedia("(display-mode: "+m+")").matches); }catch(e){ return false; } };
+  const hasSS=!!window.speechSynthesis;
+  const hasU=(typeof window.SpeechSynthesisUtterance!=="undefined");
+  let vs=[];
+  try{ vs=hasSS?(window.speechSynthesis.getVoices()||[]):[]; }catch(e){}
+  push("🩺 朗读自检 · 引擎 "+((window.V25&&V25.VER)||"?")+" · "+new Date().toLocaleString());
+  push("① 接口：speechSynthesis "+(hasSS?"有":"没有")+" / SpeechSynthesisUtterance "+(hasU?"有":"没有"));
+  push("② 声音列表：共 "+vs.length+" 个"+(vs.length?"（下列前 10 条）":""));
+  vs.slice(0,10).forEach((v,i)=>push("   "+(i+1)+". "+v.name+" · "+v.lang+" · "+(v.localService?"本地":"网络")));
+  if(!vs.length) push("   （空：iOS 首次可能为空；可点「↻ 刷新声音列表」，或完全退出浏览器重开）");
+  push("③ 独立窗口：navigator.standalone="+String(navigator.standalone)
+    +" · display-mode standalone="+mq("standalone")+" / minimal-ui="+mq("minimal-ui")
+    +" / fullscreen="+mq("fullscreen")+" · 实际="+mode);
+  push("④ 内核："+(webkit?"WebKit":"非 WebKit")+" · UA="+ua);
+  /* ⑤ 喇叭自检：同一手势里用 AudioContext 播 0.2 秒短音（不是语音合成） */
+  let beep=false;
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC){ push("⑤ 喇叭自检：不支持 AudioContext，无法测外放"); }
+    else{
+      const ac=new AC();
+      const o=ac.createOscillator(), g=ac.createGain();
+      o.type="sine"; o.frequency.value=880; g.gain.value=0.12;
+      o.connect(g); g.connect(ac.destination);
+      o.start(); o.stop(ac.currentTime+0.2);
+      if(ac.state==="suspended"){ try{ ac.resume(); }catch(e){} }
+      beep=true;
+      push("⑤ 喇叭自检：已在本次点击内播 0.2 秒 880Hz 短音（AudioContext="+ac.state+"）——听到「嘀」=外放通路正常");
+    }
+  }catch(e){ push("⑤ 喇叭自检失败："+(e&&e.message||e)); }
+  push("⑥ 语音自检：准备 speak() 一句短中文，最多等 3 秒");
+  return new Promise(resolve=>{
+    if(!hasSS||!hasU){
+      push("结论：浏览器没有语音合成接口 → 请换 Safari / Chrome 打开本页");
+      return resolve({ok:false,reason:"no-api"});
+    }
+    let spoken=false, err="", ended=false, done=false;
+    const u=new window.SpeechSynthesisUtterance("朗读自检，一二三。");
+    u.lang="zh-CN"; u.rate=1;
+    const zh=vs.find(v=>/^zh/i.test(v.lang));
+    if(zh){ try{ u.voice=zh; u.lang=zh.lang; }catch(e){} }
+    u.onstart=()=>{ spoken=true; push("   · onstart +"+ms()); };
+    u.onend=()=>{ ended=true; push("   · onend +"+ms()); conclude(); };
+    u.onerror=e=>{ err=(e&&e.error)||"unknown"; push("   · onerror "+err+" +"+ms()); conclude(); };
+    const timer=setTimeout(()=>{
+      if(!spoken&&!err) push("   · 3 秒内既无 onstart 也无 onerror —— 引擎对 speak() 没有任何回执（卡在起播环节）");
+      conclude();
+    },3000);
+    function conclude(){
+      if(done) return; done=true;
+      clearTimeout(timer);
+      const heard=beep?"若⑤的「嘀」听到了":"若设备整体有声音";
+      if(spoken&&!err){
+        push("结论：语音引擎有回执（"+(ended?"onstart+onend":"onstart")+"）。仍听不到时：先看⑤短音——短音也没有=设备静音/音量；短音正常=语音音量或语音包问题。");
+      }else if(!spoken&&!err){
+        push("结论："+heard+"但语音无 onstart → 语音引擎未就绪。请到 设置→辅助功能→朗读内容→声音→中文 下载一个声音，再完全退出浏览器重开。");
+        push("      若⑤的「嘀」也没听到 → 设备整体没出声（侧边静音开关/音量），先解决外放再看语音。");
+      }else{
+        push("结论：语音引擎报错「"+err+"」→ 多半是语音包缺失或被系统策略拦截；先在 Safari 标签页重试，再试主屏幕图标。");
+      }
+      push("补充：若本页是在某个 App 内打开（微信/飞书等 WebView），语音合成常见「接口存在但不工作」——请复制链接到 Safari 打开再试。");
+      push("补充：独立窗口（主屏幕图标）的音频会话可能与 Safari 不同——先用 Safari 标签页试，再试主屏幕图标。");
+      resolve({ok:spoken&&!err, spoken, ended, error:err, beep, mode, voices:vs.length});
+    }
+    try{ window.speechSynthesis.speak(u); push("   · speak() 已调用，等待回执…"); }
+    catch(e){ err=String(e&&e.message||e); push("   · speak() 抛错："+err); conclude(); }
+  });
 }
 
 /* —— 分句：中文按 。！？；切，英文按 .!?+大写开头 切；超长句按逗号聚合，无标点按空格硬切兜底 —— */
@@ -1530,6 +1649,7 @@ function ttsSpeak(text, lang, el, _noHd){
   }
   lang=detectedLang;
   _ttsRetry=0;
+  _ttsStallShown=false; if(_ttsStallT){ clearTimeout(_ttsStallT); _ttsStallT=null; }
   _ttsHalt(); ttsStopMarks(); _ttsHdBadge(false);   /* 系统声道起播：高清徽标必须熄灭 */
   _ttsVoiceWarnIfNeeded(hasZh);                     /* 设备没装该语言语音 → 给可照做的提示 */
   /* HD 英文：开关开启且引擎就绪 → Kokoro 神经语音；未就绪则后台预热，本次先用系统 TTS，不打断用户 */
@@ -1557,6 +1677,8 @@ function ttsSpeak(text, lang, el, _noHd){
      但 iPadOS Safari 要求首帧 speak() 留在手势栈里，延时=静默失败。改为同步起播，
      并把 60ms 的那次机会挪进 _ttsPlayNext 的无响应自愈里。 */
   _ttsPlayNext(synth);
+  /* v95：3 秒卡死诊断的定时器在每个分句里各设一次（见 _ttsPlayNext），
+     否则第二句之后卡住就没有任何提示。 */
 }
 /* v148：按句/段判语种——藏经阁整卡朗读时，卡里中文标题不再把英文正文一起带成中文声道。
    汉字占一定比重才算中文（英文句里夹一个中文词仍按英文读，避免来回换嗓子）。 */
@@ -1609,14 +1731,25 @@ function _ttsPlayNext(synth, bare){
     /* 诊断日志——在 Chrome DevTools Console 搜 [TTS] 就能看到每次挂的声音 */
     console.log("[TTS] segLang="+segLang+" pickVoice="+ (v?(v.name+"/"+v.lang):"null") +" → utterance.voice="+(u.voice?(u.voice.name+"/"+u.lang):"null")+" utterance.lang="+u.lang+" text="+(seg.slice(0,40)));
     let started=false;
-    u.onstart=()=>{ started=true; _ttsCur=u; };
-    u.onend=()=>{ if(_ttsCur===u) _ttsCur=null; if(!_ttsQ.stopped&&!_ttsQ.suppress) _ttsPlayNext(synth); };
-    u.onerror=(e)=>{ if(_ttsCur===u) _ttsCur=null;
+    /* v95：记录这次请求的完整证据——3 秒无回执时提示里要能说清「用哪个声音、什么窗口」 */
+    const probe={ at:Date.now(), seg:String(seg||"").slice(0,60), segLang:segLang,
+      voice:v?(v.name+"/"+v.lang):"null", uttLang:u.lang||"(默认)",
+      voices:(Array.isArray(_ttsVoices)?_ttsVoices.length:0), started:false, error:"", retry:_ttsRetry };
+    _ttsProbe=probe;
+    u.onstart=()=>{ started=true; _ttsCur=u; probe.started=true; probe.startedAt=Date.now();
+      if(_ttsStallT){ clearTimeout(_ttsStallT); _ttsStallT=null; } };
+    u.onend=()=>{ probe.endedAt=Date.now(); if(_ttsCur===u) _ttsCur=null; if(!_ttsQ.stopped&&!_ttsQ.suppress) _ttsPlayNext(synth); };
+    u.onerror=(e)=>{ probe.errorAt=Date.now(); probe.error=(e&&e.error)||"unknown";
+      if(_ttsStallT){ clearTimeout(_ttsStallT); _ttsStallT=null; }
+      if(_ttsCur===u) _ttsCur=null;
       if(_ttsQ.el) _ttsQ.el.classList.remove("tts-speaking");
       const code=e&&e.error||"";                 /* 朗读中断要给出原因，不再静默装死 */
       if(code&&code!=="interrupted"&&code!=="canceled") toast("语音中断（"+code+"）——可再点一次 🔊 重试"); };
     _ttsCur=u;                                  /* 持有引用，防 Chrome GC 吞声 */
     synth.speak(u);
+    /* v95：每一句都单独挂 3 秒卡死诊断（onstart/onerror 会清掉它） */
+    if(_ttsStallT){ clearTimeout(_ttsStallT); }
+    _ttsStallT=setTimeout(()=>{ _ttsStallT=null; _ttsStallCheck(); },3000);
     /* v147：只在真被 pause 过时才 resume（iOS 上无差别 resume 偶尔会把刚排进去的 utterance 顶掉） */
     try{ if(synth.paused) synth.resume(); }catch(e){}
     setTimeout(()=>{                            /* 无响应自愈：1.6s 没 onstart → cancel 后重试一次 */
@@ -1626,9 +1759,10 @@ function _ttsPlayNext(synth, bare){
       _ttsQ.i--;                              /* 回退当前段，换浏览器默认语言声道重放（带 voice） */
       if(_ttsRetry>=1){                       /* v147：只自愈一次，别无限重试把用户蒙在鼓里 */
         if(_ttsQ.el) _ttsQ.el.classList.remove("tts-speaking");
-        toast(_TTS_IOS
-          ? "没有发出声音：请检查 iPad 侧边静音开关与音量；若是「添加到主屏幕」打开的，先在 Safari 里试一次"
-          : "没有发出声音：请检查系统静音与音量，或到 设置→语音 里点「朗读自检」");
+        /* v95：不再只说「没有发出声音」——统一走 3 秒卡死诊断，说明卡在 speak() 之后。
+           不要再把 _ttsStallShown 复位：3 秒定时器与这次 1.6s×2 重试几乎同时到点，
+           复位会导致同一条诊断弹两遍。 */
+        _ttsStallCheck();
         return;
       }
       _ttsRetry++;
@@ -1640,6 +1774,7 @@ function _ttsPlayNext(synth, bare){
   }
 }
 function _ttsHalt(){ /* 停系统队列 + HD 音频；不清高亮（由调用方决定） */
+  if(_ttsStallT){ clearTimeout(_ttsStallT); _ttsStallT=null; }   /* v95：停播后不再补发 3 秒诊断 */
   const prev=_ttsCur;   /* v147：先留住「我们自己正在播的那条」，iOS 分支要用它判断该不该 cancel */
   _ttsQ.stopped=true; _ttsQ.paused=false; _ttsQ.items=[]; _ttsQ.i=0; _ttsCur=null;
   try{
@@ -1829,6 +1964,78 @@ async function _ttsHdPlay(inst, text, el){
 }
 
 /* ==================== [6] 进度记录 ==================== */
+/* v95：完成态唯一判定——任务单 / 侧栏 3 日卡 / 科目节点 / 热力图都走这里，不再各判各的。
+   规则：
+   · v.done[n] 是权威完成记录（unitDone 写入）；
+   · 日卡 s.done[n] 是当日打卡快照，存在也算完成（DYN 每日口译只有这一份）；
+   · 旧存档没有分片字段 parts 时，只要该节已整节达标（sectionDone / 老任务 ORB），
+     该节的所有分片单元都算完成——绝不把已完成的历史降级成未完成；
+   · 判定完成后忽略残留的 v.runs，不再显示「进行中」。 */
+function _unitOralSec(u){
+  try{
+    const id=String(((u&&u.items&&u.items[0])||{}).id||"");
+    const m=/^ORAL:([A-Za-z]{3}):(\d+)(?::(\d+))?$/.exec(id);
+    if(!m) return null;
+    return { aid:m[1], sec:+m[2]-1, part:m[3]!=null?+m[3]:0 };
+  }catch(e){ return null; }
+}
+function unitIsDone(u, sh){
+  if(!u) return false;
+  const v=v25st();
+  if(v.done&&v.done[u.n]) return true;
+  if(sh&&sh.done&&sh.done[u.n]) return true;
+  const os=_unitOralSec(u);
+  if(os){
+    try{ if(typeof oralSecDone==="function"&&oralSecDone(os.aid,os.sec)) return true; }catch(e){}
+    try{
+      const pg=(typeof oralProg==="function")?oralProg(os.aid):null;
+      if(pg&&Array.isArray(pg.sectionDone)&&pg.sectionDone.indexOf(os.sec)>=0) return true;
+    }catch(e){}
+    /* 分片全练完也算完成：单片节（parts 只有 [0]）练完即完成；
+       多片节必须每一片都在 parts 里，少一片仍是进行中（不会提前判完成）。 */
+    try{
+      if(typeof oralSecProgress==="function"){
+        const z=oralSecProgress(os.aid,os.sec);
+        if(z&&z.total>0&&z.done>=z.total) return true;
+      }
+    }catch(e){}
+  }
+  return false;
+}
+function unitRunState(u, sh){
+  if(!u) return false;
+  if(unitIsDone(u,sh)) return false;
+  const v=v25st();
+  return !!(v.runs&&v.runs[u.n]!=null);
+}
+/* v95：一次性迁移（幂等、只增不减）——旧档里已整节完成的导游词，
+   把该节所有分片单元补进 v.done 并撤下残留 v.runs。
+   只动完成标记，不碰任何正文、st.edits、mdBaseText、富文本。 */
+function normalizeDoneState(){
+  let add=0, cut=0;
+  try{
+    const v=v25st(); const U=allUnits();
+    v.done=v.done||{};
+    U.forEach(u=>{
+      if(unitIsDone(u)){
+        if(!v.done[u.n]){
+          v.done[u.n]={ day:0, ok:1, all:1, at:new Date().toISOString(), revs:0, migrated:1 };
+          add++;
+        }
+        if(v.runs&&v.runs[u.n]!=null){ delete v.runs[u.n]; cut++; }
+      }
+    });
+    if(add||cut){
+      Object.keys(v.sheets||{}).forEach(k=>{ const s=v.sheets[k]; if(!s||!s.items) return;
+        s.items.forEach(it=>{ const u=unitByN(it.u); if(u&&unitIsDone(u)){ s.done=s.done||{}; s.done[it.u]=true; } });
+      });
+      v._fcache={};
+      save();
+      try{ console.log("[WD v95] 完成态迁移：补 "+add+" 个单元，撤 "+cut+" 个残留进行中"); }catch(e){}
+    }
+  }catch(e){ try{ console.warn("[WD done-normalize]",e); }catch(_){} }
+  return { add, cut };
+}
 function unitDone(n, ok, all){
   const v=v25st(); v.done=v.done||{};
   const day=Math.min(planHorizon().N2, st.day||1);   /* v135：周期上限取自 planHorizon（N2 动态，旧档 startDate 早时可达 70+） */
@@ -3157,6 +3364,226 @@ function _recoverCover(host){
     b.textContent=covered?"👁 点击复原原文":"🙈 重新遮盖";
   };
 }
+/* ==================== 五步 quest 共用语音输入块（v95） ====================
+   分句精读（阅读·跟读）/ 分句复述 / 整段复述三处共用同一套 HTML 与事件：
+   录音自评 + 语音识别 + 文字输入 + 逐字对照 + 三档自评。
+   差异只走参数（显示原文/是否计分/提示文案），按钮组与状态文案不各写一份。
+
+   朗读计时口径（v95 修正）：
+   · 只有「识别器活着且真的收到识别文字」的时段才累加；
+   · 进页、停留、滑动、看原文、纯打字都不计时；
+   · 每次点「🎙 开始说」= 新的一次尝试，各自结算，绝不把多次累加混成一段；
+   · 语速 = 本次识别词数 ÷ 本次有效朗读秒数；本次没有有效朗读就显示「—」，不给凭空的数字。 */
+let _ovSeq=0;
+function _ovWords(s,lang){
+  return /^zh/i.test(String(lang||"")) ? ((String(s||"").match(/[\u4e00-\u9fff]/g)||[]).length)
+                                       : _reciteWords(s);
+}
+function _oralVoiceHtml(o){
+  o=o||{};
+  const ph=o.placeholder||"点下面「🎙 开始说」直接说；也可以在这里打字修改";
+  return '<div class="v25ovi" data-ov="1" data-ovn="'+(++_ovSeq)+'" style="margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:rgba(255,250,240,.55)">'
+    +'<div data-ov-st style="font-size:12.5px;color:var(--dim);margin-bottom:6px">'+(o.hint||"")+'</div>'
+    +'<textarea data-sp-patch="1" data-ov-ta rows="3" placeholder="'+esc(ph)+'" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;line-height:1.8;background:#fff;resize:vertical">'+(o.value?esc(o.value):"")+'</textarea>'
+    +'<div data-ov-clock style="font-size:12px;color:var(--dim);margin-top:4px;min-height:17px"></div>'
+    +'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'
+      +'<button class="btn sm primary" data-ov-say type="button">🎙 开始说</button>'
+      +'<button class="btn sm" data-ov-cmp type="button">查看对照</button>'
+      +'<button class="btn sm" data-ov-rec type="button">🔊 录音自评</button>'
+    +'</div>'
+    +'<div data-ov-res style="margin-top:8px"></div>'
+  +'</div>';
+}
+/* 绑定共用块；host 内只应有一个 [data-ov]。返回 {busy,stop,reset,setHint,el} */
+function _oralVoiceBind(host,o){
+  o=o||{};
+  const root=host.querySelector("[data-ov]"); if(!root) return null;
+  const ta=root.querySelector("[data-ov-ta]");
+  const stEl=root.querySelector("[data-ov-st]");
+  const clockEl=root.querySelector("[data-ov-clock]");
+  const resEl=root.querySelector("[data-ov-res]");
+  const sayBtn=root.querySelector("[data-ov-say]");
+  const cmpBtn=root.querySelector("[data-ov-cmp]");
+  const recBtn=root.querySelector("[data-ov-rec]");
+  const lang=o.lang||"en-US";
+  const alive=()=>!!(ta&&ta.isConnected&&root.isConnected&&host.isConnected);
+  const say=t=>{ if(stEl) stEl.textContent=String(t||""); };
+  let rec=null, recOn=false, dft=null, idleT=null, echoT=null, tick=null, gotEcho=false;
+  /* 朗读计时：只累计「识别活着 + 收到识别文字」的时段。
+     v95：改为「向前记账」——每收到一条识别结果，就把「上一条结果（或开口那一刻）到这一条」
+     的间隔记作真实发声时间。这样最后一条结果之后的停顿/静音不会被算进去
+     （旧写法在 freeze 时补尾部间隔，会把每次停下来的沉默最多多算 2 秒）。 */
+  let acc=0, lastRes=0, startedAt=0, attempt=0, recordedAt=-1, lastMetrics=null;
+  const beat=()=>{
+    const now=Date.now();
+    if(startedAt&&now>startedAt){
+      const from=lastRes||startedAt;
+      acc+=Math.min(2,Math.max(0,(now-from)/1000));
+    }
+    lastRes=now;
+  };
+  const freeze=()=>{ /* 不再补尾部静默：停止说话之后的等待不属于朗读时长 */ };
+  const resetClock=()=>{ acc=0; lastRes=0; startedAt=0; };
+  const liveDur=()=>acc;
+  const fmt=s=>{ s=Math.max(0,s); return Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0"); };
+  const metrics=()=>({ d:Math.round(liveDur()*10)/10, w:_ovWords(ta.value||"",lang) });
+  const paintClock=()=>{
+    if(!clockEl) return;
+    const d=liveDur(), w=_ovWords(ta.value||"",lang);
+    if(d<=0.05&&!w){ clockEl.textContent=""; return; }
+    const wpm=(d>0.8&&w>0)?Math.round(w/(d/60)):0;
+    clockEl.innerHTML='<span style="color:var(--gold)">🎤 本次朗读 '+fmt(d)+'</span> · '+w+' 词'
+      +(wpm?' · 语速 <b style="color:var(--gold)">'+wpm+' WPM</b>':' · 语速 —（还没收到有效朗读）')
+      +'<span style="opacity:.65"> · 只统计麦克风收到识别文字的时间（不含停留/看原文/打字）</span>';
+  };
+  const stopTick=()=>{ if(tick){ clearInterval(tick); tick=null; } };
+  const startTick=()=>{
+    stopTick();
+    tick=setInterval(()=>{
+      if(!alive()){ stopTick(); try{ if(rec) rec.stop(); }catch(e){} rec=null; return; }
+      paintClock();
+    },250);
+  };
+  const clearIdle=()=>{ if(idleT){ clearTimeout(idleT); idleT=null; } };
+  const stopAsr=()=>{
+    clearIdle();
+    if(echoT){ clearTimeout(echoT); echoT=null; }
+    if(rec){ try{ rec.stop(); }catch(e){} rec=null; }
+    sayBtn.textContent="🎙 开始说";
+    freeze(); stopTick(); paintClock();
+  };
+  const recordStats=(m)=>{
+    if(attempt===recordedAt) return;
+    if(!(m.d>0.8&&m.w>0)) return;
+    recordedAt=attempt;
+    try{ wdReciteTick(m.w,m.d,o.mod||"sent"); }catch(e){}
+  };
+  const setSelf=(g)=>{
+    try{
+      const s=_reciteStats(), h=s.h||[];
+      if(h.length){ h[h.length-1].self=+g; localStorage.setItem("wd_recite_stats",JSON.stringify(s)); }
+    }catch(e){}
+  };
+  const showDiff=()=>{
+    const said=String(ta.value||"").trim();
+    if(!said){ toast("还没有内容——点「🎙 开始说」，或直接在框里打字"); return; }
+    const ref=String((typeof o.ref==="function"?o.ref():o.ref)||"");
+    const m=(function(){ freeze(); const x=metrics(); return x; })();
+    lastMetrics=m;
+    const byVoice=!!(m.d>0.8&&m.w>0);
+    recordStats(m);
+    const cov=oralScore(said,ref,byVoice);
+    const unit=o.unit||"句", label=o.label||"复述";
+    const wpm=byVoice?Math.round(m.w/(m.d/60)):0;
+    resEl.innerHTML='<div class="v25cov">本'+unit+label+'覆盖率约 '+cov+'%（蓝色=漏掉的原文，红色=多说的内容）'
+        +(byVoice?'<span style="opacity:.6"> · 语音输入已按识别容错计</span>':'')+'</div>'
+      +'<div class="v25diffbox">'+_oralDiffHtml(ref,said,byVoice)+'</div>'
+      +(byVoice
+        ? '<div style="margin-top:8px;font-size:12.5px;color:var(--dim)">本次有效朗读 <b style="color:var(--gold)">'+m.d.toFixed(1)+' 秒</b> · '+m.w+' 词 · 语速 <b style="color:var(--gold)">'+wpm+' WPM</b>'
+          +'<div style="font-size:11px;opacity:.75;margin-top:2px">口径：语速 = 本次识别词数 ÷ 本次有效朗读秒数；只累计麦克风正在收音且有识别结果的时间。重录会另算一次，不累加。</div></div>'
+        : '<div style="margin-top:8px;font-size:12.5px;color:var(--dim)">本次没有有效朗读（没收到语音识别文字）——不显示语速；打字内容仍按逐字对照计算覆盖率。</div>')
+      +'<div data-ov-rate style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--dim)">这次练得怎么样？'
+        +'<button class="btn sm" data-g="2" type="button">流畅</button>'
+        +'<button class="btn sm" data-g="1" type="button">断续</button>'
+        +'<button class="btn sm" data-g="0" type="button">卡住</button></div>';
+    const row=resEl.querySelector("[data-ov-rate]");
+    if(row) row.querySelectorAll("[data-g]").forEach(b=>{
+      b.onpointerdown=()=>{ try{SFX.tap();}catch(e){}
+        setSelf(+b.dataset.g);
+        row.innerHTML='<span style="color:var(--ok)">已记录：'+b.textContent+'（只记在本机，不参与判分）</span>';
+      };
+    });
+  };
+  const finishSay=()=>{
+    if(!rec){ clearIdle(); return; }
+    stopAsr();
+    const said=String(ta.value||"").trim();
+    say(said?"已停止——识别到的内容已填进输入框":"没听到内容，可再说一次或直接打字");
+    if(said) showDiff();
+  };
+  sayBtn.onpointerdown=()=>{
+    try{SFX.tap();}catch(e){}
+    if(rec){ finishSay(); return; }
+    try{ micRecStop(); }catch(_){}
+    if(recOn){ recOn=false; recBtn.textContent="🔊 录音自评"; }
+    try{ ttsStop(); }catch(_){}
+    ta.value=""; resetClock(); startedAt=Date.now(); attempt++; dft=asrDraftBinder(ta); gotEcho=false;
+    if(resEl) resEl.innerHTML="";
+    sayBtn.textContent="■ 停止";
+    say("正在听……直接说本"+(o.unit||"句")+"，停一下会自动出对照");
+    try{ ta.focus(); }catch(_){}
+    rec=asrOnce(lang,(fin,inter)=>{
+      if(!dft) return;
+      dft.feed(fin,inter);
+      if((fin&&String(fin).trim())||(inter&&String(inter).trim())){ gotEcho=true; beat(); }
+      const cur=String(ta.value||"").trim();
+      say(cur?("已听到："+cur.slice(-40)):"正在听……");
+      clearIdle();
+      if(o.idleMs!==0) idleT=setTimeout(finishSay,o.idleMs||3500);
+      paintClock();
+    },e=>{
+      rec=null; sayBtn.textContent="🎙 开始说"; freeze(); stopTick(); paintClock(); say(e);
+    },alive);
+    if(!rec){ sayBtn.textContent="🎙 开始说"; say("此浏览器无法调用语音识别——可直接在框里打字，再点「查看对照」"); return; }
+    try{ rec.start(); }catch(e){ rec=null; sayBtn.textContent="🎙 开始说"; say("启动失败——可直接打字，再点「查看对照」"); return; }
+    startTick(); paintClock();
+    /* 6 秒没有识别回包：主动释放麦克风并说明原因（与分句精读同款） */
+    echoT=setTimeout(async ()=>{
+      try{
+        if(rec&&!gotEcho){
+          stopAsr();
+          let lb=null;
+          try{ lb=(typeof window.__wdMicProbe==="function")?await window.__wdMicProbe():null; }catch(_){}
+          if(stEl&&stEl.isConnected) say("6 秒没有收到任何识别结果，已释放麦克风。当前浏览器实际使用的麦克风："+(lb?("「"+lb+"」"):"读取失败")+"。常见原因：内置识别服务连不上（需联网/被网络屏蔽），或系统未授权麦克风。可直接在框里打字。");
+        }
+      }catch(_){}
+    },6000);
+  };
+  cmpBtn.onpointerdown=()=>{
+    try{SFX.tap();}catch(e){}
+    if(rec){ finishSay(); return; }
+    showDiff();
+  };
+  recBtn.onpointerdown=()=>{
+    try{SFX.tap();}catch(e){}
+    if(recOn){
+      recOn=false; recBtn.textContent="🔊 录音自评";
+      try{ micRecStop(); }catch(_){}
+      say("录音已停止——下面可回放你的发音；录音只用于回放，不计语速");
+      return;
+    }
+    recOn=true; recBtn.textContent="■ 停止录音";
+    if(rec){ try{ rec.stop(); }catch(_){} rec=null; sayBtn.textContent="🎙 开始说"; freeze(); stopTick(); }
+    say("录音中……说完点「■ 停止录音」听回放（录音只用于回放，不计语速）");
+    micRecStart(url=>{
+      recOn=false; recBtn.textContent="🔊 录音自评";
+      if(!alive()) return;
+      say("录音已停止——下面可回放你的发音；录音只用于回放，不计语速");
+      if(stEl) stEl.innerHTML='<span style="opacity:.7">你的发音：</span>'
+        +'<button class="btn sm" data-ov-pl type="button" style="padding:0 8px;font-size:11px">▶ 回放</button> '
+        +'<button class="btn sm" data-ov-cl type="button" style="padding:0 8px;font-size:11px">清除</button>';
+      const pb=stEl.querySelector("[data-ov-pl]"), cl=stEl.querySelector("[data-ov-cl]");
+      if(pb) pb.onpointerdown=()=>{ try{ new Audio(url).play(); }catch(_){} };
+      if(cl) cl.onpointerdown=()=>{ micRecClear(); say("录音已清除"); };
+    },()=>{});
+  };
+  ta.addEventListener("input",()=>{ paintClock(); });
+  return {
+    el:root,
+    busy:()=>!!rec,
+    stop:()=>{ stopAsr(); if(recOn){ recOn=false; recBtn.textContent="🔊 录音自评"; try{ micRecStop(); }catch(_){} } },
+    reset:()=>{
+      clearIdle(); ta.value=""; resetClock(); attempt++; recordedAt=-1; lastMetrics=null;
+      if(resEl) resEl.innerHTML="";
+      if(stEl) stEl.textContent="";
+      paintClock();
+      try{ ta.focus(); }catch(_){}
+    },
+    setHint:t=>say(t),
+    setLabel:t=>{ o.label=t||o.label; },
+    metrics:()=>({ d:Math.round(liveDur()*10)/10, w:_ovWords(ta.value||"",lang) })
+  };
+}
 /* 节级任务入口：1 个单元 = 1 个节片（超长节按段落均分为 (1/n)…(n/n) 子任务）
    opts.noChain=true：只练这一片（「只重练第 n 片」入口），走完不自动接下一片、
    不动整节完成标记与其它片进度 */
@@ -3416,49 +3843,8 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
   };
   const name=art.name+' · 第'+(si+1)+'节';
   let idx=0;                          /* 分句下标；五步流程靠 render* 直接切页 */
-  let reciteT0=null;                  /* v104：复述计时起点（分句/整段复述进入时打点，完成时结算语速） */
   /* 单麦约定：整个流程同一时刻只允许一个识别器、一个朗读；切页/换模式先收干净，避免抢麦克风 */
   let liveRec=null, autoTtsT=null;
-  /* v109：复述区的「录音 → 整体识别 → 回放」按钮绑定（分句复述 / 整段复述共用）
-     - 按下：开始录音（可回放，只留最后一条）＋ 启动「非连续、无草稿」识别
-     - 停止：识别器把这一整段一次性给终稿，不再逐字回填，因此不会重复复写
-     - 计时：从按下那一刻开始，停止时冻结语音时长交给语速统计（比「首次按键」更贴近真实语速） */
-  const _bindReciteMic=(ta,asrBtn,stEl,lang,onDur,alive)=>{
-    let rec=null, t0=0;
-    const dft=(typeof asrDraftBinder==="function")?asrDraftBinder(ta):null;
-    const say=t=>{ if(stEl) stEl.textContent=String(t||""); };
-    const stopRec=()=>{
-      if(!rec) return false;
-      try{ rec.stop(); }catch(e){}
-      rec=null; asrBtn.textContent="🎙 语音输入";
-      if(onDur) onDur((Date.now()-t0)/1000);
-      say("已停止——识别到的内容已填进输入框");
-      return true;
-    };
-    asrBtn.onpointerdown=()=>{
-      try{SFX.tap();}catch(e){}
-      if(stopRec()) return;
-      ta.value=""; t0=Date.now(); reciteT0=null;
-      if(dft&&dft.reset) dft.reset();
-      asrBtn.textContent="■ 停止";
-      say("正在听……你说的词会边听边实时上屏");
-      try{ ta.focus(); }catch(_){}
-      /* v126：改用 asrOnce 实时识别（同分句阅读）——一边说一边逐词上屏，
-         不再是「说完整句才一次性出结果」，也不再「没说完就停」。
-         实时草稿上屏会触发 input 事件，计时从第一个词落地就开始，而不是等输入结束才打点。 */
-      rec=asrOnce(lang,(fin,inter)=>{
-        if(dft) dft.feed(fin,inter);
-        if(String(ta.value||"").trim() && !reciteT0) reciteT0=Date.now();
-        const cur=String(ta.value||"").trim();
-        say(cur?("已听到："+cur.slice(-40)):"正在听……");
-      },e=>{ rec=null; asrBtn.textContent="🎙 语音输入"; say(e); },
-      alive||(()=>ta.isConnected));
-      if(!rec){ asrBtn.textContent="🎙 语音输入"; return; }
-      try{ rec.start(); }catch(e){ rec=null; asrBtn.textContent="🎙 语音输入"; say("启动失败——可直接打字"); }
-    };
-    /* 结算前调用：还在识别就拦一下，避免「识别草稿」晚到覆盖对照结果 */
-    return { busy:()=>!!rec, stop:stopRec };
-  };
   const killAutoTts=()=>{ if(autoTtsT){ clearTimeout(autoTtsT); autoTtsT=null; } };
   const stopVoice=()=>{ killAutoTts(); if(liveRec){ try{ liveRec.stop(); }catch(e){} liveRec=null; } try{ micRecStop(); }catch(e){} ttsStop(); };
   /* v145：朗读/评分统一只送正文句子——标题/列表/引用/分隔线不念、不计入覆盖度 */
@@ -3620,143 +4006,48 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     if(!_TTS_IOS) autoTtsT=setTimeout(()=>{ autoTtsT=null; try{ if(se.isConnected) ttsSpeak(sn.text,'en-US',se); }catch(e){} },260);
     host.querySelector("#v25otts").onpointerdown=()=>{ try{SFX.tap();}catch(e){} killAutoTts(); if(liveRec) stopVoice(); ttsSpeak(sn.text,'en-US',se); };
 
-    /* 模式：跟读=原文可见；复述=原文模糊遮盖（可点复原） */
+    /* 模式：跟读=原文可见；复述=原文模糊遮盖（点一下复原、再点一下重新遮回） */
     let mode="shadow";
     const box=host.querySelector("#v25saybox");
     const ms=host.querySelector("#v25mshadow"), mr=host.querySelector("#v25mrecall");
+    const hintOf=m=>m==="recall"
+      ? "复述模式：原文已遮住，凭记忆说本句，说完自动出逐字对照"
+      : "跟读模式：先听自动朗读，再跟着说一遍，说完自动出逐字对照";
+    /* v95：与分句复述 / 整段复述共用同一套语音输入块 */
+    box.innerHTML=_oralVoiceHtml({ hint:hintOf("shadow"), lang:"en-US", unit:"句", label:"跟读" });
+    const voice=_oralVoiceBind(box,{ lang:"en-US", ref:()=>sn.text, unit:"句", label:"跟读", mod:"sent", idleMs:3500 });
     function paintMode(next){
       mode=next;
       sk&&sk();   /* 先把打字机收尾，再决定是否遮盖 */
       ms.classList.toggle("cur",mode==="shadow"); ms.classList.toggle("ghost",mode!=="shadow");
       mr.classList.toggle("cur",mode==="recall"); mr.classList.toggle("ghost",mode!=="recall");
+      if(voice){ voice.setHint(hintOf(mode)); voice.setLabel(mode==="recall"?"复述":"跟读"); }
       /* 遮盖：只包一层模糊，不重建 DOM（避免打字机节点被替换后读出失败） */
       let wrap=se.querySelector(".v25cover-txt");
       if(mode==="recall"){
         if(!wrap){ wrap=document.createElement("div"); wrap.className="v25cover-txt"; while(se.firstChild) wrap.appendChild(se.firstChild); se.appendChild(wrap); }
         se.classList.add("v25cover");
-        if(!se.querySelector("#v25reveal")){
-          const b=document.createElement("button"); b.className="btn sm v25cover-btn"; b.type="button"; b.id="v25reveal"; b.textContent="👁 点击复原原文";
-          b.onpointerdown=(e)=>{ try{ e.preventDefault(); e.stopPropagation(); SFX.tap(); }catch(x){} se.classList.remove("v25cover"); b.remove(); };
+        let b=se.querySelector("#v25reveal");
+        if(!b){
+          b=document.createElement("button"); b.className="btn sm v25cover-btn"; b.type="button"; b.id="v25reveal";
           se.appendChild(b);
         }
+        b.textContent="👁 点击复原原文";
+        b.onpointerdown=(e)=>{ try{ e.preventDefault(); e.stopPropagation(); SFX.tap(); }catch(x){}
+          const covered=se.classList.toggle("v25cover");
+          b.textContent=covered?"👁 点击复原原文":"🙈 重新遮盖";
+        };
       } else {
         se.classList.remove("v25cover");
         const b=se.querySelector("#v25reveal"); if(b) b.remove();
       }
-      refreshPanel();
     }
-    /* 说话面板：一个「开始说」按钮，说完自动收尾出对照 */
-    let said="";
-    function refreshPanel(){
-      box.innerHTML='<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:rgba(255,250,240,.55)">'
-        +'<div id="v25sayst" style="font-size:12.5px;color:var(--dim);margin-bottom:6px">'+(mode==="recall"?'复述模式：原文已遮住，凭记忆说本句，说完自动出逐字对照':'跟读模式：先听自动朗读，再跟着说一遍，说完自动出逐字对照')+'</div>'
-        +'<textarea data-sp-patch="1" id="v25said2" rows="3" placeholder="点下面「🎙 开始说」直接说；也可以在这里打字修改" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;line-height:1.8;background:#fff;resize:vertical">'+esc(said)+'</textarea>'
-        +'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'
-          +'<button class="btn sm primary" id="v25say" type="button">🎙 开始说</button>'
-          +'<button class="btn sm" id="v25cmp" type="button">查看对照</button>'
-          +'<button class="btn sm" id="v25rec" type="button">🔊 录音自评</button>'
-        +'</div>'
-        +'<div id="v25res2" style="margin-top:8px"></div>'
-      +'</div>';
-      const ta=box.querySelector("#v25said2"), sayBtn=box.querySelector("#v25say");
-      ta.oninput=()=>{ said=ta.value; };
-      box.querySelector("#v25cmp").onpointerdown=()=>{ try{SFX.tap();}catch(e){} stopVoice(); said=ta.value; showDiff(); };
-      /* GPT/Gemini 式：持续监听 + 草稿实时上屏 + 停顿 2.6 秒自动收尾出对照 */
-      let idleT=null, gotEcho=false;
-      const finishSay=()=>{
-        if(idleT){ clearTimeout(idleT); idleT=null; }
-        if(!liveRec) return;
-        stopVoice();                       /* 先停麦并落地草稿 */
-        said=ta.value;
-        sayBtn.textContent="🎙 开始说";
-        if(box.querySelector("#v25sayst")) box.querySelector("#v25sayst").textContent=said.trim()?"说完自动收尾——下方是逐字对照":"没听到内容，可再说一次或直接打字";
-        if(said.trim()) showDiff();
-      };
-      sayBtn.onpointerdown=()=>{
-        try{SFX.tap();}catch(e){}
-        try{ micRecStop(); }catch(_){}   /* v125：点识别时先收掉录音，避免两个都占麦克风 */
-        { const rb=box.querySelector("#v25rec"); if(rb) rb.textContent="🔊 录音自评"; }
-        if(liveRec){ finishSay(); return; }
-        killAutoTts(); ttsStop();
-        const st=box.querySelector("#v25sayst");
-        said=""; ta.value="";
-        gotEcho=false;
-        const dft=asrDraftBinder(ta);
-        liveRec=asrOnce('en-US',(fin,inter)=>{
-          dft.feed(fin,inter); said=ta.value;
-          if(inter||fin) gotEcho=true;
-          if(st) st.textContent=inter?("识别中："+inter.slice(-46)):(fin?("已听到："+String(fin).slice(-46)):"正在听……");
-          if(idleT) clearTimeout(idleT);
-          idleT=setTimeout(finishSay,3500);
-        },e=>{
-          liveRec=null; if(sayBtn) sayBtn.textContent="🎙 开始说";
-          if(st) st.textContent=e;
-        },()=>ta.isConnected&&host.isConnected);
-        if(!liveRec){ if(st) st.textContent="此浏览器无法调用语音识别——可直接在框里打字，再点「查看对照」"; return; }
-        if(st) st.textContent="正在听……直接说本句，停一下会自动出对照";
-        sayBtn.textContent="■ 停止";
-        /* 光标先落进输入框，再启动识别；启动后再补一次 focus，确保打字/续说都不丢焦点 */
-        try{ ta.focus(); }catch(_){}
-        try{ liveRec.start(); }catch(x){ liveRec=null; sayBtn.textContent="🎙 开始说"; if(st) st.textContent="启动失败——可直接打字，再点「查看对照」"; }
-        setTimeout(()=>{ try{ if(ta.isConnected&&!ta.value.trim()) ta.focus(); }catch(_){} },120);
-        /* 麦克风已开却迟迟没有任何识别回包：主动释放麦克风并说明原因，不再干占着。
-           v102：释放后读一次「实际用的麦克风」名字并显示——设备由浏览器决定，只能如实告知，
-                 让「到底走的哪个麦」有数据可查，而不是靠猜。 */
-        setTimeout(async ()=>{ try{
-          if(liveRec&&!gotEcho){
-            stopVoice(); sayBtn.textContent="🎙 开始说";
-            let lb=null;
-            try{ lb=(typeof window.__wdMicProbe==="function")?await window.__wdMicProbe():null; }catch(_){}
-            const phone=/iPhone|iPad|连续互通|Continuity/i.test(String(lb||""));
-            if(st&&st.isConnected) st.textContent="6 秒没有收到任何识别结果，已释放麦克风。"
-              +"当前浏览器实际使用的麦克风："+(lb?("「"+lb+"」"):"读取失败")
-              +(phone?"——这是手机/连续互通的麦，请在 系统设置→声音→输入 切回「MacBook 麦克风」":"")
-              +"。常见原因：内置识别服务连不上（需联网/被网络屏蔽），或系统未授权麦克风。可直接在框里打字。";
-          }
-        }catch(_){} },6000);
-      };
-      /* v125：录音自评——只听自己的发音（不识别）。
-         识别走「开始说」、录音走这里，两者共用同一支麦克风、不能同时开。 */
-      const recBtn=box.querySelector("#v25rec");
-      let recOn=false;
-      recBtn.onpointerdown=()=>{
-        try{SFX.tap();}catch(e){}
-        const st=box.querySelector("#v25sayst");
-        if(recOn){
-          recOn=false; recBtn.textContent="🔊 录音自评";
-          micRecStop();
-          if(st) st.textContent="录音已停止——下面可回放你的发音，或点「开始说」做逐字对照";
-          return;
-        }
-        recOn=true; recBtn.textContent="■ 停止录音";
-        stopVoice();   /* 停识别，避免抢麦克风 */
-        micRecStart(url=>{
-          recOn=false; recBtn.textContent="🔊 录音自评";
-          if(st) st.innerHTML='<span style="opacity:.7">你的发音：</span>'
-            +'<button class="btn sm" id="v25pl" type="button" style="padding:0 8px;font-size:11px">▶ 回放</button> '
-            +'<button class="btn sm" id="v25cl" type="button" style="padding:0 8px;font-size:11px">清除</button>';
-          const pb=st.querySelector("#v25pl"), cl=st.querySelector("#v25cl");
-          if(pb) pb.onpointerdown=()=>{ try{ new Audio(url).play(); }catch(_){} };
-          if(cl) cl.onpointerdown=()=>{ micRecClear(); if(st) st.textContent="录音已清除"; };
-        },()=>{
-          if(st) st.textContent="录音中……跟读本句，说完点「■ 停止录音」听回放";
-        });
-      };
-    }
-    function showDiff(){
-      const res=host.querySelector("#v25res2"); if(!res) return;
-      const s=(said||"").trim();
-      if(!s){ toast("还没说话——点「🎙 开始说」，或直接在框里打字"); return; }
-      const cov=oralScore(s,sn.text);
-      res.innerHTML='<div class="v25cov">本句'+(mode==="recall"?'复述':'跟读')+'覆盖率约 '+cov+'%（蓝色=漏掉的原文，红色=多说的内容）</div>'
-        +'<div class="v25diffbox">'+_oralDiffHtml(sn.text,s)+'</div>';
-    }
-    ms.onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(mode==="shadow") return; stopVoice(); said=""; paintMode("shadow"); };
-    mr.onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(mode==="recall") return; stopVoice(); said=""; paintMode("recall"); };
+    ms.onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(mode==="shadow") return; stopVoice(); if(voice) voice.stop(); paintMode("shadow"); };
+    mr.onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(mode==="recall") return; stopVoice(); if(voice) voice.stop(); paintMode("recall"); };
     paintMode("shadow");
-    host.querySelector("#v25oprev").onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(i>0){ stopVoice(); said=""; idx=i-1; renderSentRead(idx); } };
+    host.querySelector("#v25oprev").onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(i>0){ if(voice) voice.stop(); stopVoice(); idx=i-1; renderSentRead(idx); } };
     host.querySelector("#v25oedit").onpointerdown=()=>{ try{SFX.tap();}catch(e){}
-      stopVoice();
+      if(voice) voice.stop(); stopVoice();
       try{
         const eid="fullp:"+art.id+":"+si+":"+pa;
         openEditor({ uid:eid, editId:eid, id:art.aid+'-S'+(si+1)+'-P'+(pa+1),
@@ -3767,9 +4058,9 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       }catch(x){ toast("编辑器暂不可用"); }
     };
     host.querySelector("#v25ojump").onpointerdown=()=>{ try{SFX.tap();}catch(e){}
-      stopVoice(); histPush(()=>renderSentRead(i)); renderRetell(); };
+      if(voice) voice.stop(); stopVoice(); histPush(()=>renderSentRead(i)); renderRetell(); };
     host.querySelector("#v25onext").onpointerdown=()=>{ try{SFX.tap();}catch(e){}
-      stopVoice();
+      if(voice) voice.stop(); stopVoice();
       if(i+1>=sents.length){ histPush(()=>renderSentRead(i)); idx=0; renderSentRetell(0); }
       else { idx=i+1; renderSentRead(idx); }
     };
@@ -3782,88 +4073,35 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     if(i>=sents.length) i=Math.max(0,sents.length-1);
     const sn=sents[i];
     stopVoice();   /* 切到复述页先收麦停朗读，免得盖住口述 */
-    reciteT0=null; /* 每句重新计时，避免上一句没结算就把时间带过来 */
     const prevTxt=i>0?(sents[i-1]?sents[i-1].text:""):"";
     host.innerHTML='<div class="v25rd">'
       +bar('导游词 · 分句复述',(i+1)+' / '+sents.length+' 句','')
       +head()
       +(prevTxt?'<details class="v25ctx" style="margin-bottom:6px"><summary>上下文 · 上一句</summary><div style="padding:6px 8px;font-size:12.5px;color:var(--dim)">'+esc(prevTxt)+'</div></details>':'')
-      +'<div class="v25sent-no">第 '+(i+1)+' 句 · 先遮盖原文，复述完再点开对照</div>'
+      +'<div class="v25sent-no">第 '+(i+1)+' 句 · 原文已遮住；说完点「查看对照」再打开</div>'
       +_oralCover(sn.html? rich(sn.html):esc(sn.text))
-      +'<textarea data-sp-patch="1" id="v25said" rows="3" placeholder="复述本句（点「🎙 语音输入」开口说，也可直接打字）" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;line-height:1.8;background:rgba(255,250,240,.5);resize:vertical"></textarea>'
-      +'<div id="v25rstat" style="font-size:12px;color:var(--dim);margin:4px 0 0;min-height:16px"></div>'
-      +'<div class="v25rd-acts" id="v25actsMain">'
+      +'<div id="v25saybox">'+_oralVoiceHtml({hint:"复述模式：凭记忆说本句，说完会自动出逐字对照",lang:"en-US",unit:"句",label:"复述"})+'</div>'
+      +'<div class="v25rd-acts">'
         +'<button class="btn sm" id="v25oprev" type="button"'+(i>0?'':' disabled')+'>◀ 上一句</button>'
-        +'<button class="btn sm" id="v25oasr" type="button">🎙 语音输入</button>'
-        +'<button class="btn sm primary" id="v25ook" type="button">完成本句，查看对照</button>'
-        +'<button class="btn sm" id="v25oskipone" type="button">下一句 ⏭</button>'
-      +'</div>'
-      +'<div id="v25ost"></div>'
-      +'<div id="v25ores"></div></div>';
+        +'<button class="btn sm" id="v25retry" type="button">🔄 再练本句</button>'
+        +'<button class="btn sm primary" id="v25onext" type="button">'+(i+1>=sents.length?'进入整段重读 →':'下一句 ⏭')+'</button>'
+      +'</div></div>';
     _bindOralCover(host);
-    const ta=host.querySelector("#v25said"), asrBtn=host.querySelector("#v25oasr"), stEl=host.querySelector("#v25ost");
-    const advance=()=>{ stopVoice(); if(i+1>=sents.length) renderRead(2); else { idx=i+1; renderSentRetell(idx); } };
-    /* v104：复述计时——首次输入（打字或开口）打点，完成后结算本句词数与 WPM
-       计时条每 0.5 秒刷新，后台持续计算语速；页面被替换后自动停表，不留定时器 */
-    const rstat=host.querySelector("#v25rstat");
-    const markStart=()=>{ if(!reciteT0) reciteT0=Date.now(); };
-    ta.addEventListener("input",markStart);
-    let tick=setInterval(()=>{
-      if(!rstat||!rstat.isConnected){ clearInterval(tick); return; }
-      if(!reciteT0){ rstat.textContent=""; return; }
-      const d=(Date.now()-reciteT0)/1000, w=_reciteWords(ta.value||""), wpm=d>0.8?Math.round(w/(d/60)):0;
-      rstat.innerHTML='<span style="color:var(--gold)">⏱ '+Math.floor(d/60)+':'+String(Math.floor(d%60)).padStart(2,"0")+'</span>'
-        +' · '+w+' 词 · 当前 <b style="color:var(--gold)">'+(wpm||"—")+'</b> WPM';
-    },500);
-    let speechDur=0;
-    const mic=_bindReciteMic(ta,asrBtn,stEl,'en-US',d=>{ speechDur=d; },()=>ta.isConnected&&host.isConnected);
-    host.querySelector("#v25oskipone").onpointerdown=()=>{ try{SFX.tap();}catch(e){} advance(); };
-    host.querySelector("#v25oprev").onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(i>0){ stopVoice(); idx=i-1; renderSentRetell(idx); } };
-    host.querySelector("#v25ook").onpointerdown=()=>{
-      try{SFX.tap();}catch(e){}
-      if(mic&&mic.busy()){ toast("还在识别——先点「■ 停止」，等整句识别完再结算"); return; }
-      stopVoice();
-      const said=(ta.value||"").trim();
-      if(!said){ toast("还没有内容——可以直接打字，或点「下一句」先跳过"); return; }
-      /* v109：语音输入走容错对照（识别误差不算错），时长优先用录音实测时长 */
-      const byVoice=speechDur>0.8;
-      const cov=oralScore(said, sn.text, byVoice);
-      const dur=byVoice?speechDur:(reciteT0?(Date.now()-reciteT0)/1000:0);
-      speechDur=0;
-      const w=_reciteWords(said);
-      if(dur>0.8){ wdReciteTick(w,dur,"sent"); reciteT0=null; }
-      host.querySelector("#v25ores").innerHTML=
-        '<div class="v25cov">本句覆盖率约 '+cov+'%（蓝色=漏掉的原文，红色=多说的内容）'
-          +(byVoice?'<span style="opacity:.6"> · 语音输入已按识别容错计</span>':'')+'</div>'
-        +'<div class="v25diffbox">'+_oralDiffHtml(sn.text, said, byVoice)+'</div>'
-        +(dur>0.8?wdReciteInlineHtml(w,dur):'')
-        +'<div class="v25rd-acts">'
-          +'<button class="btn sm" id="v25retry" type="button">🔄 再试本句</button>'
-          +'<button class="btn sm" id="v25oprev2" type="button"'+(i>0?'':' disabled')+'>◀ 上一句</button>'
-          +'<button class="btn sm primary" id="v25onext" type="button">'+(i+1>=sents.length?'进入整段重读 →':'下一句 →')+'</button>'
-        +'</div>';
-      /* v126：结算后收起中排按钮（语音/完成/下一句），避免出现两个「下一句」挤在一起 */
-      const actMain=host.querySelector("#v25actsMain"); if(actMain) actMain.style.display="none";
-      host.querySelector("#v25onext").onpointerdown=()=>{ try{SFX.tap();}catch(e){} advance(); };
-      const p2=host.querySelector("#v25oprev2"); if(p2) p2.onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(i>0){ stopVoice(); idx=i-1; renderSentRetell(idx); } };
-      /* v127：再试本句——同一句可反复练：清对照结果、重新遮盖原文、恢复语音/完成按钮 */
-      const rt=host.querySelector("#v25retry");
-      if(rt) rt.onpointerdown=()=>{ try{SFX.tap();}catch(e){}
-        host.querySelector("#v25ores").innerHTML="";
-        const am=host.querySelector("#v25actsMain"); if(am) am.style.display="flex";
-        ta.value=""; reciteT0=null; speechDur=0;
-        if(stEl) stEl.textContent="";
-        const rs=host.querySelector("#v25rstat"); if(rs) rs.textContent="";
-        _recoverCover(host);
-        try{ ta.focus(); }catch(_){}
-      };
+    /* v95：与分句精读 / 整段复述共用同一套语音输入块 */
+    const voice=_oralVoiceBind(host.querySelector("#v25saybox"),{lang:"en-US",ref:()=>sn.text,unit:"句",label:"复述",mod:"sent",idleMs:4000});
+    const advance=()=>{ if(voice) voice.stop(); stopVoice(); if(i+1>=sents.length) renderRead(2); else { idx=i+1; renderSentRetell(idx); } };
+    host.querySelector("#v25onext").onpointerdown=()=>{ try{SFX.tap();}catch(e){} advance(); };
+    host.querySelector("#v25oprev").onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(i>0){ if(voice) voice.stop(); stopVoice(); idx=i-1; renderSentRetell(idx); } };
+    host.querySelector("#v25retry").onpointerdown=()=>{ try{SFX.tap();}catch(e){}
+      if(voice) voice.stop();
+      if(voice) voice.reset();
+      _recoverCover(host);
     };
   }
 
   /* ⑤ 整段复述：遮盖全节 → 复述 → 逐字对照 → 完成本节 */
   function renderRetell(){
     stopVoice();
-    reciteT0=null;  /* 整段复述重新计时 */
     const fullHtml=paras.map(p=>{
       const v=_oralSplit(_oralParaRaw(art,si,paOf(p),p.text));
       return (p.head?'<div class="v25subhead">'+esc(p.head)+'</div>':'')+(v.practice||v.body);
@@ -3872,68 +4110,24 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
       +bar('导游词 · 整段复述','第 '+(si+1)+' 节 · 第 5 步','')
       +head()
       +_oralCover(fullHtml)
-      +'<textarea data-sp-patch="1" id="v25said" rows="4" placeholder="整段复述上屏，也可直接打字" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;line-height:1.8;background:rgba(255,250,240,.5);resize:vertical"></textarea>'
-      +'<div id="v25rstat" style="font-size:12px;color:var(--dim);margin:4px 0 0;min-height:16px"></div>'
+      +'<div id="v25saybox">'+_oralVoiceHtml({hint:"整段复述：原文已遮住；说完点「查看对照」，可随时点「偷看原文」",lang:"en-US",unit:"节",label:"复述",placeholder:"整段复述上屏，也可直接打字"})+'</div>'
       +'<div class="v25rd-acts">'
-        +'<button class="btn sm" id="v25oasr" type="button">🎙 语音输入</button>'
-        +'<button class="btn sm primary" id="v25ook" type="button">完成复述，查看对照</button>'
         +'<button class="btn sm" id="v25opeek" type="button">👁 偷看原文</button>'
-      +'</div>'
-      +'<div id="v25ost"></div>'
-      +'<div id="v25ores"></div></div>';
+        +'<button class="btn sm primary" id="v25ofin" type="button">完成本节 →</button>'
+      +'</div></div>';
     _bindOralCover(host);
-    const ta=host.querySelector("#v25said"), asrBtn=host.querySelector("#v25oasr"), stEl=host.querySelector("#v25ost");
-    /* v104：整段复述计时（同分句复述，只是结算口径为整节） */
-    const rstat=host.querySelector("#v25rstat");
-    const markStart=()=>{ if(!reciteT0) reciteT0=Date.now(); };
-    ta.addEventListener("input",markStart);
-    let tick=setInterval(()=>{
-      if(!rstat||!rstat.isConnected){ clearInterval(tick); return; }
-      if(!reciteT0){ rstat.textContent=""; return; }
-      const d=(Date.now()-reciteT0)/1000, w=_reciteWords(ta.value||""), wpm=d>0.8?Math.round(w/(d/60)):0;
-      rstat.innerHTML='<span style="color:var(--gold)">⏱ '+Math.floor(d/60)+':'+String(Math.floor(d%60)).padStart(2,"0")+'</span>'
-        +' · '+w+' 词 · 当前 <b style="color:var(--gold)">'+(wpm||"—")+'</b> WPM';
-    },500);
-    let speechDur=0;
-    const mic=_bindReciteMic(ta,asrBtn,stEl,'en-US',d=>{ speechDur=d; },()=>ta.isConnected&&host.isConnected);
-    host.querySelector("#v25opeek").onpointerdown=()=>{
-      try{SFX.tap();}catch(e){}
-      const c=host.querySelector(".v25cover");
-      if(c){ c.classList.remove("v25cover"); const b=c.querySelector("#v25reveal"); if(b) b.remove(); }
+    /* v95：与分句精读 / 分句复述共用同一套语音输入块 */
+    const voice=_oralVoiceBind(host.querySelector("#v25saybox"),{lang:"en-US",ref:()=>allPlain(),unit:"节",label:"复述",mod:"whole",idleMs:5000});
+    /* 偷看原文 = 同一个遮罩状态：点一下复原，再点一下重新遮回；按钮不删除 */
+    const peek=host.querySelector("#v25opeek");
+    peek.onpointerdown=()=>{ try{SFX.tap();}catch(e){}
+      const c=host.querySelector(".v25covbox"); if(!c) return;
+      const covered=c.classList.toggle("v25cover");
+      const b=c.querySelector("#v25reveal");
+      if(b) b.textContent=covered?"👁 点击复原原文":"🙈 重新遮盖";
+      peek.textContent=covered?"👁 偷看原文":"🙈 重新遮盖";
     };
-    host.querySelector("#v25ook").onpointerdown=()=>{
-      try{SFX.tap();}catch(e){}
-      if(mic&&mic.busy()){ toast("还在识别——先点「■ 停止」，等整句识别完再结算"); return; }
-      stopVoice();
-      const said=(ta.value||"").trim();
-      if(!said){ toast("先复述本节，或点「偷看原文」"); return; }
-      const byVoice=speechDur>0.8;
-      const cov=oralScore(said, allPlain(), byVoice);
-      const dur=byVoice?speechDur:(reciteT0?(Date.now()-reciteT0)/1000:0);
-      speechDur=0;
-      const w=_reciteWords(said);
-      if(dur>0.8){ wdReciteTick(w,dur,"whole"); reciteT0=null; }
-      host.querySelector("#v25ores").innerHTML=
-        '<div class="v25cov">全节覆盖率约 '+cov+'%（蓝色=漏掉的原文，红色=多说的内容）'
-          +(byVoice?'<span style="opacity:.6"> · 语音输入已按识别容错计</span>':'')+'</div>'
-        +'<div class="v25diffbox">'+_oralDiffHtml(allPlain(), said, byVoice)+'</div>'
-        +(dur>0.8?wdReciteInlineHtml(w,dur):'')
-        +'<div class="v25rd-acts">'
-          +'<button class="btn sm" id="v25retryW" type="button">🔄 再试整段</button>'
-          +'<button class="btn sm primary" id="v25ofin" type="button">完成本节 →</button>'
-        +'</div>';
-      host.querySelector("#v25ofin").onpointerdown=()=>{ try{SFX.tap();}catch(e){} done(); };
-      /* v127：再试整段——整节可反复练：清对照、重新遮盖，语音/完成按钮本就可见 */
-      const rw=host.querySelector("#v25retryW");
-      if(rw) rw.onpointerdown=()=>{ try{SFX.tap();}catch(e){}
-        host.querySelector("#v25ores").innerHTML="";
-        ta.value=""; reciteT0=null; speechDur=0;
-        if(stEl) stEl.textContent="";
-        const rs=host.querySelector("#v25rstat"); if(rs) rs.textContent="";
-        _recoverCover(host);
-        try{ ta.focus(); }catch(_){}
-      };
-    };
+    host.querySelector("#v25ofin").onpointerdown=()=>{ try{SFX.tap();}catch(e){} if(voice) voice.stop(); done(); };
   }
 
   renderRead(1);
@@ -4042,8 +4236,9 @@ function runDynInterpUnit(u){
 function renderBoard(){
   const stream=document.getElementById("stream"); if(!stream||typeof st==="undefined"||!st) return;
   const v=v25st(); const U=allUnits(); const day=st.day||1;
+  try{ normalizeDoneState(); }catch(e){}   /* v95：旧档完成态补齐（幂等，只增不减） */
   /* 完成数只统计现存单元：防止删空单元后 done 残留导致分子虚高 */
-  const doneMap=v.done||{}, doneN=U.filter(u=>doneMap[u.n]).length;
+  const doneMap=v.done||{}, doneN=U.filter(u=>unitIsDone(u)).length;
   const pct=U.length?Math.round(100*doneN/U.length):0;
   const dueN=(function(){ try{ return srsDueKeys().length; }catch(e){ return 0; } })();
   if(day>planHorizon().N2){
@@ -4056,7 +4251,7 @@ function renderBoard(){
   const sh=sheet(day);
   ensurePlan25(day, sh, stream);
   const estMins=sh.items.reduce((a,it)=>{ const u=unitByN(it.u); return a+(u?u.mins:0); },0);
-  const doneToday=sh.items.filter(it=>sh.done&&sh.done[it.u]).length;
+  const doneToday=sh.items.filter(it=>unitIsDone(unitByN(it.u),sh)).length;
   let h='<div style="padding:8px 4px">'
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline">'
     +'<span style="font-size:22px;color:var(--neon);font-weight:700">第 '+day+' 日 / '+planHorizon().N2+'</span>'
@@ -4070,8 +4265,8 @@ function renderBoard(){
     const s=(v.sheets||{})["d"+d];
     let bg="var(--bg3)", st2="";
     if(s&&s.items&&s.items.length){
-      if(s.items.every(it=>s.done&&s.done[it.u])){ bg="var(--neon)"; st2=" · 全完成"; }
-      else if(s.items.some(it=>s.done&&s.done[it.u])){ bg="var(--gold)"; st2=" · 部分完成"; }
+      if(s.items.every(it=>unitIsDone(unitByN(it.u),s))){ bg="var(--neon)"; st2=" · 全完成"; }
+      else if(s.items.some(it=>unitIsDone(unitByN(it.u),s))){ bg="var(--gold)"; st2=" · 部分完成"; }
       else if(d<day) st2=" · 未完成";
     }
     const dt=d0?new Date(d0.getTime()+(d-1)*864e5):null;
@@ -4087,15 +4282,15 @@ function renderBoard(){
     h+='<div style="display:flex;gap:4px;margin:0 0 8px">'+sh.items.map(it=>{
       const u=unitByN(it.u); if(!u) return "";
       const wd=estMins?Math.max(7,Math.round(100*u.mins/estMins)):10;
-      const dn2=!!(sh.done&&sh.done[it.u]);
+      const dn2=unitIsDone(u,sh);
       const sc=subjColor(u.subj);
       return '<span title="单元 #'+u.n+' · 约 '+u.mins+' 分钟" style="width:'+wd+'%;height:6px;border-radius:3px;background:'+(dn2?sc:"var(--bg3)")+'"></span>';
     }).join("")+'</div>';
     /* 今日任务卡：横排一行（卡数超出即横向滚动），整卡可点即进入修行（不再单设按钮）。
        排序铁律：未完成靠前、已完成靠后；组内导游词类靠前，且两段导游词之间安插其他任务 */
     const all=sh.items.map((it,i)=>{ const u=unitByN(it.u); if(!u) return null;
-      const dn=!!(sh.done&&sh.done[it.u]);
-      const run=!dn&&!!(v.runs&&v.runs[u.n]);
+      const dn=unitIsDone(u,sh);
+      const run=unitRunState(u,sh);
       return { it, i, u, dn, run };
     }).filter(Boolean);
     const isTour=c=>s5Cat(c.u)==="tour";
@@ -4139,7 +4334,7 @@ function renderBoard(){
         const tip=subjShort+' '+catLabel+' · 单元 #'+u.n+(isOralU?' · '+oTitle:'');
         return '<div data-u="'+u.n+'" title="'+esc(tip)+'" style="cursor:pointer;flex:1 1 0;min-width:124px;max-width:280px;display:flex;flex-direction:column;gap:6px;padding:9px 10px 9px 12px;border:1px solid var(--border);border-left:3px solid '+accent+';border-radius:12px;background:'+(isCur?"rgba(255,255,255,.07)":"rgba(255,255,255,.03)")+';'+(c.dn?"opacity:.55;":"")+'">'
           +'<div style="display:flex;justify-content:space-between;align-items:center;gap:4px">'
-          +'<span style="font-size:10px;color:var(--dim);white-space:nowrap">今日 '+(idx+1)+'/'+cards.length+'</span>'
+          +'<span style="font-size:10px;color:var(--dim);white-space:nowrap">第 '+(idx+1)+'/'+cards.length+' 张</span>'
           +'<span style="font-size:9.5px;padding:0 5px;border-radius:8px;border:1px solid '+stCol+';color:'+stCol+';white-space:nowrap">'+stTxt+'</span></div>'
           +'<div style="font-size:13px;font-weight:600;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">'+esc(content)+'</div>'
           +'<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">'+badge+'<span style="font-size:9.5px;color:var(--dim)">#'+u.n+'</span></div>'
@@ -4210,7 +4405,7 @@ function renderBoard(){
     (bySubj[k]=bySubj[k]||{full:u.subj,arr:[]}).arr.push(u); });
   h+='<div style="margin-top:14px;font-size:12px;color:var(--dim)">任务推进 · 五科单元（25 日任务单完成情况）</div>';
   Object.keys(bySubj).forEach(k=>{
-    const g=bySubj[k]; const dn3=g.arr.filter(u=>doneMap[u.n]).length;
+    const g=bySubj[k]; const dn3=g.arr.filter(u=>unitIsDone(u)).length;
     const pc=g.arr.length?Math.round(100*dn3/g.arr.length):0;
     const ju=_nearestUnitOf(k);
     const sc=subjColor(k);
@@ -4263,11 +4458,12 @@ window.V25={ v25st, V25_TIERS, aiGenInterp25, mockInterp25, aiGenQuiz25, mockQui
   planHorizon, planFloor, startOralSectionFlow,
   _htmlPlainAligned, _htmlSlicePlain,   /* v136：修习室富文本按纯文本坐标分句，需复用这套切片 */
   subjColor, SUBJ_COLORS, s5Cat, S5_CATS,
-  VER:"v31",
+  VER:"v32",
   ttsSpeak, ttsStop, ttsPause, ttsResume, ttsCtlHtml, bindTtsCtl, ttsPickVoice, ttsHdOn, ttsHdSet, ttsHdStatus, ttsHdEnsure, ttsHdPct,
-  ttsVoiceList, ttsGetVoicePref, ttsSetVoicePref, ttsPreview, ttsDiag, ttsGetRate, ttsSetRate, ttsRateCycle,
+  ttsVoiceList, ttsGetVoicePref, ttsSetVoicePref, ttsPreview, ttsDiag, ttsSelfCheck, ttsGetRate, ttsSetRate, ttsRateCycle,
+  unitIsDone, unitRunState, normalizeDoneState,
   injectCards, cardMins, acctNote, settleAcct, subjStats, laggingSubjs };
-const VER="v31";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
+const VER="v32";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
 engineBoot();
 /* 页脚版本水印延迟填充——engineBoot() 在 IIFE 执行时 DOM 里还没有 footer（wd-v25.js 是 body 内同步加载的），
    所以 getElementById("v25ver") 会返回 null。等到 DOM 就绪后再填，这样即使 index.html 模板是旧版（硬编码 "…"）也能被 JS 覆盖 */

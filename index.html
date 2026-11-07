@@ -1717,7 +1717,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v94";
+const BUILD_VERSION="v95";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -3667,7 +3667,7 @@ function renderSidePanel(){
     const d=Math.min(_n2,cur+i); if(i>0&&d===cur) break;
     const sh=V25.sheet(d); const items=sh.items||[];
     const L=dayLabel(d);
-    const dn=items.filter(it=>sh.done&&sh.done[it.u]).length;
+    const dn=items.filter(it=>{ const u=V25.unitByN(it.u); return u?(V25.unitIsDone?V25.unitIsDone(u,sh):!!(sh.done&&sh.done[it.u])):false; }).length;
     const mins=items.reduce((s,it)=>{ const u=V25.unitByN(it.u); return s+(u?u.mins:0); },0);
     const pct=items.length?Math.round(dn/items.length*100):0;
     any=any||items.length>0;
@@ -3680,12 +3680,13 @@ function renderSidePanel(){
     } else {
       html+=items.map(it=>{
         const u=V25.unitByN(it.u); if(!u) return "";
-        const isDone=!!(sh.done&&sh.done[it.u]);
+        const isDone=V25.unitIsDone?V25.unitIsDone(u,sh):!!(sh.done&&sh.done[it.u]);
+        const isRun=!isDone&&V25.unitRunState?V25.unitRunState(u,sh):false;
         const c=V25.subjColor(u.subj);                          /* 主色永远=科目色，避免科目二与科目五撞色 */
         const cat=V25.s5Cat?V25.s5Cat(u):null;                 /* 科目五三类（导游词/知识问答/口译）只作文字标签 */
         const catLabel=cat?V25.S5_CATS[cat].label:"笔试";
         const catTag=`<i class="spctag" style="border-color:var(--border);color:var(--dim)">${catLabel}</i>`;
-        const dot=isDone?"✓":(it.kind==="new"?"▶":"☆");
+        const dot=isDone?"✓":(isRun?"▶":(it.kind==="new"?"▶":"☆"));
         const kIdx=it.kind==="new"?0:it.kind==="test"?2:1;
         const subj=String(u.subj||"").replace(/^科目([一二三四五]).*/,"科目$1").replace(/（.*$/,"");
         /* 统一标题：内容在前，编号后置小字；导游词=「篇 · 第N节「章节名」」，笔试=模块链 */
@@ -3707,7 +3708,7 @@ function renderSidePanel(){
           <div class="spcbody">
             ${t1Html}
             <div class="spct2"><em style="color:${c}">${esc(subj)}</em>${catTag} · ${u.items.length} 条目 · ${u.mins}分${secPr?' · 本节 '+secPr.done+'/'+secPr.total:''}
-              <i class="spctag ${relCls[kIdx]}">${relTag[kIdx]}</i>${isDone?'<i class="spctag kdone">已完成</i>':""}</div>
+              <i class="spctag ${relCls[kIdx]}">${relTag[kIdx]}</i>${isDone?'<i class="spctag kdone">已完成</i>':(isRun?'<i class="spctag" style="border-color:var(--gold);color:var(--gold)">进行中</i>':'')}</div>
           </div>
           <span class="spcdot">${dot}</span>
         </div>`;
@@ -10105,24 +10106,11 @@ function renderCfg(){
   if(ePrev) ePrev.onpointerdown=()=>{ SFX.tap(); try{ V25.ttsPreview(enSel&&enSel.value||V25.ttsGetVoicePref("en-US")); }catch(e){} };
   const dBtn=$("#ttsDiagBtn",ov), rBtn=$("#voiceRefresh",ov);
   if(dBtn) dBtn.onpointerdown=()=>{ SFX.tap();
-    if(!window.V25||!V25.ttsDiag){ if(diagOut){ diagOut.style.display=""; diagOut.textContent="任务引擎未加载，无法自检"; } return; }
-    let d; try{ d=V25.ttsDiag(); }catch(e){ d={err:String(e)}; }
-    if(diagOut){
-      diagOut.style.display="";
-      diagOut.textContent = d.err?("自检出错："+d.err)
-        : "自检结果（引擎版本 "+(d.ver||"未知")+"——不是 v19=浏览器缓存了旧页，需强制刷新）"
-        + "\n· 声音总数 "+d.total+"（中文 "+d.zh+" / 英文 "+d.en+"）"
-        + "\n· 中文默认选中 "+d.pickZh+"\n· 英文默认选中 "+d.pickEn
-        + "\n· 引擎状态 "+(d.speaking?"正在朗读":(d.paused?"暂停中（这就是不出声的常见原因，点朗读条上的⏯恢复）":"空闲"))
-        + "\n· 高清英文 "+(d.hd||"已关闭")+"（英文是否走神经语音，以播放时控制条的「✨高清」徽标为准）"
-        + (d.zhEnh>0?"\n· 已检测到 "+d.zhEnh+" 个增强/高级中文音色（下拉里排最前）":"")
-        + "\n· 中文声音清单 "+((d.zhNames&&d.zhNames.length)?d.zhNames.join("、"):"无")
-        + (d.ios?"\n· 当前设备 "+d.engine+"：iPhone/iPad 上所有浏览器都用苹果的 WebKit 内核，语音只有系统那几套，**不会出现 Google 语音**（平台限制，不是缺陷）":"")
-        + (d.ios?"\n· 手势/静音：iPad 若侧边静音开关打开、或页面不是从点按开始播放，都会没声音——请先点一下页面再点 🔊"
-          +"\n· 中文语音为空？设置 → 辅助功能 → 朗读内容 → 声音 → 中文，下载一个（如「婷婷」），再从主屏幕重开本页":"")
-        + "\n· 提示：Chrome 与 Safari 的声音列表本就不同（各自只报自己知道的声音）；刚下载的系统语音包，Chrome 必须【完全退出并重启】才会出现，Safari 刷新页面即可"
-        + "\n· Siri 语音：苹果不向第三方开放，任何浏览器都取不到，属系统限制"
-        + (d.total===0?"\n\n一个声音都没有？Chrome 需联网加载语音列表，或重启浏览器再试。":"");
+    if(!window.V25||!V25.ttsSelfCheck){ if(diagOut){ diagOut.style.display=""; diagOut.textContent="任务引擎未加载，无法自检"; } return; }
+    /* v95：同一次点击的手势栈里跑完接口/声音/窗口/内核/喇叭短音/语音时间线，
+       结果逐行留在下面这块，真机直接截图即可。 */
+    try{ V25.ttsSelfCheck(diagOut); }catch(e){
+      if(diagOut){ diagOut.style.display=""; diagOut.textContent="自检出错："+(e&&e.message||e); }
     }
   };
   if(rBtn) rBtn.onpointerdown=()=>{ SFX.tap(); try{ if(window.speechSynthesis) speechSynthesis.getVoices(); }catch(e){} fillVoices();
