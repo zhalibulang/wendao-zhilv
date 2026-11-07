@@ -1255,11 +1255,20 @@ const TTS_STORE="wdzx.tts";
 const TTS_HD_KEY="wdzx.ttsHD";
 const TTS_SEG_MAX=160;   /* 单句上限（字符），超过按逗号二级切分 */
 let _ttsVoices=[]; let _ttsHooked=false;
+let _ttsRetry=0;     /* v147：无响应自愈只做一次，避免无限重试却不给提示 */
 let _ttsCur=null;   /* 防 GC：Chrome 会回收局部 utterance 导致静默无声（crbug 679437），必须模块级持有 */
 let _ttsHdInst=null; let _ttsHdAudio=null; let _ttsHdLoading=null; let _ttsHdFailed=false; let _ttsHdPct=0; let _ttsHdPromise=null;
 /* 播放会话：系统队列与 HD 播放共用（stopped/el/lang），ttsStop 一停全停 */
 const _ttsQ={ items:[], i:0, el:null, lang:"", stopped:true, paused:false, rate:1, suppress:false };
 
+/* v147：iPadOS / iOS 判定。iPadOS 13+ 默认伪装成 macOS（MacIntel + 多点触控），要一起认。 */
+const _TTS_IOS=(()=>{
+  try{
+    const ua=String(navigator.userAgent||"");
+    return /iPad|iPhone|iPod/.test(ua)||(navigator.platform==="MacIntel"&&(navigator.maxTouchPoints||0)>1);
+  }catch(e){ return false; }
+})();
+let _ttsUnlocked=false;
 function _ttsLoadVoices(){
   try{
     const synth=window.speechSynthesis; if(!synth) return;
@@ -1269,6 +1278,30 @@ function _ttsLoadVoices(){
     }
   }catch(e){}
 }
+/* v147：iOS 音频会话解锁——必须在【用户手势的同步栈里】说一句极短的话，
+   之后同一个页面的 speak() 才能稳定发声。桌面/安卓 getVoices 非空说明早已就绪，直接跳过。 */
+function _ttsUnlockNow(force){
+  if(_ttsUnlocked&&!force) return;
+  try{
+    const synth=window.speechSynthesis; if(!synth) return;
+    if(!_TTS_IOS&&(synth.getVoices()||[]).length){ _ttsUnlocked=true; return; }
+    const u=new SpeechSynthesisUtterance(" ");
+    u.volume=0; u.rate=1; u.lang="en-US";
+    try{ synth.speak(u); }catch(e){}
+    _ttsUnlocked=true;
+    try{ console.log("[TTS-iOS] 音频会话已解锁 voiceN="+(synth.getVoices()||[]).length); }catch(e){}
+  }catch(e){}
+}
+/* 首次任意点按即预热（此时一定在手势里），避免第一次点「🔊」才解锁、时序已晚 */
+try{
+  if(typeof document!=="undefined"&&document.addEventListener){
+    const onFirstGesture=()=>{
+      try{ document.removeEventListener("pointerdown",onFirstGesture,true); }catch(e){}
+      _ttsUnlockNow();
+    };
+    document.addEventListener("pointerdown",onFirstGesture,true);
+  }
+}catch(e){}
 function _ttsPrefs(){ try{ return JSON.parse(localStorage.getItem(TTS_STORE)||"{}"); }catch(e){ return {}; } }
 function _ttsSavePrefs(p){ try{ localStorage.setItem(TTS_STORE,JSON.stringify(p)); }catch(e){} }
 
@@ -1374,6 +1407,19 @@ function ttsDiag(){ /* 一键自检：声音列表/当前选中/引擎状态，�
     zhNames:zhAll.slice(0,12).map(v=>v.name+"["+gradeOf(v)+"]"),
     pickZh:fm(vz), pickEn:fm(ve),
     speaking:synth?!!synth.speaking:false, paused:synth?!!synth.paused:false,
+    ios:_TTS_IOS, unlocked:_ttsUnlocked,
+    engine:(function(){
+      /* v147：iOS/iPadOS 上 Chrome/Edge/Firefox 全走 WebKit，语音只有系统那几套，绝不会有 Google 语音 */
+      try{
+        const ua=String(navigator.userAgent||"");
+        if(_TTS_IOS){
+          const m=ua.match(/(CriOS|FxiOS|EdgiOS|OPiOS)\//);
+          return "iOS WebKit（"+(m?m[1].replace("iOS","")+"，底层仍是 Safari 内核":"Safari")+"）";
+        }
+        if(/Android/i.test(ua)) return "Android Chrome"; 
+        return "桌面浏览器";
+      }catch(e){ return "未知"; }
+    })(),
     hd:ttsHdOn()?(_ttsHdInst?"已就绪":"加载中/失败"):"已关闭",
     rawList:rawAll,  /* 完整原始清单——设置页自检弹窗会显示 */
     ver:(typeof V25!=="undefined"&&V25.VER)||"" };
@@ -1423,11 +1469,31 @@ function _ttsSanitize(text){
   return s;
 }
 
+/* v147：设备没装对应语言语音时给一句「照着做」的提示（iOS 上常见：从没下载过中文语音）。
+   注意 getVoices() 首次为空是正常现象，此时不误报，等 voiceschanged 再说。 */
+let _ttsVoiceWarned=false;
+function _ttsVoiceWarnIfNeeded(wantZh){
+  try{
+    if(_ttsVoiceWarned) return;
+    const synth=window.speechSynthesis; if(!synth||!synth.getVoices) return;
+    const all=synth.getVoices()||[];
+    if(!all.length) return;
+    if(all.some(v=>wantZh?/^zh/i.test(v.lang):/^en/i.test(v.lang))) return;
+    _ttsVoiceWarned=true;
+    toast(wantZh
+      ? "这台设备还没装中文语音：设置 → 辅助功能 → 朗读内容 → 声音 → 中文，下载一个再回来"
+      : "这台设备没有英文语音：设置 → 辅助功能 → 朗读内容 → 声音 → 英语，下载一个再回来");
+  }catch(e){}
+}
+
 function ttsSpeak(text, lang, el, _noHd){
   const synth=window.speechSynthesis;
   let s=_ttsSanitize(String(text||"")).replace(/【中文对照】[\s\S]*$/,"").trim();
-  if(!synth){ toast("当前环境不支持语音朗读——建议用 Chrome/Edge/Safari"); return; }
-  if(!s) return;
+  if(!synth){ toast("当前浏览器不支持语音朗读——请用 Safari / Chrome / Edge 打开"); return; }
+  if(!s){ toast("这句没有可朗读的文字"); return; }
+  /* v147：先把音频会话解锁（必须在手势同步栈里），再 cancel 旧队列，
+     最后【同步】起播——iOS/iPadOS 的 speak() 一旦跨过 setTimeout/await 就会被静默丢弃。 */
+  _ttsUnlockNow();
   /* 重入保护：正在播时再次点击 → 先设 stopped 让前一个尽快退出，等它 resolve 再启新的
      HD 是 async 循环，_ttsHalt 设 _ttsQ.stopped 后 generate() 可能还在跑，
      必须等它真正 resolve 才能启下一个，否则两个 async 循环争抢 Audio 对象会卡死 */
@@ -1444,7 +1510,9 @@ function ttsSpeak(text, lang, el, _noHd){
     console.warn("[TTS] lang 参数 "+lang+" 与文本内容不符（hasZh="+hasZh+"），修正为 "+detectedLang+" text="+s.slice(0,50));
   }
   lang=detectedLang;
+  _ttsRetry=0;
   _ttsHalt(); ttsStopMarks(); _ttsHdBadge(false);   /* 系统声道起播：高清徽标必须熄灭 */
+  _ttsVoiceWarnIfNeeded(hasZh);                     /* 设备没装该语言语音 → 给可照做的提示 */
   /* HD 英文：开关开启且引擎就绪 → Kokoro 神经语音；未就绪则后台预热，本次先用系统 TTS，不打断用户 */
   if(/^en/i.test(lang)&&ttsHdOn()&&!_noHd){
     if(_ttsHdInst){
@@ -1460,8 +1528,10 @@ function ttsSpeak(text, lang, el, _noHd){
   _ttsQ.items=_ttsSplitSentences(s); _ttsQ.i=0;
   _ttsQ.el=el||null; _ttsQ.lang=lang; _ttsQ.stopped=false; _ttsQ.rate=ttsGetRate(); _ttsQ.suppress=false;
   if(el) el.classList.add("tts-speaking");
-  /* cancel() 后立刻 speak() 会被 Chrome 静默吞掉——稍等一拍再起播 */
-  setTimeout(()=>{ if(!_ttsQ.stopped) _ttsPlayNext(synth); },60);
+  /* v147：原先这里等 60ms 再起播，是为了避 Chrome「cancel 后立刻 speak 被吞」；
+     但 iPadOS Safari 要求首帧 speak() 留在手势栈里，延时=静默失败。改为同步起播，
+     并把 60ms 的那次机会挪进 _ttsPlayNext 的无响应自愈里。 */
+  _ttsPlayNext(synth);
 }
 function _ttsPlayNext(synth, bare){
   if(_ttsQ.stopped||_ttsQ.paused) return;
@@ -1476,20 +1546,29 @@ function _ttsPlayNext(synth, bare){
     if(!v){ _ttsLoadVoices(); v=ttsPickVoice(_ttsQ.lang); }
     /* 语族错配兜底：无论存档怎么脏，中文声音绝不允许被挂到英文朗读上（反之亦然） */
     if(v&&((/^zh/i.test(_ttsQ.lang)&&!/^zh/i.test(v.lang))||(/^en/i.test(_ttsQ.lang)&&!/^en/i.test(v.lang)))) v=null;
-    /* 终极兜底：v 仍为 null（Chrome voiceschanged 还没触发、或声音列表为空）时，
-       硬编码挑一个默认声音——绝不放 null 给 utterance.voice（Mac 中文 locale 的默认声道就是中文声音！） */
+    /* 终极兜底：v 仍为 null（iOS 首次 getVoices 为空、或系统只有英文声音）时，
+       只按语言前缀再找一次，绝不按硬编码语音名硬套——iOS 上根本没有 Google/Samantha 这套命名。
+       仍找不到就交给调用方「不指定 voice」走系统默认，而不是 return 静默失败。 */
     if(!v){
-      const fallbackVoices={
-        zh:["Tingting","Meijia","Sinji","YaoYao","Huihui","Kangkang","Li-Mu","Shanshan"],
-        en:["Samantha","Aaron","Daniel","Alex","Karen","Moira","Tessa","Vicki"]
-      };
-      const wantZh=/^zh/i.test(_ttsQ.lang);
-      const names=wantZh?fallbackVoices.zh:fallbackVoices.en;
       const all=window.speechSynthesis&&window.speechSynthesis.getVoices?window.speechSynthesis.getVoices():[];
-      v=all.find(x=>names.some(n=>new RegExp(n,"i").test(x.name)));
-      if(!v) v=all.find(x=>wantZh?/^zh/i.test(x.lang):/^en/i.test(x.lang));
+      const wantZh=/^zh/i.test(_ttsQ.lang);
+      v=all.find(x=>wantZh?/^zh/i.test(x.lang):/^en/i.test(x.lang))||null;
+      if(!v&&wantZh){  /* 中文内容但设备只有别的语言：退而求其次用系统默认声音念（总比不出声好） */
+        try{ console.log("[TTS] 设备无中文语音，改用系统默认声音；建议到 设置→辅助功能→朗读内容→声音→中文 下载"); }catch(e){}
+        v=null;
+      }
     }
-    if(v){ u.voice=v; u.lang=v.lang; } else u.lang=_ttsQ.lang;
+    if(v){
+      /* v147：voice 对象可能已失效（系统语音被删/切换）——直接赋值会抛错并整句不出声。
+         赋值失败就退回「不指定 voice」走系统默认，绝不因为挑声音失败而静默。 */
+      try{ u.voice=v; u.lang=v.lang; }
+      catch(e){ v=null; try{ console.warn("[TTS] 语音对象赋值失败，改用系统默认声音："+(e&&e.message||e)); }catch(_e){} }
+    }
+    if(!v){
+      if(_TTS_IOS){ /* v147：iOS 拿不到匹配语音时【不指定 voice、也不硬塞 lang】——
+                       交给系统默认声音。乱塞一个系统没有的 lang 在 iPadOS 上会静默无声。 */ }
+      else u.lang=_ttsQ.lang;
+    }
     u.rate=(/^zh/i.test(u.lang||_ttsQ.lang)?1:0.9)*(_ttsQ.rate||1); u.pitch=1;
     /* 诊断日志——在 Chrome DevTools Console 搜 [TTS] 就能看到每次挂的声音 */
     console.log("[TTS] lang="+_ttsQ.lang+" pickVoice="+ (v?(v.name+"/"+v.lang):"null") +" → utterance.voice="+(u.voice?(u.voice.name+"/"+u.lang):"null")+" utterance.lang="+u.lang+" text="+(seg.slice(0,40)));
@@ -1502,14 +1581,22 @@ function _ttsPlayNext(synth, bare){
       if(code&&code!=="interrupted"&&code!=="canceled") toast("语音中断（"+code+"）——可再点一次 🔊 重试"); };
     _ttsCur=u;                                  /* 持有引用，防 Chrome GC 吞声 */
     synth.speak(u);
-    try{ synth.resume(); }catch(e){}            /* Chrome 卡在 paused 态的解卡惯用法 */
-    setTimeout(()=>{                            /* 无响应自愈：1.6s 没 onstart → cancel 后重试（始终有 voice，绝不放 null） */
-      if(!_ttsQ.stopped&&!_ttsQ.paused&&!started&&_ttsCur===u){
-        _ttsCur=null;
-        try{ synth.cancel(); }catch(e){}
-        _ttsQ.i--;                              /* 回退当前段，换浏览器默认语言声道重放（带 voice） */
-        setTimeout(()=>{ if(!_ttsQ.stopped&&!_ttsQ.paused) _ttsPlayNext(synth); },100);
+    /* v147：只在真被 pause 过时才 resume（iOS 上无差别 resume 偶尔会把刚排进去的 utterance 顶掉） */
+    try{ if(synth.paused) synth.resume(); }catch(e){}
+    setTimeout(()=>{                            /* 无响应自愈：1.6s 没 onstart → cancel 后重试一次 */
+      if(_ttsQ.stopped||_ttsQ.paused||started||_ttsCur!==u) return;
+      _ttsCur=null;
+      try{ synth.cancel(); }catch(e){}
+      _ttsQ.i--;                              /* 回退当前段，换浏览器默认语言声道重放（带 voice） */
+      if(_ttsRetry>=1){                       /* v147：只自愈一次，别无限重试把用户蒙在鼓里 */
+        if(_ttsQ.el) _ttsQ.el.classList.remove("tts-speaking");
+        toast(_TTS_IOS
+          ? "没有发出声音：请检查 iPad 侧边静音开关与音量；若是「添加到主屏幕」打开的，先在 Safari 里试一次"
+          : "没有发出声音：请检查系统静音与音量，或到 设置→语音 里点「朗读自检」");
+        return;
       }
+      _ttsRetry++;
+      setTimeout(()=>{ if(!_ttsQ.stopped&&!_ttsQ.paused) _ttsPlayNext(synth); },120);
     },1600);
   }catch(e){
     if(_ttsQ.el) _ttsQ.el.classList.remove("tts-speaking");
@@ -1517,10 +1604,17 @@ function _ttsPlayNext(synth, bare){
   }
 }
 function _ttsHalt(){ /* 停系统队列 + HD 音频；不清高亮（由调用方决定） */
+  const prev=_ttsCur;   /* v147：先留住「我们自己正在播的那条」，iOS 分支要用它判断该不该 cancel */
   _ttsQ.stopped=true; _ttsQ.paused=false; _ttsQ.items=[]; _ttsQ.i=0; _ttsCur=null;
   try{
     const synth=window.speechSynthesis;
-    if(synth){ synth.cancel(); synth.resume(); }  /* resume：解 Chrome「上次暂停后 cancel 仍卡 paused」的残留态 */
+    if(synth){
+      /* v147：iOS 上只停「我们自己正在播的那条」。队列空着时多余 cancel 会把紧跟着的 speak 一起吞掉，
+         也会把首次解锁用的静音占位句取消掉，导致整个会话没被激活。 */
+      if(_TTS_IOS){ if(prev&&(synth.speaking||synth.pending)) synth.cancel(); }
+      else synth.cancel();
+      if(synth.paused) synth.resume();   /* 解 Chrome「上次暂停后 cancel 仍卡 paused」的残留态 */
+    }
   }catch(e){}
   try{
     if(_ttsHdAudio){ _ttsHdAudio.pause(); if(_ttsHdAudio.src&&_ttsHdAudio.src.indexOf("blob:")===0) URL.revokeObjectURL(_ttsHdAudio.src); _ttsHdAudio=null; }
@@ -2490,8 +2584,9 @@ function drawReciteGroup(host, ps, next){
       se.style.cursor="pointer"; se.title="点击立即显示"; se.onpointerdown=(ev)=>{ try{ if(ev&&ev.target){ const t=ev.target; if(/BUTTON|INPUT|TEXTAREA|A|SELECT/i.test(t.tagName)) return; } SFX.tap();}catch(e){} sk&&sk(); }; }
     bindTtsCtl(host);
     host.querySelector("#v25stts").onpointerdown=()=>{ try{SFX.tap();}catch(e){} ttsSpeak(it.s, lang, se); };
-    /* 自动朗读：进入句级页即播报本句（已切页时旧节点脱离，不再补播） */
-    setTimeout(()=>{ try{ if(host.isConnected&&se&&se.isConnected) ttsSpeak(it.s, lang, se); }catch(e){} },240);
+    /* 自动朗读：进入句级页即播报本句（已切页时旧节点脱离，不再补播）
+       v147：iPadOS 不允许脱离手势 speak，自动播必然静音，改为只在桌面/安卓自动播 */
+    if(!_TTS_IOS) setTimeout(()=>{ try{ if(host.isConnected&&se&&se.isConnected) ttsSpeak(it.s, lang, se); }catch(e){} },240);
     _bindEdits(host, ()=>renderSentence(i));
     _bindOralEdits(host, ()=>renderSentence(i));
     host.querySelector("#v25sprev").onpointerdown=()=>{ try{SFX.tap();}catch(e){} renderSentence(Math.max(0,i-1)); };
@@ -3482,9 +3577,10 @@ function drawOralFlow(host, art, sec, si, p0, p1, done){
     se.style.cursor="pointer"; se.title="点击立即显示本句";
     se.onpointerdown=()=>{ try{SFX.tap();}catch(e){} killAutoTts(); sk&&sk(); };
 
-    /* 自动朗读：进页即读；离开/开始说话/切模式时立即取消，避免和识别抢麦 */
+    /* 自动朗读：进页即读；离开/开始说话/切模式时立即取消，避免和识别抢麦
+       v147：iPadOS 脱离手势的 speak 会被静默丢弃，iOS 上不自动播，用户点 🔊 即可 */
     killAutoTts();
-    autoTtsT=setTimeout(()=>{ autoTtsT=null; try{ if(se.isConnected) ttsSpeak(sn.text,'en-US',se); }catch(e){} },260);
+    if(!_TTS_IOS) autoTtsT=setTimeout(()=>{ autoTtsT=null; try{ if(se.isConnected) ttsSpeak(sn.text,'en-US',se); }catch(e){} },260);
     host.querySelector("#v25otts").onpointerdown=()=>{ try{SFX.tap();}catch(e){} killAutoTts(); if(liveRec) stopVoice(); ttsSpeak(sn.text,'en-US',se); };
 
     /* 模式：跟读=原文可见；复述=原文模糊遮盖（可点复原） */
@@ -4130,11 +4226,11 @@ window.V25={ v25st, V25_TIERS, aiGenInterp25, mockInterp25, aiGenQuiz25, mockQui
   planHorizon, planFloor, startOralSectionFlow,
   _htmlPlainAligned, _htmlSlicePlain,   /* v136：修习室富文本按纯文本坐标分句，需复用这套切片 */
   subjColor, SUBJ_COLORS, s5Cat, S5_CATS,
-  VER:"v29",
+  VER:"v30",
   ttsSpeak, ttsStop, ttsPause, ttsResume, ttsCtlHtml, bindTtsCtl, ttsPickVoice, ttsHdOn, ttsHdSet, ttsHdStatus, ttsHdEnsure, ttsHdPct,
   ttsVoiceList, ttsGetVoicePref, ttsSetVoicePref, ttsPreview, ttsDiag, ttsGetRate, ttsSetRate, ttsRateCycle,
   injectCards, cardMins, acctNote, settleAcct, subjStats, laggingSubjs };
-const VER="v29";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
+const VER="v30";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
 engineBoot();
 /* 页脚版本水印延迟填充——engineBoot() 在 IIFE 执行时 DOM 里还没有 footer（wd-v25.js 是 body 内同步加载的），
    所以 getElementById("v25ver") 会返回 null。等到 DOM 就绪后再填，这样即使 index.html 模板是旧版（硬编码 "…"）也能被 JS 覆盖 */

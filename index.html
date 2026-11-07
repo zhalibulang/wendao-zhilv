@@ -1694,7 +1694,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v92";
+const BUILD_VERSION="v93";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -10050,7 +10050,7 @@ function renderCfg(){
                     .sort((a,b)=>rank(b)-rank(a));
       const opts=(a)=>a.map(v=>`<option value="${esc(v.name)}"${v.name===cur?" selected":""}>${esc(v.name)}${gradeTag(v.grade)} · ${esc(v.lang)}${v.local?"":" · 网络"}</option>`).join("");
       sel.innerHTML=arr.length?`<optgroup label="${wantZh?"中文声音（高质量在前）":"英文声音（高质量在前）"}">${opts(arr)}</optgroup>`
-        :`<option value="">（本浏览器未列出${wantZh?"中":"英"}文声音）</option>`;
+        :`<option value="">（未列出${wantZh?"中":"英"}文声音：设置 → 辅助功能 → 朗读内容 → 声音 → ${wantZh?"中文":"英语"} 下载一个）</option>`;
       if(cur&&!sel.querySelector(`option[value="${CSS.escape(cur)}"]`)) sel.value=cur; /* 当前声音不在列表时保留显示 */
     };
     if(zhSel) mk(zhSel,true,(()=>{ try{return V25.ttsGetVoicePref("zh-CN")}catch(e){return ""} })());
@@ -10075,6 +10075,9 @@ function renderCfg(){
         + "\n· 高清英文 "+(d.hd||"已关闭")+"（英文是否走神经语音，以播放时控制条的「✨高清」徽标为准）"
         + (d.zhEnh>0?"\n· 已检测到 "+d.zhEnh+" 个增强/高级中文音色（下拉里排最前）":"")
         + "\n· 中文声音清单 "+((d.zhNames&&d.zhNames.length)?d.zhNames.join("、"):"无")
+        + (d.ios?"\n· 当前设备 "+d.engine+"：iPhone/iPad 上所有浏览器都用苹果的 WebKit 内核，语音只有系统那几套，**不会出现 Google 语音**（平台限制，不是缺陷）":"")
+        + (d.ios?"\n· 手势/静音：iPad 若侧边静音开关打开、或页面不是从点按开始播放，都会没声音——请先点一下页面再点 🔊"
+          +"\n· 中文语音为空？设置 → 辅助功能 → 朗读内容 → 声音 → 中文，下载一个（如「婷婷」），再从主屏幕重开本页":"")
         + "\n· 提示：Chrome 与 Safari 的声音列表本就不同（各自只报自己知道的声音）；刚下载的系统语音包，Chrome 必须【完全退出并重启】才会出现，Safari 刷新页面即可"
         + "\n· Siri 语音：苹果不向第三方开放，任何浏览器都取不到，属系统限制"
         + (d.total===0?"\n\n一个声音都没有？Chrome 需联网加载语音列表，或重启浏览器再试。":"");
