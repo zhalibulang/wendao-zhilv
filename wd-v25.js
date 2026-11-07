@@ -33,20 +33,26 @@ function _applyCsvOverrides(){
     sec.sentences=sents; sec.sents=sents.length; sec.words=_cntWords(sec.text);
   };
   const ovAt=+O.stamp||0;
-  const _reconcileLocal=(aid,si,paras)=>{
+  /* v97：CSV 导入不再「先删后说」——先收集会被覆盖的旧校订，交给界面确认；
+     确认后才真正删除（覆盖语义不变），取消则原样保留。collect 为空时仍按旧逻辑立即删。 */
+  const _reconcileLocal=(aid,si,paras,collect)=>{
     try{
       if(!st||!st.edits) return;
       const base="fullp:"+aid+":"+si+":", whole="full:"+aid+":"+si, whole2="fullsec:"+aid+":"+si;
+      const _drop=(k,meta)=>{
+        if(collect) collect.push(Object.assign({key:k,at:(st.edits[k]&&st.edits[k][0]&&st.edits[k][0].at)||""},meta));
+        else delete st.edits[k];
+      };
       Object.keys(st.edits).forEach(k=>{
         const arr=st.edits[k]||[]; const rawAt=(arr[0]||{}).at;
         /* 修订时间是 ISO 字符串；兼容历史/数字时间戳，解析不出就按 0 处理 */
         const at=typeof rawAt==="number"?rawAt:(Date.parse(rawAt||"")||0);
-        if(k===whole){ if(at&&ovAt&&at<ovAt) delete st.edits[k]; return; }
+        if(k===whole){ if(at&&ovAt&&at<ovAt) _drop(k,{kind:"full",art:aid,sec:si}); return; }
         if(k===whole2){
           /* 只在能确定「修订确实早于 CSV」时才删。以前写成 `!at||!ovAt||at<ovAt`，
              at 解析失败(0) 就把整片修订删掉——用户保存的稿子刷新一次就消失，代价太大。
              宁可多留一份（最坏是 CSV 改动没立刻压过它），也不能误删。 */
-          if(at&&ovAt&&at<ovAt) delete st.edits[k];
+          if(at&&ovAt&&at<ovAt) _drop(k,{kind:"fullsec",art:aid,sec:si});
           return;
         }
         if(k.indexOf(base)!==0) return;
@@ -57,7 +63,7 @@ function _applyCsvOverrides(){
            措辞变了且修订早于 CSV → CSV 赢，删掉旧修订 */
         const same = !!(p && _plainOf(et)===String(p.text||"").replace(/\s+/g," ").trim());
         if(same) return;
-        if(at&&ovAt&&at<ovAt) delete st.edits[k];
+        if(at&&ovAt&&at<ovAt) _drop(k,{kind:"fullp",art:aid,sec:si,para:pi});
       });
     }catch(e){}
   };
@@ -75,15 +81,27 @@ function _applyCsvOverrides(){
     }catch(e){}
   };
   if(O.oralSec){
+    const csvDelPlan=[];   /* v97：本次导入会被覆盖的旧校订（交给界面确认后再删） */
     Object.keys(O.oralSec).forEach(k=>{
       const a=k.split("|"), aid=a[0], si=+a[1];
       const o=(D.oralFull||[]).find(x=>x.id===aid); if(!o) return;
       const sec=(o.sections||[])[si]; if(!sec) return;
       const list=O.oralSec[k]; if(!Array.isArray(list)||!list.length) return;
       sec.paragraphs=list.map((p,i)=>({ n:i+1, text:String(p.text||""), head:String(p.head||""), note:String(p.note||"") }));
-      _reconcileLocal(aid,si,sec.paragraphs); _restoreRich(aid,si,sec.paragraphs);
+      _reconcileLocal(aid,si,sec.paragraphs,csvDelPlan); _restoreRich(aid,si,sec.paragraphs);
       _rebuildSec(sec); nOral++;
     });
+    if(csvDelPlan.length){
+      /* 只登记，不删除：确认弹窗里点「确认覆盖」才按原逻辑删；点「保留校订」则不删。
+         同一 key 只登记一次，避免重复调用时弹窗条数虚高。 */
+      try{
+        const old=window.__wdCsvPending;
+        const src=(old&&old.stamp===ovAt)?old.plan.concat(csvDelPlan):csvDelPlan;
+        const seen={}, plan=[];
+        src.forEach(it=>{ if(!seen[it.key]){ seen[it.key]=1; plan.push(it); } });
+        window.__wdCsvPending={stamp:ovAt, plan};
+      }catch(e){}
+    }
   }
   if(O.oral){
     Object.keys(O.oral).forEach(k=>{
@@ -4546,13 +4564,13 @@ window.V25={ v25st, V25_TIERS, aiGenInterp25, mockInterp25, aiGenQuiz25, mockQui
   planHorizon, planFloor, startOralSectionFlow,
   _htmlPlainAligned, _htmlSlicePlain,   /* v136：修习室富文本按纯文本坐标分句，需复用这套切片 */
   subjColor, SUBJ_COLORS, s5Cat, S5_CATS,
-  VER:"v33",
+  VER:"v34",
   ttsSpeak, ttsStop, ttsPause, ttsResume, ttsCtlHtml, bindTtsCtl, ttsPickVoice, ttsHdOn, ttsHdSet, ttsHdStatus, ttsHdEnsure, ttsHdPct,
   ttsVoiceList, ttsGetVoicePref, ttsSetVoicePref, ttsPreview, ttsDiag, ttsSelfCheck, ttsGetRate, ttsSetRate, ttsRateCycle,
   unitIsDone, unitRunState, normalizeDoneState,
   oralSecText, oralSecParas, oralSecHasEdit,   /* v151：导游词统一取文（段落级 fullp 与整节级 full/fullsec 按时间戳合并） */
   injectCards, cardMins, acctNote, settleAcct, subjStats, laggingSubjs };
-const VER="v33";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
+const VER="v34";  /* 局部常量——_fillVer() 等内部函数引用它，不能只挂在 window.V25 上 */
 engineBoot();
 /* 页脚版本水印延迟填充——engineBoot() 在 IIFE 执行时 DOM 里还没有 footer（wd-v25.js 是 body 内同步加载的），
    所以 getElementById("v25ver") 会返回 null。等到 DOM 就绪后再填，这样即使 index.html 模板是旧版（硬编码 "…"）也能被 JS 覆盖 */

@@ -928,7 +928,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v69"></script>
 <script src="wd-planner.js?v33"></script>
-<script src="wd-v25.js?v139"></script>
+<script src="wd-v25.js?v140"></script>
 <script>
 
 "use strict";
@@ -1717,7 +1717,7 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v96";
+const BUILD_VERSION="v97";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -4619,13 +4619,26 @@ function openQuest(qid){
       <div id="oralAiOut" style="margin-top:8px"></div>
       <div style="font-size:11px;color:var(--dim);margin-top:6px">校订实时存档，可随时回退官方原文；本段预估时长约 ${p._oral?p._oral.est:1} 分钟（校订后自动更新）。</div>`;
     }
+    /* v97：传译底稿统一键——以前按钮读 l.editId，但全项目从未给它赋值（点击即 return 的死键）。
+       这里按既有 oral:<id>:zh|en 规范现算：已有校订就读存档，没有则用页内底稿；
+       id 缺失时用页标题+行号生成稳定键，保存后刷新仍能命中同一条。 */
+    const _transKeyOf=(li,lang)=>{
+      const l=(p.lines||[])[li]||{}, card=((p.transCards||[])[li-1]||{});
+      if(lang==="zh"&&l.editId) return l.editId;
+      if(lang==="en"&&l.editIdEn) return l.editIdEn;
+      const id=card.id||l.id;
+      return "oral:"+(id||((p.title||"TR")+"-L"+li))+":"+lang;
+    };
     /* v69：d 类传译——底稿校订入口（每句可独立校订中/英） */
     if(p.transEdit&&p.lines){
+      const _tc=p.transCards||[];
       body=p.lines.map((l,li)=>{
-        if(!l.editId) return `<div class="pt" style="border:none">${esc(filterNpcText(l.x))}</div>`;
-        const edited=hasEdit(l.editId)||hasEdit(l.editIdEn) ? '<span style="color:var(--ok);font-size:10px;margin-left:3px" title="已采用校订版">✎</span>' : "";
+        if(li===0||!_tc[li-1]) return `<div class="pt" style="border:none">${esc(filterNpcText(l.x))}</div>`;
+        const card=_tc[li-1], eZh=_transKeyOf(li,"zh"), eEn=_transKeyOf(li,"en");
+        const shown=getEdit(eZh, card.zh!=null?card.zh:l.x);
+        const edited=hasEdit(eZh)||hasEdit(eEn) ? '<span style="color:var(--ok);font-size:10px;margin-left:3px" title="已采用校订版">✎</span>' : "";
         return `<div class="pt" style="border:none;display:flex;gap:8px;align-items:baseline">
-          <span style="flex:1">${esc(filterNpcText(l.x))}${edited}</span>
+          <span style="flex:1">${esc(filterNpcText(shown))}${edited}</span>
           <button class="btn sm ghost trans-edit-btn" data-li="${li}" type="button" style="flex-shrink:0;font-size:11px;padding:2px 6px">✏️</button>
         </div>`;
       }).join("");
@@ -4692,20 +4705,22 @@ function openQuest(qid){
       oas.disabled=true; oas.textContent="扩讲中…";
       aiOralStory(oa, $("#oralAiOut",stageHost));
     };
-    /* v69：d 类传译——底稿校订按钮事件 */
+    /* v69：d 类传译——底稿校订按钮事件（v97：editId 按统一键现算，死键修复） */
     if(p.transEdit&&p.transCards){
       stageHost.querySelectorAll(".trans-edit-btn").forEach(btn=>{
         btn.onpointerdown=(e)=>{ e.stopPropagation(); SFX.tap();
           const li=+btn.dataset.li, l=p.lines[li], card=p.transCards[li-1]; /* li=0 是说明行 */
-          if(!card||!l||!l.editId) return;
-          const editZh=()=>{ openEditor({id:l.editId, catLabel:"传译底稿 · "+card.id+" · 中文",
-            title:l.editId, body:getEdit(l.editId, card.zh),
-            editable:true, editId:l.editId, onSaved:renderStageBookPage}); };
-          const editEn=()=>{ openEditor({id:l.editIdEn, catLabel:"传译底稿 · "+card.id+" · 英文",
-            title:l.editIdEn, body:getEdit(l.editIdEn, card.en),
-            editable:true, editId:l.editIdEn, onSaved:renderStageBookPage}); };
+          if(!card||!l) return;
+          const eidZh=_transKeyOf(li,"zh"), eidEn=_transKeyOf(li,"en");
+          const srcZh=card.zh!=null?card.zh:l.x, srcEn=card.en!=null?card.en:l.x;
+          const editZh=()=>{ openEditor({id:eidZh, catLabel:"传译底稿 · "+(card.id||eidZh)+" · 中文",
+            title:eidZh, body:getEdit(eidZh, srcZh),
+            editable:true, editId:eidZh, onSaved:renderStageBookPage}); };
+          const editEn=()=>{ openEditor({id:eidEn, catLabel:"传译底稿 · "+(card.id||eidEn)+" · 英文",
+            title:eidEn, body:getEdit(eidEn, srcEn),
+            editable:true, editId:eidEn, onSaved:renderStageBookPage}); };
           /* 弹出让玩家选择校订中文还是英文 */
-          const ov=panel(`<h2>校订 · ${card.id}</h2><div class="mt">选择要校订的部分</div>
+          const ov=panel(`<h2>校订 · ${esc(card.id||eidZh)}</h2><div class="mt">选择要校订的部分</div>
             <div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">
               <button class="btn" id="teZh" type="button">校订中文</button>
               <button class="btn" id="teEn" type="button">校订英文</button>
@@ -6494,6 +6509,75 @@ function panel(html){
   }catch(e){}
   return ov;
 }
+/* ==================== v97：CSV 覆盖导入确认 ====================
+   CSV 底本更新时，_applyCsvOverrides 会把「早于 CSV」的 full/fullp/fullsec 修订判给 CSV。
+   以前这一步静默删除，用户不知道自己的校订被覆盖。现在只登记候选（window.__wdCsvPending），
+   由这里明确告知条数/影响篇节，并提供一键备份；确认后才按原逻辑删除，保留则一字不删。 */
+function _csvPlanGroup(plan){
+  const g={};
+  (plan||[]).forEach(it=>{
+    const a=it.art||"未知篇";
+    const o=((D.oralFull||[]).find(x=>x.id===a)||{});
+    const key=o.name?o.name+"（"+a+"）":a;
+    const sec=(typeof it.sec==="number")?String(it.sec+1):"?";
+    const row=g[key]||(g[key]={n:0,secs:{}});
+    row.n++; row.secs[sec]=(row.secs[sec]||0)+1;
+  });
+  return g;
+}
+function _exportEditsBackup(){
+  try{
+    const pend=window.__wdCsvPending||{};
+    const data={app:"wendao-zhilv",type:"edits-backup",exportedAt:new Date().toISOString(),
+      csvStamp:pend.stamp||null,edits:st.edits||{}};
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const d=new Date(), p=n=>String(n).padStart(2,"0");
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download="wendao-edits-backup-"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes())+".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} },3000);
+    toast("校订备份已导出（只含 edits）");
+  }catch(e){ toast("备份导出失败："+e.message); }
+}
+function _promptCsvOverride(){
+  const pend=window.__wdCsvPending;
+  if(!pend||!pend.plan||!pend.plan.length) return;
+  if(st.csvSkipStamp===pend.stamp) return;   /* 用户已选「保留」，同一底本不再打扰 */
+  const plan=pend.plan.filter(it=>st.edits&&st.edits[it.key]);
+  if(!plan.length){ window.__wdCsvPending=null; return; }
+  const g=_csvPlanGroup(plan), keys=Object.keys(g);
+  const secN=new Set(plan.map(it=>it.art+"|"+it.sec)).size;
+  const rows=keys.map(k=>{
+    const row=g[k], secs=Object.keys(row.secs).sort((a,b)=>(+a||0)-(+b||0));
+    return `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px dashed var(--border)">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(k)}</span>
+      <span style="flex:none;color:var(--dim)">${row.n} 条 · 第 ${secs.join("/")} 节</span></div>`;
+  }).join("");
+  const ov=panel(`<h2>CSV 文本库更新 · 覆盖确认</h2>
+    <div class="mt">检测到新的 CSV 底本。按既有规则，比它更早的本地校订会被覆盖——这一步以前是静默执行的。</div>
+    <div class="note" style="border-left-color:var(--gold)">本次导入会覆盖 <b>${plan.length}</b> 条更早的本地校订，涉及 <b>${keys.length}</b> 篇 / <b>${secN}</b> 节，是否继续？${rows}</div>
+    <div class="ad" style="font-size:11.5px">建议先「备份当前校订」再继续；备份文件只含 st.edits。选择「保留校订」则本次一条不删，CSV 更新会在下次换底本时再询问。</div>
+    <div class="kitbar" style="margin-top:12px">
+      <button class="btn sm" id="csvBak" type="button">⬇ 备份当前校订</button>
+      <button class="btn sm primary" id="csvGo" type="button">确认覆盖并继续</button>
+      <button class="btn sm ghost" id="csvKeep" type="button">保留校订（不覆盖）</button>
+    </div>`);
+  $("#csvBak",ov).onpointerdown=()=>{ SFX.tap(); _exportEditsBackup(); };
+  $("#csvGo",ov).onpointerdown=()=>{
+    SFX.ok();
+    try{
+      plan.forEach(it=>{ try{ delete st.edits[it.key]; }catch(e){} });
+      st.csvSkipStamp=pend.stamp; window.__wdCsvPending=null; save();
+      toast("已按 CSV 底本覆盖 "+plan.length+" 条旧校订");
+    }catch(e){}
+    ov.remove(); try{ _refreshCurrentView(); }catch(e){}
+  };
+  $("#csvKeep",ov).onpointerdown=()=>{
+    SFX.tap(); st.csvSkipStamp=pend.stamp; window.__wdCsvPending=null; save();
+    toast("已保留本地校订，本次未覆盖任何记录"); ov.remove(); try{ _refreshCurrentView(); }catch(e){}
+  };
+}
 /* ==================== 内容编辑 / 版本系统 ==================== */
 /* st.edits[id] = [{at:ISO, text}, ...] 最新在前；默认永远显示最新版本 */
 function editVer(id){ return (st.edits&&st.edits[id])||[]; }
@@ -6515,6 +6599,23 @@ function oralTextOf(o,si){
 function oralHasEditOf(o,si){
   try{ return (window.V25&&V25.oralSecHasEdit)?V25.oralSecHasEdit(o,si):hasEdit("full:"+o.id+":"+si); }
   catch(e){ return false; }
+}
+/* v97：问契·自录统一取文——通用编辑器写入的是 myoral:<id>，卡面/详情/朗读都先读它，
+   没有校订才回落到结构化字段现拼「问：… 答：…」，与 point:/clue:/oral: 同一套取文方式。
+   st.myOral 原字段只读不改，结构化录入面板仍是它的唯一写入方。 */
+function myOralTextOf(m){
+  if(!m) return "";
+  const assembled="问："+m.q+"\n答："+m.a;
+  return getEdit("myoral:"+m.id, assembled);
+}
+/* 巡夜/复习的「参考答」只取答段：校订文本若仍是「问：…答：…」结构就剥出答段，
+   保证题库/揭示语义不变；若用户整段改写（没有答标记），则整段作为答。 */
+function myOralAnswerOf(m){
+  if(!m) return "";
+  const t=getEdit("myoral:"+m.id, "");
+  if(!t) return m.a;
+  const mm=/\n?答[：:]([\s\S]*)$/.exec(String(t));
+  return mm?mm[1].trim():String(t).trim();
 }
 function saveEdit(id, text){
   text=String(text);
@@ -6612,7 +6713,8 @@ function buildCardPool(){
     cards.push({uid:"myoral:"+m.id, cat:"qmine", catLabel:"问契·自录", id:m.id,
       key:m.id, sub:m.status==="final"?"已定稿":"草稿", star:2, created:m.created,
       title:"★★ "+m.id+(m.status==="final"?"":" · 草稿"),
-      body:"问："+m.q+"\n答："+m.a,
+      /* v97：卡面正文与朗读同源——有 myoral:<id> 校订就读校订，没有才现拼 */
+      body:myOralTextOf(m),
       extra:m.ref?("参考："+String(m.ref).slice(0,80)):"", editable:true, editId:"myoral:"+m.id});
   });
   D.clues.forEach(x=>{
@@ -7445,7 +7547,7 @@ function rtCardOf(key){
   if(/^S[1-4]-/.test(key)){ const p=D.pointsLib.find(x=>x.id===key); return p?{key,id:key,text:mdClean(getEdit("point:"+key,p.text)),star:+p.star||1,cat:"a",subj:key.slice(0,2),mod:p.module||""}:null; }
   if(/^S5-/.test(key)){ const p=D.pointsLib.find(x=>x.id===key); return p?{key,id:key,text:mdClean(getEdit("point:"+key,p.text)),star:+p.star||2,cat:"b",subj:"S5",mod:mdClean(p.module||p.title||""),title:mdClean(p.title||"")}:null; }
   /* b2-1：自录问契（定稿后才进入调度/复习链） */
-  if(/^QM-/.test(key)){ const m=(st.myOral||[]).find(x=>x.id===key&&x.status==="final"); return m?{key,id:key,text:m.a,star:2,cat:"b",subj:"QM",mod:"自录",title:m.q}:null; }
+  if(/^QM-/.test(key)){ const m=(st.myOral||[]).find(x=>x.id===key&&x.status==="final"); return m?{key,id:key,text:myOralAnswerOf(m),star:2,cat:"b",subj:"QM",mod:"自录",title:m.q}:null; }
   /* v139：线索册（CL-xx）——补 key 后与普通卡同规则进 SRS，夜巡用它回忆线索 */
   if(/^CL-/.test(key)){ const c=(D.clues||[]).find(x=>x.id===key); return c?{key,id:key,text:mdClean(getEdit("clue:"+key,c.text)),star:1,cat:"clue",subj:"CL",mod:"线索册",title:mdClean(c.title||"")}:null; }
   if(/^ORB-/.test(key)){ const o=rtOralOf(key); return o?{key,id:key,text:rtOralText(key),star:2,cat:"c",oral:o}:null; }
@@ -11949,6 +12051,8 @@ async function boot(){
     st.energy=Math.max(0,Math.min(maxEnergy(),st.energy));
     save(); refreshStat();
   });
+  /* v97：CSV 覆盖导入确认——只有检测到「会被覆盖的更早校订」时才弹，避免静默删除 */
+  setTimeout(()=>{ try{ _promptCsvOverride(); }catch(e){ console.warn("[WD_CSV] 确认弹窗异常:",e); } },800);
 }
 /* v25：旧任务树/全局看板（buildQuestTree/renderDashboard/renderBoard 等 ~310 行）已物理删除，任务脊柱为 V25.renderBoard */
 /* ==================== 吟游 · 英文导游词独立任务线 ==================== */
