@@ -928,7 +928,7 @@ body.ov-open #oralFab{display:none}
 <script src="qrcode.js"></script>
 <script src="wd-sync.js?v69"></script>
 <script src="wd-planner.js?v33"></script>
-<script src="wd-v25.js?v141"></script>
+<script src="wd-v25.js?v142"></script>
 <script>
 
 "use strict";
@@ -1717,7 +1717,10 @@ Object.assign(D.acts,{
    供 AI prompt 注入、启动自检与跨会话一致性校验使用 */
 const PLAN_VERSION="v54";
 /* 构建版本：必须与 sw.js 的 CACHE 版本一致。显示在页脚，用于一眼确认设备当前实际运行的是哪一版代码 */
-const BUILD_VERSION="v98";
+const BUILD_VERSION="v99";
+/* v99：核心脚本版本握手——index 与 wd-v25.js 必须同版；SW 的 ignoreSearch 回落可能
+   在弱网时把「新 index + 旧 wd-v25」混在一起，这里发现不一致就自愈一次并给出可见提示 */
+const WD_NEED_V25="v36";
 const PLAN_REG={
   version:PLAN_VERSION,
   oralStart:"GUG",                /* R6：导游词学习起点改故宫（不再锁天安门） */
@@ -6602,13 +6605,13 @@ function hasEdit(id){ return editVer(id).length>0; }
    并列时段落级优先；只读，不写回、不删除任何 st.edits 记录。 */
 function oralTextOf(o,si){
   try{
-    if(window.V25&&V25.oralSecText) return V25.oralSecText(o,si);
+    if(window.V25&&typeof V25.oralSecText==="function") return V25.oralSecText(o,si);
     const s=(o.sections||[])[si]||{};
     return getEdit("full:"+o.id+":"+si,String(s.text||s.en||""));
   }catch(e){ const s=(o.sections||[])[si]||{}; return String(s.text||s.en||""); }
 }
 function oralHasEditOf(o,si){
-  try{ return (window.V25&&V25.oralSecHasEdit)?V25.oralSecHasEdit(o,si):hasEdit("full:"+o.id+":"+si); }
+  try{ return (window.V25&&typeof V25.oralSecHasEdit==="function")?V25.oralSecHasEdit(o,si):hasEdit("full:"+o.id+":"+si); }
   catch(e){ return false; }
 }
 /* v97：问契·自录统一取文——通用编辑器写入的是 myoral:<id>，卡面/详情/朗读都先读它，
@@ -6630,6 +6633,32 @@ function myOralAnswerOf(m){
   if(!t) return m.a;
   const mm=/\n?答[：:]([\s\S]*)$/.exec(String(t));
   return mm?mm[1].trim():String(t).trim();
+}
+/* v99：通用编辑器保存后回填结构化镜像（st.myOral）——只映射能可靠识别的字段：
+   ① 有「问：」→ q；② 有「答：」→ a；③ 有「参考：」→ ref；
+   ④ 没有任何标记 → 整段作为 a，q 保留旧值；⑤ 空内容不写，绝不清空镜像。 */
+function myOralSyncMirror(id, raw){
+  try{
+    const m=(st.myOral||[]).find(x=>x.id===id); if(!m) return null;
+    /* 富文本 → 保留行边界的纯文本：mdPlain 会把换行折成句号，不能用来拆「问/答/参考」 */
+    const plain=String(raw||"")
+      .replace(/<br\s*\/?>/gi,"\n")
+      .replace(/<\/(div|p|li|h[1-6]|blockquote)>/gi,"\n")
+      .replace(/<[^>]+>/g,"")
+      .replace(/&nbsp;/g," ").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">");
+    const s=String(plain||"").replace(/\r/g,"").trim();
+    if(!s) return null;
+    const mq=/问\s*[：:]\s*([\s\S]*?)(?=\n\s*答\s*[：:]|$)/.exec(s);
+    const ma=/答\s*[：:]\s*([\s\S]*?)(?=\n\s*参考\s*[：:]|$)/.exec(s);
+    const mr=/参考\s*[：:]\s*([\s\S]*)$/.exec(s);
+    let q=mq?mq[1].trim():"", a=ma?ma[1].trim():"", ref=mr?mr[1].trim():"";
+    if(!a){ a=s.replace(/^问\s*[：:]\s*/,"").trim(); if(!q) q=m.q||""; }
+    if(q) m.q=q;
+    if(a) m.a=a;
+    if(ref) m.ref=ref;
+    save();
+    return {q:m.q,a:m.a,ref:m.ref};
+  }catch(e){ console.warn("[myoral] 镜像同步失败:",e); return null; }
 }
 function saveEdit(id, text){
   text=String(text);
@@ -6908,6 +6937,8 @@ function openEditor(card){
      已把段落级 fullp 与整节级 full/fullsec 合并好），不能再退回只读单键的 getEdit，
      否则用户在这里看到的是没合并的旧文本。 */
   const current = card.preferBody ? String(card.body==null?"":card.body) : getEdit(card.editId, origText);
+  /* v99：问契卡保存后把显示源回填结构化镜像，避免面板预填/夜巡标题停在旧问答 */
+  const _syncMyOralMirror=()=>{ const k=String(card.editId||""); if(k.indexOf("myoral:")===0) myOralSyncMirror(k.slice(7), getEdit(k,"")); };
   /* 纯文本正文（含换行）→ 结构化 HTML。
      contenteditable 里裸 \n 只是文本节点：用户一编辑，浏览器重建 DOM 时会把 \n 折叠成空格，
      保存回来行结构全丢（【小注】行和正文粘成一行，整块被当成小注渲染）。
@@ -7171,7 +7202,7 @@ function openEditor(card){
       SFX.tap(); rollbackEdit(card.editId, +b.dataset.v);
       area.innerHTML=getEdit(card.editId,origText); dirty=false;
       status.className="estatus saved"; status.textContent="● 已回退并保存为最新版本";
-      drawHist(); toast("已回退到所选版本"); if(card.onSaved)card.onSaved();
+      drawHist(); toast("已回退到所选版本"); if(card.onSaved)card.onSaved(); _syncMyOralMirror();
     });
   }
   $("#edSave",ov).onpointerdown=()=>{
@@ -7180,11 +7211,12 @@ function openEditor(card){
     const html=area.innerHTML.trim();
     if(saveEdit(card.editId, html)){ SFX.ok(); dirty=false; status.className="estatus saved"; status.textContent="● 已保存 "+_atLocal(new Date().toISOString(), true); drawHist(); toast("新版本已存档"); if(card.onSaved)card.onSaved(); }
     else { status.className="estatus saved"; status.textContent="● 内容未变化"; }
+    _syncMyOralMirror();
   };
   $("#edReset",ov).onpointerdown=()=>{
     if(!confirm("恢复为官方原文？此操作会把原文存为最新版本。")) return;
     SFX.tap(); saveEdit(card.editId, origText); area.innerHTML=esc(origText); dirty=false;
-    status.className="estatus saved"; status.textContent="● 已恢复官方原文"; drawHist(); toast("已恢复官方原文"); if(card.onSaved)card.onSaved();
+    status.className="estatus saved"; status.textContent="● 已恢复官方原文"; drawHist(); toast("已恢复官方原文"); if(card.onSaved)card.onSaved(); _syncMyOralMirror();
   };
   $("#edClose",ov).onpointerdown=()=>{
     if(dirty && !confirm("有未保存的修改，确定关闭？")) return;
@@ -9685,7 +9717,7 @@ function exportOralSrc(){
       (o.sections||[]).forEach((s,si)=>{
         /* v151：导出与界面同源——直接取统一取文结果（fullp 与整节稿按时间戳裁决） */
         let ps=null;
-        try{ const c=(window.V25&&V25.oralSecParas)?V25.oralSecParas(o,si):null;
+        try{ const c=(window.V25&&typeof V25.oralSecParas==="function")?V25.oralSecParas(o,si):null;
           if(c&&c.length) ps=c.map(p=>({n:p.n,text:p.text||"",head:p.head||"",note:p.note||""})); }catch(e){}
         if(!ps) ps=(Array.isArray(s.paragraphs)&&s.paragraphs.length?s.paragraphs:[{n:1,text:s.text||s.en||""}]).map(p=>Object.assign({},p));
         ps.forEach((p,i)=>{ p.n=i+1; });
@@ -12752,7 +12784,61 @@ function renderOralLine(){
     };
   });
 }
+/* v99：核心脚本自检。弱网时 SW 的 ignoreSearch 回落可能把「新 index + 旧 wd-v25.js」
+   拼在一起，表现为 V25.xxx is not a function。
+   ⚠ 时机很关键：wd-v25.js 的 init() 挂在 load 事件上，解析期 window.V25 必然还不存在，
+   所以自检必须放到 load 之后，且不能拦着 boot()——启动照常，只在确实缺版时提示并自愈一次。 */
+function _v25CoreOk(){
+  try{ return !!(window.V25 && V25.VER===WD_NEED_V25
+    && typeof V25.oralSecParas==="function"
+    && typeof V25.oralSecText==="function"
+    && typeof V25.oralSecHasEdit==="function"); }catch(e){ return false; }
+}
+function _v25Missing(){
+  const need=["oralSecParas","oralSecText","oralSecHasEdit"];
+  try{ return need.filter(function(k){ return !window.V25||typeof V25[k]!=="function"; }); }
+  catch(e){ return need; }
+}
+function _v25Guard(){
+  if(_v25CoreOk()){ try{ sessionStorage.removeItem("wd_v25_heal"); }catch(e){} return true; }
+  const got=(window.V25&&V25.VER)||"missing";
+  const miss=_v25Missing();
+  const why=window.V25?("版本 "+got+"，缺 "+miss.join("/")):"未加载 V25";
+  try{ console.warn("[V25] 核心脚本不完整："+why+"（need="+WD_NEED_V25+"）"); }catch(e){}
+  let bar=document.getElementById("v25HealBar");
+  if(!bar&&document.body){
+    bar=document.createElement("div"); bar.id="v25HealBar";
+    bar.style.cssText="position:fixed;left:0;right:0;top:0;z-index:99999;padding:10px 14px;background:#b85c5c;color:#fff;font:14px/1.5 -apple-system,BlinkMacSystemFont,sans-serif;text-align:center";
+    bar.textContent="核心脚本加载不完整（"+why+"），正在重新加载…";
+    document.body.appendChild(bar);
+  }
+  let first=false;
+  try{ first=!sessionStorage.getItem("wd_v25_heal"); if(first) sessionStorage.setItem("wd_v25_heal","1"); }catch(e){ first=true; }
+  if(first){
+    setTimeout(function(){
+      try{
+        Promise.resolve()
+          .then(function(){ return (navigator.serviceWorker&&navigator.serviceWorker.getRegistrations)?navigator.serviceWorker.getRegistrations():[]; })
+          .then(function(rs){ return Promise.all((rs||[]).map(function(r){ return r.unregister(); })); })
+          .then(function(){ return (typeof caches!=="undefined")?caches.keys():[]; })
+          .then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
+          .catch(function(){})
+          .then(function(){ location.reload(); });
+      }catch(e){ location.reload(); }
+    },800);
+  }else if(bar){
+    bar.textContent="核心脚本仍不完整（"+why+"）：请关闭页面重开，或清除站点缓存";
+    bar.style.background="#8a4b1f";
+  }
+  return false;
+}
 boot();
+/* load 之后 300ms 再核验：此时 wd-v25.js 的 init() 已执行完（它的 load 监听注册更早，先跑） */
+function _v25GuardLater(){
+  setTimeout(function(){ try{ _v25Guard(); }catch(e){ console.error("[V25] 自检异常",e); } },300);
+}
+if(document.readyState==="complete") _v25GuardLater();
+else window.addEventListener("load",_v25GuardLater);
 /* v83：语音输入双通路——iPad 靠软键盘麦克风（v82），macOS Safari 没有软键盘，靠 Web Speech API 自建「🎙️」按钮 */
 (function _speechInputPatch(){
   if(typeof document==="undefined"||typeof window==="undefined") return;
